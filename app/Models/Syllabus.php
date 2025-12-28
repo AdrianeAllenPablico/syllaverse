@@ -93,10 +93,15 @@ class Syllabus extends Model
         return $this->belongsTo(Program::class);
     }
 
-    // 🔁 A syllabus has many criteria
+    // 🔁 A syllabus has many criteria categories (each with tasks)
     public function criteria()
     {
-        return $this->hasMany(SyllabusCriteria::class)->orderBy('position');
+        return $this->hasMany(\App\Models\SyllabusCriteriaCategory::class)->orderBy('position');
+    }
+
+    public function criteriaTasks()
+    {
+        return $this->hasMany(\App\Models\SyllabusCriteriaTask::class);
     }
 
     // 🔁 A syllabus has many topic-learning activities (TLA)

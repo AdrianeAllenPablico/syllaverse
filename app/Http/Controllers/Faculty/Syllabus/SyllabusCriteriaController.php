@@ -4,7 +4,8 @@ namespace App\Http\Controllers\Faculty\Syllabus;
 
 use App\Http\Controllers\Controller;
 use App\Models\Syllabus;
-use App\Models\SyllabusCriteria;
+use App\Models\SyllabusCriteriaCategory;
+use App\Models\SyllabusCriteriaTask;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -148,20 +149,56 @@ class SyllabusCriteriaController extends Controller
      */
     protected function replaceSections(array $sections, Syllabus $syllabus): void
     {
-        $syllabus->criteria()->delete();
+        // Delete existing categories and tasks for this syllabus
+        try {
+            // Eager delete tasks then categories
+            $existingCats = SyllabusCriteriaCategory::where('syllabus_id', $syllabus->id)->get();
+            foreach ($existingCats as $cat) {
+                SyllabusCriteriaTask::where('category_id', $cat->id)->delete();
+            }
+            SyllabusCriteriaCategory::where('syllabus_id', $syllabus->id)->delete();
+        } catch (\Throwable $e) {
+            Log::warning('SyllabusCriteriaController::replaceSections cleanup failed', [
+                'syllabus_id' => $syllabus->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
+        // Create new categories and tasks from sections
         foreach ($sections as $position => $section) {
             try {
-                SyllabusCriteria::create([
+                $category = SyllabusCriteriaCategory::create([
                     'syllabus_id' => $syllabus->id,
-                    'key' => $section['key'] ?? ('section_' . $position),
-                    'heading' => $section['heading'] ?? null,
-                    'section' => $section['heading'] ?? null,
-                    'value' => $section['values'] ?? [],
+                    'category' => $section['heading'] ?? null,
                     'position' => $position,
                 ]);
+
+                $entries = $section['values'] ?? [];
+                if (is_array($entries)) {
+                    foreach ($entries as $entryIndex => $entry) {
+                        try {
+                            $desc = trim((string) ($entry['description'] ?? ''));
+                            $pct  = trim((string) ($entry['percent'] ?? ''));
+                            if ($desc === '' && $pct === '') { continue; }
+                            SyllabusCriteriaTask::create([
+                                'syllabus_id' => $syllabus->id,
+                                'category_id' => $category->id,
+                                'task' => $desc,
+                                'percent' => $pct,
+                                'position' => $entryIndex,
+                            ]);
+                        } catch (\Throwable $inner) {
+                            Log::debug('SyllabusCriteriaController::replaceSections failed to create task', [
+                                'syllabus_id' => $syllabus->id,
+                                'error' => $inner->getMessage(),
+                                'category_id' => $category->id ?? null,
+                                'entry' => $entry,
+                            ]);
+                        }
+                    }
+                }
             } catch (\Throwable $e) {
-                Log::warning('SyllabusCriteriaController::replaceSections failed to create row', [
+                Log::warning('SyllabusCriteriaController::replaceSections failed to create category', [
                     'syllabus_id' => $syllabus->id,
                     'error' => $e->getMessage(),
                     'position' => $position,

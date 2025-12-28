@@ -96,6 +96,7 @@
   @vite('resources/js/faculty/syllabus-sdg.js')
   @vite('resources/js/faculty/syllabus-textbook.js')
   @vite('resources/js/faculty/syllabus-tla.js')
+  @vite('resources/js/faculty/syllabus-criteria.js')
   @vite('resources/js/faculty/syllabus-assessment-mapping.js')
   @vite('resources/js/faculty/syllabus-ai-chat.js')
   @vite('resources/js/faculty/ai/prompts.js')

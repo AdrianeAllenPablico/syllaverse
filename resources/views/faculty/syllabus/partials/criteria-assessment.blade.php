@@ -60,14 +60,15 @@
   .cis-criteria .section { padding: 6px 8px; border:0; border-radius:6px; background:#fff; display:flex; flex-direction:column }
   /* textarea look unified */
   .cis-criteria textarea { width:100%; border:none; background:transparent; padding:0; font-weight:400; font-family: inherit; font-size: inherit; line-height:1.15; color:#000; resize:none; overflow:hidden; }
+  .cis-criteria input { width:100%; border:none; background:transparent; padding:0; font-weight:400; font-family: inherit; font-size: inherit; line-height:1.15; color:#000; }
   .cis-criteria .sub-list { margin-top:6px; flex: 1 1 auto; }
   .cis-criteria .sub-line { margin-left:18px; display:flex; gap:8px; align-items:flex-start; }
   .cis-criteria .sub-input { flex:1 1 auto; }
-  .cis-criteria .sub-percent { flex:0 0 64px; width:64px; text-align:right; font-family: 'Times New Roman', Times, serif; font-size: 10pt; font-weight: 400; line-height: 1.15; }
+  .cis-criteria .sub-percent { flex:0 0 48px; width:48px; text-align:right; font-family: 'Times New Roman', Times, serif; font-size: 10pt; font-weight: 400; line-height: 1.15; }
   .cis-criteria textarea:focus { outline: none; box-shadow: none; background-color: transparent; }
   .cis-criteria .section-head { display:flex; justify-content:flex-start; align-items:flex-start; gap:8px; }
   /* allow add button to sit on the right of the main heading */
-  .cis-criteria .section-head .main-input { width: auto; flex: 1 1 auto; }
+  .cis-criteria .section-head .category { width: auto; flex: 1 1 auto; }
   .cis-criteria .placeholder-muted { color:#6c757d; }
   /* remove all padding of the Criteria cell */
   .cis-criteria td { position: relative; }
@@ -201,9 +202,14 @@
               @foreach($sections as $idx => $sec)
                 <div class="section" data-section-key="{{ $sec['key'] ?? ('section_' . ($idx+1)) }}">
                   <div class="section-head">
-                    <textarea rows="1" name="criteria_{{ $sec['key'] ?? ($idx+1) }}_display" data-section="{{ $sec['key'] ?? ('section_' . ($idx+1)) }}" class="main-input cis-input autosize" placeholder="Category">{{ old('criteria_section_heading.' . $idx, $sec['heading'] ?? '') }}</textarea>
+                    <input type="text" name="criteria_{{ $sec['key'] ?? ($idx+1) }}_category" id="category" data-section="{{ $sec['key'] ?? ('section_' . ($idx+1)) }}" class="category cis-input" placeholder="Category" value="{{ old('criteria_category.' . $idx, $sec['heading'] ?? '') }}" />
                   </div>
-                  <div class="sub-list" aria-live="polite" data-init='{{ json_encode($sec['value'] ?? []) }}'></div>
+                  <div class="sub-list" aria-live="polite" data-init='{{ json_encode($sec['value'] ?? []) }}'>
+                    <div class="sub-line">
+                      <input type="text" name="criteria_{{ $sec['key'] ?? ($idx+1) }}_task" class="sub-input cis-input" placeholder="Task" />
+                      <input type="text" name="criteria_{{ $sec['key'] ?? ($idx+1) }}_percent" class="sub-percent cis-number" placeholder="0%" />
+                    </div>
+                  </div>
                   <div class="criteria-actions-row">
                     <button type="button" class="btn btn-sm criteria-remove-btn" title="Remove last sub-item" aria-label="Remove last sub-item">
                       <i data-feather="minus"></i>
