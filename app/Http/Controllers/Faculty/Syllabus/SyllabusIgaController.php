@@ -93,7 +93,7 @@ class SyllabusIgaController extends Controller
         return response()->json(['message' => 'IGA order updated successfully.']);
     }
 
-    // 📥 Load predefined IGAs from master data (replaces existing IGAs)
+    // 📥 Load predefined IGAs from master data (UI-only preview; no DB writes)
     public function loadPredefinedIgas(Request $request, $syllabusId)
     {
         $syllabus = \App\Models\Syllabus::whereHas('facultyMembers', function($q) { $q->where('faculty_id', Auth::id())->where('can_edit', true); })->findOrFail($syllabusId);
@@ -117,31 +117,24 @@ class SyllabusIgaController extends Controller
             return response()->json(['message' => 'No predefined IGAs found.'], 404);
         }
 
-        // Delete existing IGAs for this syllabus
-        SyllabusIga::where('syllabus_id', $syllabus->id)->delete();
-
-        // Create new IGAs from predefined data
-        $newIgas = [];
-        foreach ($predefinedIgas as $index => $predefined) {
-            $iga = SyllabusIga::create([
-                'syllabus_id' => $syllabus->id,
+        // Build a non-persistent preview payload for the UI
+        $previewIgas = [];
+        foreach ($predefinedIgas as $index => $predef) {
+            $previewIgas[] = [
+                // Use a computed code for display; actual persistence happens on Save
                 'code' => 'IGA' . ($index + 1),
-                'title' => $predefined->title,
-                'description' => $predefined->description,
+                'title' => $predef->title,
+                'description' => $predef->description,
                 'position' => $index + 1,
-            ]);
-            $newIgas[] = [
-                'id' => $iga->id,
-                'code' => $iga->code,
-                'title' => $iga->title,
-                'description' => $iga->description,
-                'position' => $iga->position,
+                // Provide origin info for potential client-side needs (not used for DB ops)
+                'origin' => 'master',
+                'origin_id' => $predef->id,
             ];
         }
 
         return response()->json([
-            'message' => count($newIgas) . ' IGA' . (count($newIgas) !== 1 ? 's' : '') . ' loaded successfully.',
-            'igas' => $newIgas,
+            'message' => count($previewIgas) . ' IGA' . (count($previewIgas) !== 1 ? 's' : '') . ' loaded for preview. Save to persist.',
+            'igas' => $previewIgas,
         ]);
     }
 }

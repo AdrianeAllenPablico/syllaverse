@@ -465,11 +465,12 @@ document.addEventListener('DOMContentLoaded', () => {
           listRef.removeChild(listRef.firstChild);
         }
 
-        // Add new rows from predefined data
+        // Add new rows from predefined data (UI-only; treat as new unsaved rows)
         data.igas.forEach((iga, index) => {
           const row = document.createElement('tr');
           row.className = 'iga-row';
-          row.setAttribute('data-id', iga.id || `new-${Date.now()}-${index}`);
+          // Always set a client-only id so subsequent Save treats these as new
+          row.setAttribute('data-id', `new-${Date.now()}-${index}`);
           row.innerHTML = `
             <td class="text-center align-middle">
               <div class="iga-badge fw-semibold">${iga.code || ('IGA' + (index + 1))}</div>
@@ -495,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (modalInstance) modalInstance.hide();
 
         // Log success message
-        console.log(data.message || 'Predefined IGAs loaded successfully');
+        console.log(data.message || 'Predefined IGAs loaded for preview');
 
       } catch (error) {
         console.error('Error loading predefined IGAs:', error);
