@@ -11,6 +11,12 @@
 		return true;
 	}
 
+	async function saveCourseInfo(){
+		if (typeof window.saveCourseInfo !== 'function') return false;
+		await window.saveCourseInfo(false);
+		return true;
+	}
+
 	document.addEventListener('DOMContentLoaded', function(){
 		const btn = document.getElementById('syllabusSaveBtn');
 		if (!btn) return;
@@ -19,9 +25,18 @@
 			try {
 				btn.disabled = true;
 				setState('saving');
-				// Run Mission & Vision save first
-				await saveMissionVision();
-				setState('saved');
+
+				// Execute saves sequentially; ignore modules not present
+				const results = [];
+				try { results.push(await saveCourseInfo()); } catch (e) { console.error('Course Info save failed:', e); results.push(false); }
+				try { results.push(await saveMissionVision()); } catch (e) { console.error('Mission/Vision save failed:', e); results.push(false); }
+
+				// If any module reported failure, reflect error state
+				if (results.some(r => r === false)) {
+					setState('error');
+				} else {
+					setState('saved');
+				}
 			} catch (e) {
 				console.error('Toolbar Save failed:', e);
 				setState('error');
