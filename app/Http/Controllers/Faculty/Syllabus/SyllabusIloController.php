@@ -61,7 +61,7 @@ class SyllabusIloController extends Controller
         } catch (\Throwable $e) { /* ignore logging errors */ }
 
         $request->validate([
-            'ilos' => 'required|array',
+            'ilos' => 'array',
             'ilos.*.id' => 'nullable|integer|exists:syllabus_ilos,id',
             'ilos.*.code' => 'required|string',
             // allow nullable description so empty/placeholder ILO rows can be created client-side
@@ -69,6 +69,7 @@ class SyllabusIloController extends Controller
             'ilos.*.position' => 'required|integer',
             'deleted_ids' => 'nullable|array',
             'deleted_ids.*' => 'integer|exists:syllabus_ilos,id',
+            'delete_all' => 'nullable|boolean',
         ]);
 
         $incomingIds = collect($request->ilos)->pluck('id')->filter();
@@ -77,6 +78,12 @@ class SyllabusIloController extends Controller
         // 🔥 Determine deletions from both explicit deleted_ids and missing from payload
         $explicitDeletes = collect($request->input('deleted_ids', []));
         $toDelete = $existingIds->diff($incomingIds)->merge($explicitDeletes)->unique();
+
+        // If no ILOs are provided or delete_all flag is set, delete all existing
+        $incomingCount = is_array($request->ilos) ? count($request->ilos) : 0;
+        if ($incomingCount === 0 || $request->boolean('delete_all')) {
+            $toDelete = $existingIds->merge($explicitDeletes)->unique();
+        }
         
         if ($toDelete->count()) {
             \Log::debug('SyllabusIloController.update: deleting removed ILOs', [ 'delete_ids' => $toDelete->values() ]);
@@ -93,7 +100,8 @@ class SyllabusIloController extends Controller
         
         
         \DB::transaction(function() use ($request, $syllabus, &$createdIds, &$updatedIds) {
-            foreach ($request->ilos as $iloData) {
+            $incomingList = is_array($request->ilos) ? $request->ilos : [];
+            foreach ($incomingList as $iloData) {
                 $attrs = [
                     'syllabus_id' => $syllabus->id,
                     'code' => $iloData['code'],

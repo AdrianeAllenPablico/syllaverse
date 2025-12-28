@@ -211,20 +211,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renumber();
   try { initAutosize(); } catch (e) { /* noop */ }
 
-  // Wire save function to toolbar save button
-  const toolbarSaveBtn = document.getElementById('syllabusSaveBtn');
-  if (toolbarSaveBtn) {
-    toolbarSaveBtn.addEventListener('click', async (e) => {
-      // Check if this is the main save button click
-      if (e.isTrusted && window.saveIlo) {
-        try {
-          await window.saveIlo();
-        } catch (err) {
-          console.error('Failed to save ILOs from toolbar:', err);
-        }
-      }
-    }, true); // Use capture phase to run before other handlers
-  }
+  // Toolbar Save is handled centrally by syllabus-save.js (aggregator)
 });
 
 // Persist ILOs (create/update + order). Inserts new rows typed before save.
@@ -303,7 +290,8 @@ window.saveIlo = async function saveIlo() {
     credentials: 'same-origin',
     body: JSON.stringify({ 
       ilos: payloadIlos,
-      deleted_ids: deletedIds
+      deleted_ids: deletedIds,
+      delete_all: payloadIlos.length === 0
     })
   });
   

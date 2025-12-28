@@ -23,6 +23,12 @@
 		return true;
 	}
 
+	async function saveIlo(){
+		if (typeof window.saveIlo !== 'function') return false;
+		await window.saveIlo(false);
+		return true;
+	}
+
 	document.addEventListener('DOMContentLoaded', function(){
 		const btn = document.getElementById('syllabusSaveBtn');
 		if (!btn) return;
@@ -36,6 +42,7 @@
 				const results = [];
 				try { results.push(await saveCourseInfo()); } catch (e) { console.error('Course Info save failed:', e); results.push(false); }
 				try { results.push(await saveCriteria()); } catch (e) { console.error('Criteria save failed:', e); results.push(false); }
+				try { results.push(await saveIlo()); } catch (e) { console.error('ILO save failed:', e); results.push(false); }
 				try { results.push(await saveMissionVision()); } catch (e) { console.error('Mission/Vision save failed:', e); results.push(false); }
 
 				// If any module reported failure, reflect error state
