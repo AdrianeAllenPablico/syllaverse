@@ -121,6 +121,8 @@ Route::middleware([FacultyAuth::class])->group(function () {
     
     // ---------- Course Info Save ----------
     Route::post('/faculty/syllabi/{syllabus}/course-info', [\App\Http\Controllers\Faculty\Syllabus\SyllabusCourseInfoController::class, 'save'])->name('faculty.syllabi.course-info.save');
+    // ---------- Criteria Save (Categories + Tasks) ----------
+    Route::post('/faculty/syllabi/{syllabus}/criteria', [\App\Http\Controllers\Faculty\Syllabus\SyllabusCriteriaController::class, 'save'])->name('faculty.syllabi.criteria.save');
     
     // (Removed live save endpoints: mission-vision, tlas, criteria, ilo-save)
     // ---------- ILO CRUD & Batch Operations (replacing deprecated IloSaveController) ----------

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Syllabus;
 use App\Models\SyllabusCriteriaCategory;
 use App\Models\SyllabusCriteriaTask;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -39,6 +40,43 @@ class SyllabusCriteriaController extends Controller
     {
         $normalized = $this->normalizeSections($sections);
         $this->replaceSections($normalized, $syllabus);
+    }
+
+    /**
+     * Dedicated save endpoint for Criteria (categories + tasks) via AJAX.
+     */
+    public function save(Request $request, $syllabusId)
+    {
+        try {
+            $syllabus = Syllabus::whereHas('facultyMembers', function($q) {
+                $q->where('faculty_id', Auth::id())->where('can_edit', true);
+            })->findOrFail($syllabusId);
+
+            $this->syncFromRequest($request, $syllabus);
+
+            // Return current categories + tasks snapshot
+            $categories = SyllabusCriteriaCategory::with('tasks')
+                ->where('syllabus_id', $syllabus->id)
+                ->orderBy('position')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Criteria saved successfully',
+                'data' => [
+                    'categories' => $categories,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('Failed to save criteria', [
+                'syllabus_id' => $syllabusId,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save criteria: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     /**
