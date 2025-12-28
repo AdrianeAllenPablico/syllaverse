@@ -716,88 +716,85 @@ document.addEventListener('DOMContentLoaded', function() {
     .then(data => {
       if (data.success && data.sections && data.sections.length > 0) {
         console.log('Loading assessment tasks:', data.sections);
-        
-        // Clear existing rows first
-        tbody.querySelectorAll('tr').forEach(row => row.remove());
-        
-        // Rebuild table from loaded data
-        data.sections.forEach((section, index) => {
+        // Ensure table structure matches Criteria first
+        window.syncATWithCriteria();
+
+        // Fill existing rows by section and sub-index
+        const sectionsData = data.sections;
+        sectionsData.forEach((section, index) => {
           const sectionNum = section.section_num || (index + 1);
-          
-          // Create main row
-          const mainRow = document.createElement('tr');
-          mainRow.className = 'at-main-row';
-          mainRow.dataset.section = sectionNum;
-          
-          const currentIloCount = getCurrentIloCount();
-          mainRow.innerHTML = `
-            <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;">
-              <textarea class="cis-textarea main-input text-center" placeholder="-" rows="1">${section.main_row?.code || ''}</textarea>
-            </td>
-            <td style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#f8f9fa;">
-              <textarea class="cis-textarea main-input" rows="1" readonly style="cursor:not-allowed;">${section.main_row?.task || ''}</textarea>
-            </td>
-            <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>
-            <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#f8f9fa;">
-              <textarea class="cis-textarea main-input text-center percent-input" rows="1" readonly style="cursor:not-allowed;">${section.main_row?.percent ? Math.round(section.main_row.percent) : ''}</textarea>
-            </td>
-            ${Array(currentIloCount).fill(0).map((_, i) => {
-              const val = section.main_ilo_columns?.[i] || '';
-              return `<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"><textarea class="cis-textarea main-input text-center" placeholder="-" rows="1">${val}</textarea></td>`;
-            }).join('')}
-            <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>
-            <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>
-            <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>
-          `;
-          tbody.appendChild(mainRow);
-          
-          // Create sub rows
-          const subRows = section.sub_rows || [];
-          subRows.forEach((subRow) => {
-            const subRowEl = document.createElement('tr');
-            subRowEl.className = 'at-sub-row';
-            subRowEl.dataset.section = sectionNum;
-            
-            subRowEl.innerHTML = `
-              <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
-                <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1">${subRow.code || ''}</textarea>
-              </td>
-              <td style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#f8f9fa;">
-                <textarea class="cis-textarea sub-input" rows="1" readonly style="cursor:not-allowed;">${subRow.task || ''}</textarea>
-              </td>
-              <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
-                <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1">${subRow.ird || ''}</textarea>
-              </td>
-              <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#f8f9fa;">
-                <textarea class="cis-textarea sub-input text-center percent-input" rows="1" readonly style="cursor:not-allowed;">${subRow.percent ? Math.round(subRow.percent) : ''}</textarea>
-              </td>
-              ${Array(currentIloCount).fill(0).map((_, i) => {
-                const val = subRow.ilo_columns?.[i] || '';
-                return `<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;"><textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1">${val}</textarea></td>`;
-              }).join('')}
-              <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
-                <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1">${subRow.cpa_columns?.[0] || ''}</textarea>
-              </td>
-              <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
-                <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1">${subRow.cpa_columns?.[1] || ''}</textarea>
-              </td>
-              <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
-                <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1">${subRow.cpa_columns?.[2] || ''}</textarea>
-              </td>
-            `;
-            tbody.appendChild(subRowEl);
+          const mainRow = tbody.querySelector(`.at-main-row[data-section="${sectionNum}"]`);
+          if (mainRow){
+            const mainCells = Array.from(mainRow.children);
+            // code
+            const codeTa = mainCells[0]?.querySelector('textarea');
+            if (codeTa) codeTa.value = section.main_row?.code || '';
+            // task
+            const taskTa = mainCells[1]?.querySelector('textarea');
+            if (taskTa) taskTa.value = section.main_row?.task || '';
+            // percent
+            const percentTa = mainCells[3]?.querySelector('textarea.percent-input');
+            if (percentTa) percentTa.value = section.main_row?.percent ? Math.round(section.main_row.percent) : '';
+            // ILO columns (plain text cells)
+            const totalCols = mainCells.length;
+            const iloStartIdx = 4;
+            const iloEndIdx = totalCols - 3;
+            for (let i = iloStartIdx; i < iloEndIdx; i++){
+              const cell = mainCells[i];
+              const val = section.main_ilo_columns?.[i - iloStartIdx] || '';
+              if (cell) cell.textContent = val;
+            }
+          }
+          // Sub rows
+          const savedSubs = section.sub_rows || [];
+          // Ensure enough sub rows exist for this section
+          let atSubs = tbody.querySelectorAll(`.at-sub-row[data-section="${sectionNum}"]`);
+          const deficit = savedSubs.length - atSubs.length;
+          for (let i = 0; i < deficit; i++) { window.addATSubRow(sectionNum); }
+          atSubs = tbody.querySelectorAll(`.at-sub-row[data-section="${sectionNum}"]`);
+          savedSubs.forEach((subRow, j) => {
+            const rowEl = atSubs[j];
+            if (!rowEl) return;
+            const cells = Array.from(rowEl.children);
+            // code
+            const codeTa = cells[0]?.querySelector('textarea');
+            if (codeTa) codeTa.value = subRow.code || '';
+            // task
+            const taskTa = cells[1]?.querySelector('textarea');
+            if (taskTa) taskTa.value = subRow.task || '';
+            // ird
+            const irdTa = cells[2]?.querySelector('textarea');
+            if (irdTa) irdTa.value = subRow.ird || '';
+            // percent
+            const percentTa = cells[3]?.querySelector('textarea.percent-input');
+            if (percentTa) percentTa.value = subRow.percent ? Math.round(subRow.percent) : '';
+            // ILO columns
+            const totalCols = cells.length;
+            const iloStartIdx = 4;
+            const iloEndIdx = totalCols - 3;
+            for (let i = iloStartIdx; i < iloEndIdx; i++){
+              const ta = cells[i]?.querySelector('textarea');
+              if (ta) ta.value = subRow.ilo_columns?.[i - iloStartIdx] || '';
+            }
+            // C/P/A
+            const cTa = cells[totalCols - 3]?.querySelector('textarea');
+            const pTa = cells[totalCols - 2]?.querySelector('textarea');
+            const aTa = cells[totalCols - 1]?.querySelector('textarea');
+            if (cTa) cTa.value = (subRow.cpa_columns?.[0] ?? '') === null ? '' : (subRow.cpa_columns?.[0] ?? '');
+            if (pTa) pTa.value = (subRow.cpa_columns?.[1] ?? '') === null ? '' : (subRow.cpa_columns?.[1] ?? '');
+            if (aTa) aTa.value = (subRow.cpa_columns?.[2] ?? '') === null ? '' : (subRow.cpa_columns?.[2] ?? '');
           });
         });
-        
-        // Apply visibility logic after loading
+
+        // Apply visibility logic and totals after loading
         updateMainRowVisibility();
-        
-        // Recalculate total after loading
         calculatePercentTotal();
-        
-        console.log('Assessment tasks loaded successfully');
+        console.log('Assessment tasks loaded and aligned to Criteria');
       } else {
-        console.log('No saved assessment tasks found, keeping default structure');
+        console.log('No saved assessment tasks found, keeping criteria-synced structure');
+        window.syncATWithCriteria();
+        updateMainRowVisibility();
+        calculatePercentTotal();
       }
     })
     .catch(error => {
@@ -906,7 +903,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     criteriaSections.forEach((criteriaSection, index) => {
       const sectionNum = index + 1;
-      const mainInput = criteriaSection.querySelector('.section-head .main-input');
+      const mainInput = criteriaSection.querySelector('.section-head .category');
       if (!mainInput) return;
       
       let mainValue = mainInput.value || '';
@@ -974,7 +971,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const sectionNum = index + 1;
       
       // Sync main input numbers to main row percent (extract numbers only)
-      const mainInput = criteriaSection.querySelector('.section-head .main-input');
+      const mainInput = criteriaSection.querySelector('.section-head .category');
       if (mainInput) {
         const mainValue = mainInput.value || '';
         const numberMatch = mainValue.match(/\d+/);
@@ -1020,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // Listen for input changes in Criteria and sync to AT
   if (criteriaContainer) {
     criteriaContainer.addEventListener('input', function(e) {
-      if (e.target && (e.target.classList.contains('main-input') || e.target.classList.contains('sub-input'))) {
+      if (e.target && (e.target.classList.contains('category') || e.target.classList.contains('sub-input'))) {
         clearTimeout(window._criteriaValueSyncTimeout);
         window._criteriaValueSyncTimeout = setTimeout(() => {
           window.syncCriteriaValuesToAT();
@@ -1030,7 +1027,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       
       // Also sync percents when main-input or sub-percent changes
-      if (e.target && (e.target.classList.contains('main-input') || e.target.classList.contains('sub-percent'))) {
+      if (e.target && (e.target.classList.contains('category') || e.target.classList.contains('sub-percent'))) {
         clearTimeout(window._criteriaPercentSyncTimeout);
         window._criteriaPercentSyncTimeout = setTimeout(() => {
           window.syncCriteriaPercentsToAT();
@@ -1127,7 +1124,10 @@ document.addEventListener('DOMContentLoaded', function() {
       const iloEndIdx = totalCols - 3;
       
       for (let i = iloStartIdx; i < iloEndIdx; i++) {
-        const val = mainCells[i]?.querySelector('textarea')?.value || '';
+        const cell = mainCells[i];
+        // Prefer textarea if present, else use plain text from cell
+        const ta = cell ? cell.querySelector('textarea') : null;
+        const val = ta ? (ta.value || '') : (cell ? (cell.textContent || '').trim() : '');
         mainIloColumns.push(val);
       }
       
