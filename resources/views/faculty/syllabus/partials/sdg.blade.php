@@ -80,7 +80,9 @@
   </colgroup>
   <tbody>
     <tr>
-      <th class="align-top text-start cis-label sdg-left-title">Sustainable Development Goals (SDG)</th>
+      <th class="align-top text-start cis-label sdg-left-title">Sustainable Development Goals (SDG)
+        <span id="unsaved-sdgs" class="unsaved-pill d-none">Unsaved</span>
+      </th>
       <td id="sdg-right-wrap">
         <table class="table mb-0" style="font-family: Georgia, serif; font-size: 13px; line-height: 1.4; border: none; table-layout: fixed;">
           <colgroup>
@@ -116,9 +118,7 @@
                 </td>
                 <td>
                   <div class="d-flex align-items-center gap-2">
-                    <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-                      <i class="bi bi-grip-vertical"></i>
-                    </span>
+                    <!-- drag handle removed -->
                     <div class="flex-grow-1 w-100">
                       <textarea
                         name="sdg_titles[]"
@@ -259,7 +259,7 @@
 
       <div class="modal-body">
         <div class="alert alert-warning" role="alert">
-          <strong>Warning:</strong> This will replace all current SDGs with the selected predefined ones from the master data. This action cannot be undone.
+          <strong>Warning:</strong> Loading predefined SDGs will replace the current SDGs in the UI for preview. No database changes are made until you click the main Save.
         </div>
         
         <div class="mb-3">

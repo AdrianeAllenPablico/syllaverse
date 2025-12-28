@@ -41,6 +41,12 @@
 		return true;
 	}
 
+	async function saveSdg(){
+		if (typeof window.saveSdg !== 'function') return false;
+		await window.saveSdg();
+		return true;
+	}
+
 	async function saveSo(){
 		if (typeof window.saveSo !== 'function') return false;
 		await window.saveSo();
@@ -69,6 +75,7 @@
 				try { results.push(await saveIlo()); } catch (e) { console.error('ILO save failed:', e); results.push(false); }
 				try { results.push(await saveIga()); } catch (e) { console.error('IGA save failed:', e); results.push(false); }
 				try { results.push(await saveCdio()); } catch (e) { console.error('CDIO save failed:', e); results.push(false); }
+				try { results.push(await saveSdg()); } catch (e) { console.error('SDG save failed:', e); results.push(false); }
 				try { results.push(await saveSo()); } catch (e) { console.error('SO save failed:', e); results.push(false); }
 				try { results.push(await saveAssessmentTasks()); } catch (e) { console.error('Assessment Tasks save failed:', e); results.push(false); }
 				try { results.push(await saveMissionVision()); } catch (e) { console.error('Mission/Vision save failed:', e); results.push(false); }

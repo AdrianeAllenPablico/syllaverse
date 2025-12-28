@@ -140,25 +140,28 @@ class SyllabusSdgController extends Controller
         if ($syllabus->faculty_id !== Auth::id() && ! Auth::guard('admin')->check()) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
-    // Debug: log incoming payload for troubleshooting when update appears to silently fail
-    try { Log::debug('SyllabusSdgController::bulkUpdate payload', $request->all()); } catch (\Throwable $e) {}
+        // Debug: log incoming payload for troubleshooting when update appears to silently fail
+        try { Log::debug('SyllabusSdgController::bulkUpdate payload', $request->all()); } catch (\Throwable $e) {}
         $data = $request->validate([
-            'sdgs' => 'required|array',
+            'sdgs' => 'nullable|array',
             'sdgs.*.title' => 'nullable|string|max:255',
             'sdgs.*.code' => 'nullable|string|max:50',
             'sdgs.*.description' => 'nullable|string|max:1000',
             'sdgs.*.position' => 'nullable|integer',
         ]);
+        $items = $data['sdgs'] ?? [];
+        // If empty array, clear all SDGs
+        if (!is_array($items)) { $items = []; }
         // Update entries inside a transaction and avoid writing 'code' directly to prevent
         // transient uniqueness conflicts (code is derived from position). After updating
         // descriptions and sort_order, call resequence() to recompute codes deterministically.
         \DB::beginTransaction();
         try {
-            // Delete all existing SDGs for this syllabus first to avoid duplicate key conflicts
+            // Delete all existing SDGs for this syllabus first to replace with payload
             SyllabusSdg::where('syllabus_id', $syllabus->id)->delete();
 
-            // Then create all SDGs from the payload
-            foreach ($data['sdgs'] as $item) {
+            // If no items, just commit deletion (clear-all)
+            foreach ($items as $item) {
                 SyllabusSdg::create([
                     'syllabus_id' => $syllabus->id,
                     'code' => $item['code'] ?? 'SDG' . ($item['position'] ?? 1),
@@ -174,7 +177,7 @@ class SyllabusSdgController extends Controller
             // Handle explicit code overrides safely:
             // Collect desired code updates (id => code) when provided
             $codeUpdates = [];
-            foreach ($data['sdgs'] as $item) {
+            foreach ($items as $item) {
                 if (!empty($item['id']) && array_key_exists('code', $item) && $item['code'] !== null) {
                     $codeUpdates[(int)$item['id']] = (string)$item['code'];
                 }
@@ -225,6 +228,48 @@ class SyllabusSdgController extends Controller
             \DB::rollBack();
             return response()->json(['error' => 'Failed to update SDGs', 'message' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Preview-only: return selected SDGs from master data without persisting.
+     */
+    public function loadPredefinedSdgs(Request $request, Syllabus $syllabus)
+    {
+        if ($syllabus->faculty_id !== Auth::id() && ! Auth::guard('admin')->check()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $request->validate([
+            'sdg_ids' => 'required|array',
+            'sdg_ids.*' => 'integer|exists:sdgs,id',
+        ]);
+
+        $ids = $request->input('sdg_ids', []);
+        if (empty($ids)) {
+            return response()->json(['message' => 'Please select at least one SDG to load.'], 400);
+        }
+
+        $predefs = Sdg::whereIn('id', $ids)->orderBy('id')->get();
+        if ($predefs->isEmpty()) {
+            return response()->json(['message' => 'No predefined SDGs found.'], 404);
+        }
+
+        $preview = [];
+        foreach ($predefs as $index => $sdg) {
+            $preview[] = [
+                'code' => 'SDG' . ($index + 1),
+                'title' => $sdg->title,
+                'description' => $sdg->description,
+                'position' => $index + 1,
+                'origin' => 'master',
+                'origin_id' => $sdg->id,
+            ];
+        }
+
+        return response()->json([
+            'message' => count($preview) . ' SDG' . (count($preview) !== 1 ? 's' : '') . ' loaded for preview. Save to persist.',
+            'sdgs' => $preview,
+        ]);
     }
 
     /**

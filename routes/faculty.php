@@ -198,6 +198,8 @@ Route::middleware([FacultyAuth::class])->group(function () {
 
     // ---------- ✅ SDG Mapping ----------
     Route::post('/faculty/syllabi/{syllabus}/sdgs', [SyllabusSdgController::class, 'attach'])->name('faculty.syllabi.sdgs.attach');
+    // Preview-only load from master data
+    Route::post('/faculty/syllabi/{syllabus}/load-predefined-sdgs', [SyllabusSdgController::class, 'loadPredefinedSdgs'])->name('faculty.syllabi.sdgs.load-predefined');
     // Bulk save (order + descriptions)
     Route::put('/faculty/syllabi/{syllabus}/sdgs', [SyllabusSdgController::class, 'bulkUpdate'])->name('faculty.syllabi.sdgs.save');
     // Reorder positions only

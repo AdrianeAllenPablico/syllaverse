@@ -27,7 +27,7 @@
  * ===========================================================================================
  */
 
-import Sortable from 'sortablejs';
+// Drag-and-drop disabled; renumbering handled on add/delete only
 
 document.addEventListener('DOMContentLoaded', function () {
   const sdgTbody = document.getElementById('syllabus-sdg-sortable');
@@ -64,17 +64,7 @@ document.addEventListener('DOMContentLoaded', function () {
    * Updates badge numbers after reordering
    * Saves new order to backend
    */
-  if (sdgTbody) {
-    Sortable.create(sdgTbody, {
-      animation: 150,
-      handle: '.drag-handle',
-      ghostClass: 'sortable-ghost',
-      onEnd: function () {
-        updateVisibleCodes();
-        saveSdgOrder();
-      }
-    });
-  }
+  // Drag-and-drop disabled
 
   /**
    * ===========================================================================================
@@ -138,58 +128,22 @@ document.addEventListener('DOMContentLoaded', function () {
         sdgTbody.appendChild(placeholder);
       }
     } else {
-      // Backend row: delete via AJAX (regardless of blank or not)
-      if (!syllabusId) return;
-
-      try {
-        const response = await fetch(`/faculty/syllabi/${syllabusId}/sdgs/entry/${sdgId}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to delete SDG');
-        }
-
-        const data = await response.json();
-        
-        row.remove();
-        updateVisibleCodes();
-
-        // Update all code inputs to match badges
-        const rows = sdgTbody.querySelectorAll('tr[data-id]');
-        rows.forEach((row, index) => {
-          const codeInput = row.querySelector('input[name="code[]"]');
-          if (codeInput) {
-            codeInput.value = `SDG${index + 1}`;
-          }
-        });
-
-        // Show placeholder if no rows left
-        const remainingRows = sdgTbody.querySelectorAll('tr[data-id]');
-        if (remainingRows.length === 0) {
-          const placeholder = document.createElement('tr');
-          placeholder.id = 'sdg-placeholder';
-          placeholder.innerHTML = `
-            <td colspan="2" class="text-center text-muted py-4">
-              <p class="mb-2">No SDGs added yet.</p>
-              <p class="mb-0"><small>Click the <strong>+</strong> button above to add an SDG.</small></p>
-            </td>
-          `;
-          sdgTbody.appendChild(placeholder);
-        }
-
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('success', 'SDG deleted successfully');
-        }
-      } catch (error) {
-        console.error('Error deleting SDG:', error);
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', error.message || 'Failed to delete SDG');
-        }
+      // UI-only delete for persisted rows; changes saved via main Save
+      row.remove();
+      updateVisibleCodes();
+      const rows = sdgTbody.querySelectorAll('tr[data-id]');
+      rows.forEach((row, index) => { const codeInput = row.querySelector('input[name="code[]"]'); if (codeInput) codeInput.value = `SDG${index + 1}`; });
+      const remainingRows = sdgTbody.querySelectorAll('tr[data-id]');
+      if (remainingRows.length === 0) {
+        const placeholder = document.createElement('tr');
+        placeholder.id = 'sdg-placeholder';
+        placeholder.innerHTML = `
+          <td colspan="2" class="text-center text-muted py-4">
+            <p class="mb-2">No SDGs added yet.</p>
+            <p class="mb-0"><small>Click the <strong>+</strong> button above to add an SDG.</small></p>
+          </td>
+        `;
+        sdgTbody.appendChild(placeholder);
       }
     }
   });
@@ -234,19 +188,19 @@ document.addEventListener('DOMContentLoaded', function () {
       </td>
       <td>
         <div class="d-flex align-items-center gap-2">
-          <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-            <i class="bi bi-grip-vertical"></i>
-          </span>
+          
           <div class="flex-grow-1 w-100">
             <textarea
               name="sdg_titles[]"
               class="cis-textarea cis-field autosize"
+              data-original=""
               placeholder="Title"
               rows="1"
               style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;"></textarea>
             <textarea
               name="sdgs[]"
               class="cis-textarea cis-field autosize"
+              data-original=""
               placeholder="Description"
               rows="1"
               style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;"></textarea>
@@ -313,13 +267,24 @@ document.addEventListener('DOMContentLoaded', function () {
    * Saves all SDG rows to the backend
    * Collects data from all rows and sends bulk update
    */
+  function bindGlobalUnsaved() {
+    function checkAnyChanged(){
+      const anyChanged = Array.from(sdgTbody.querySelectorAll('textarea.autosize')).some(t => (t.value||'') !== (t.getAttribute('data-original')||''));
+      const pill = document.getElementById('unsaved-sdgs'); if (pill) pill.classList.toggle('d-none', !anyChanged);
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+    }
+    sdgTbody.querySelectorAll('textarea.autosize').forEach((ta)=>{ ta.addEventListener('input', checkAnyChanged); ta.addEventListener('change', checkAnyChanged); });
+  }
+
+  bindGlobalUnsaved();
+
   async function saveSdg() {
     if (!syllabusId) {
       console.error('Syllabus ID not found');
       return;
     }
 
-    const rows = sdgTbody.querySelectorAll('tr[data-id]');
+    const rows = Array.from(sdgTbody.querySelectorAll('tr')).filter(tr => tr.id !== 'sdg-placeholder');
     const sdgs = [];
 
     rows.forEach((row, index) => {
@@ -336,10 +301,7 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     });
 
-    if (sdgs.length === 0) {
-      console.log('No SDGs to save');
-      return;
-    }
+    // Allow empty payload to clear all SDGs on backend
 
     try {
       const response = await fetch(`/faculty/syllabi/${syllabusId}/sdgs`, {
@@ -357,74 +319,16 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       const data = await response.json();
-
-      // Update DOM with fresh data from backend
-      if (data.sdgs && Array.isArray(data.sdgs)) {
-        // Clear existing rows
-        sdgTbody.innerHTML = '';
-        
-        if (data.sdgs.length === 0) {
-          // Show placeholder if no SDGs
-          const placeholder = document.createElement('tr');
-          placeholder.id = 'sdg-placeholder';
-          placeholder.innerHTML = `
-            <td colspan="2" class="text-center text-muted py-4">
-              <p class="mb-2">No SDGs added yet.</p>
-              <p class="mb-0"><small>Click the <strong>+</strong> button above to add an SDG.</small></p>
-            </td>
-          `;
-          sdgTbody.appendChild(placeholder);
-        } else {
-          // Rebuild rows with fresh backend data
-          data.sdgs.forEach((sdg, index) => {
-            const tr = document.createElement('tr');
-            tr.setAttribute('data-id', sdg.id);
-            
-            tr.innerHTML = `
-              <td class="text-center align-middle">
-                <div class="sdg-badge fw-semibold">SDG${index + 1}</div>
-              </td>
-              <td>
-                <div class="d-flex align-items-center gap-2">
-                  <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-                    <i class="bi bi-grip-vertical"></i>
-                  </span>
-                  <div class="flex-grow-1 w-100">
-                    <textarea
-                      name="sdg_titles[]"
-                      class="cis-textarea cis-field autosize"
-                      placeholder="Title"
-                      rows="1"
-                      style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;">${sdg.title || ''}</textarea>
-                    <textarea
-                      name="sdgs[]"
-                      class="cis-textarea cis-field autosize"
-                      placeholder="Description"
-                      rows="1"
-                      style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${sdg.description || ''}</textarea>
-                    <input type="hidden" name="code[]" value="${sdg.code}">
-                  </div>
-                  <button type="button" class="btn btn-sm btn-outline-danger btn-delete-sdg ms-2" title="Delete SDG"><i class="bi bi-trash"></i></button>
-                </div>
-              </td>
-            `;
-            
-            sdgTbody.appendChild(tr);
-          });
-          
-          // Reinitialize autosize for new textareas
-          if (typeof autosize !== 'undefined') {
-            const textareas = sdgTbody.querySelectorAll('textarea.autosize');
-            textareas.forEach(textarea => autosize(textarea));
-          }
-        }
-      }
+      // Mark inputs as saved and hide unsaved indicator
+      Array.from(sdgTbody.querySelectorAll('textarea[name="sdgs[]"]')).forEach((ta)=>{ ta.setAttribute('data-original', ta.value || ''); });
+      Array.from(sdgTbody.querySelectorAll('textarea[name="sdg_titles[]"]')).forEach((ta)=>{ ta.setAttribute('data-original', ta.value || ''); });
+      const pill = document.getElementById('unsaved-sdgs'); if (pill) pill.classList.add('d-none');
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+      return true;
       
     } catch (error) {
       console.error('Error saving SDGs:', error);
-      if (window.showAlertOverlay) {
-        window.showAlertOverlay('error', error.message || 'Failed to save SDGs');
-      }
+      return false;
     }
   }
 
@@ -538,10 +442,11 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       try {
-        const response = await fetch(`/faculty/syllabi/${syllabusId}/sdgs`, {
+        const response = await fetch(`/faculty/syllabi/${syllabusId}/load-predefined-sdgs`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
           },
           body: JSON.stringify({ sdg_ids: selectedIds })
@@ -554,12 +459,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const data = await response.json();
 
-        // Close modal
+        // Close modal (no overlay messaging)
         bootstrap.Modal.getInstance(loadPredefinedModal).hide();
-
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('success', 'SDGs loaded successfully');
-        }
 
         // Update DOM with fresh data
         if (data.sdgs && Array.isArray(data.sdgs)) {
@@ -578,10 +479,10 @@ document.addEventListener('DOMContentLoaded', function () {
             `;
             sdgTbody.appendChild(placeholder);
           } else {
-            // Rebuild rows with fresh backend data
+            // Build preview-only rows (client ids)
             data.sdgs.forEach((sdg, index) => {
               const tr = document.createElement('tr');
-              tr.setAttribute('data-id', sdg.id);
+              tr.setAttribute('data-id', `new-${Date.now()}-${index}`);
               
               tr.innerHTML = `
                 <td class="text-center align-middle">
@@ -589,23 +490,22 @@ document.addEventListener('DOMContentLoaded', function () {
                 </td>
                 <td>
                   <div class="d-flex align-items-center gap-2">
-                    <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-                      <i class="bi bi-grip-vertical"></i>
-                    </span>
                     <div class="flex-grow-1 w-100">
                       <textarea
                         name="sdg_titles[]"
                         class="cis-textarea cis-field autosize"
+                        data-original="${sdg.title || ''}"
                         placeholder="Title"
                         rows="1"
                         style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;">${sdg.title || ''}</textarea>
                       <textarea
                         name="sdgs[]"
                         class="cis-textarea cis-field autosize"
+                        data-original="${sdg.description || ''}"
                         placeholder="Description"
                         rows="1"
                         style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${sdg.description || ''}</textarea>
-                      <input type="hidden" name="code[]" value="${sdg.code}">
+                      <input type="hidden" name="code[]" value="${sdg.code || `SDG${index+1}`}">
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-danger btn-delete-sdg ms-2" title="Delete SDG"><i class="bi bi-trash"></i></button>
                   </div>
@@ -620,6 +520,14 @@ document.addEventListener('DOMContentLoaded', function () {
               const textareas = sdgTbody.querySelectorAll('textarea.autosize');
               textareas.forEach(textarea => autosize(textarea));
             }
+            updateVisibleCodes();
+            // Rebind unsaved tracking for newly added rows
+            (function(){
+              const pill = document.getElementById('unsaved-sdgs'); if (pill) pill.classList.remove('d-none');
+              sdgTbody.querySelectorAll('textarea.autosize').forEach((ta)=>{
+                ta.addEventListener('input', ()=>{ const anyChanged = Array.from(sdgTbody.querySelectorAll('textarea.autosize')).some(t => (t.value||'') !== (t.getAttribute('data-original')||'')); pill.classList.toggle('d-none', !anyChanged); });
+              });
+            })();
           }
         }
 
