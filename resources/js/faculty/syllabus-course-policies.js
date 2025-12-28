@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', function () {
   const confirmLoadBtn = document.getElementById('confirmLoadPredefinedPolicy');
   const syllabusId = document.getElementById('syllabus-document')?.dataset?.syllabusId;
 
+  let lastPreviewPolicies = null;
+
   if (loadPolicyBtn && loadPolicyModal && syllabusId) {
     loadPolicyBtn.addEventListener('click', async function() {
       const modal = new bootstrap.Modal(loadPolicyModal);
@@ -32,6 +34,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const data = await response.json();
         
         if (data.success && data.policies) {
+          lastPreviewPolicies = data.policies;
           // Display all policies in a formatted view
           let html = '';
           const sectionLabels = {
@@ -89,54 +92,65 @@ document.addEventListener('DOMContentLoaded', function () {
     if (confirmLoadBtn) {
       confirmLoadBtn.addEventListener('click', async function() {
         try {
-          const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-          // Inform user that loading has started
-          if (window.showAlertOverlay) {
-            window.showAlertOverlay('info', 'Loading predefined course policies...');
+          // Preview-only: populate fields without persisting
+          // If we have last preview cached, use it; else refetch
+          let policies = lastPreviewPolicies;
+          if (!policies) {
+            const response = await fetch(`/faculty/syllabi/${syllabusId}/predefined-policies`);
+            const data = await response.json();
+            if (data.success && data.policies) policies = data.policies; else throw new Error(data.message || 'No predefined policies found');
           }
-          const response = await fetch(`/faculty/syllabi/${syllabusId}/load-predefined-policies`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': csrf || ''
-            },
-            body: JSON.stringify({})
+
+          const textareas = document.querySelectorAll('.course-policies textarea[name="course_policies[]"]');
+          const sections = ['policy', 'exams', 'dishonesty', 'dropping', 'other'];
+
+          sections.forEach((section, index) => {
+            if (textareas[index] && typeof policies[section] !== 'undefined') {
+              textareas[index].value = policies[section] || '';
+              // set baseline for unsaved tracking to loaded value
+              textareas[index].setAttribute('data-original', policies[section] || '');
+              if (window.autosize) { autosize.update(textareas[index]); }
+              textareas[index].dispatchEvent(new Event('input', { bubbles: true }));
+            }
           });
-          const data = await response.json();
 
-          if (data.success && data.policies) {
-            const textareas = document.querySelectorAll('.course-policies textarea[name="course_policies[]"]');
-            const sections = ['policy', 'exams', 'dishonesty', 'dropping', 'other'];
-
-            sections.forEach((section, index) => {
-              if (textareas[index] && typeof data.policies[section] !== 'undefined') {
-                textareas[index].value = data.policies[section];
-                if (window.autosize) { autosize.update(textareas[index]); }
-                textareas[index].dispatchEvent(new Event('input', { bubbles: true }));
-              }
-            });
-
-            // Optionally show a lightweight feedback (custom event for global toast system if exists)
-            document.dispatchEvent(new CustomEvent('syllabus:policiesLoaded', { detail: { syllabusId, source: data.source } }));
-
-            if (window.showAlertOverlay) {
-              window.showAlertOverlay('success', 'Predefined course policies loaded.');
-            }
-
-            bootstrap.Modal.getInstance(loadPolicyModal).hide();
-          } else {
-            console.warn('Load predefined policies failed:', data.message);
-            if (window.showAlertOverlay) {
-              window.showAlertOverlay('error', data.message || 'Failed to load predefined policies.');
-            }
-          }
+          // Close modal (no DB writes)
+          const instance = bootstrap.Modal.getInstance(loadPolicyModal);
+          if (instance) instance.hide();
         } catch (error) {
-          console.error('Error persisting predefined policies:', error);
-          if (window.showAlertOverlay) {
-            window.showAlertOverlay('error', 'Error loading predefined course policies.');
-          }
+          console.error('Error loading predefined policies for preview:', error);
+          alert(error.message || 'Failed to load predefined policies');
         }
       });
     }
   }
+  // Expose save for toolbar: persist course_policies[] via PUT
+  window.saveCoursePolicies = async function() {
+    try {
+      const syllabusEl = document.getElementById('syllabus-document');
+      const sid = syllabusEl?.dataset?.syllabusId;
+      if (!sid) return false;
+      const fields = Array.from(document.querySelectorAll('.course-policies textarea[name="course_policies[]"]'));
+      const course_policies = fields.map(f => {
+        const v = (f.value || '').trim();
+        return v === '' ? null : v;
+      });
+      const res = await fetch(`/faculty/syllabi/${sid}/course-policies`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '' },
+        body: JSON.stringify({ course_policies })
+      });
+      const data = await res.json().catch(()=>({ ok:false }));
+      if (data && data.ok) {
+        // mark fields as saved
+        fields.forEach(f => f.setAttribute('data-original', f.value || ''));
+        try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+        return true;
+      }
+      return false;
+    } catch(e) {
+      console.error('saveCoursePolicies error', e);
+      return false;
+    }
+  };
 });

@@ -118,6 +118,8 @@ Route::middleware([FacultyAuth::class])->group(function () {
     Route::get('/faculty/syllabi/{id}/validation-status', [SyllabusController::class, 'validationStatus'])->name('faculty.syllabi.validation-status');
     Route::get('/faculty/syllabi/{id}/predefined-policies', [\App\Http\Controllers\Faculty\Syllabus\SyllabusCoursePolicyController::class, 'getPredefinedPolicies'])->name('faculty.syllabi.predefined-policies');
     Route::post('/faculty/syllabi/{id}/load-predefined-policies', [\App\Http\Controllers\Faculty\Syllabus\SyllabusCoursePolicyController::class, 'loadPredefinedPolicies'])->name('faculty.syllabi.course-policies.load-predefined');
+    // Preview-only is already provided by GET /predefined-policies; add PUT endpoint to persist edited fields
+    Route::put('/faculty/syllabi/{syllabus}/course-policies', [\App\Http\Controllers\Faculty\Syllabus\SyllabusCoursePolicyController::class, 'update'])->name('faculty.syllabi.course-policies.update');
     
     // ---------- Course Info Save ----------
     Route::post('/faculty/syllabi/{syllabus}/course-info', [\App\Http\Controllers\Faculty\Syllabus\SyllabusCourseInfoController::class, 'save'])->name('faculty.syllabi.course-info.save');

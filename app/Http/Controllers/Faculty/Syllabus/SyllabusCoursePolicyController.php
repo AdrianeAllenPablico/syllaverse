@@ -54,13 +54,31 @@ class SyllabusCoursePolicyController extends Controller
             $policies = $request->input('course_policies');
             
             foreach ($sections as $index => $section) {
-                if (isset($policies[$index])) {
+                // Use array_key_exists to allow null values to be persisted when fields are cleared
+                if (array_key_exists($index, $policies)) {
+                    $val = $policies[$index];
+                    // Normalize empty strings to null when user clears the field
+                    if (is_string($val) && trim($val) === '') { $val = null; }
                     SyllabusCoursePolicy::updateOrCreate(
                         ['syllabus_id' => $syllabus->id, 'section' => $section],
-                        ['content' => $policies[$index], 'position' => $index + 1]
+                        ['content' => $val, 'position' => $index + 1]
                     );
                 }
             }
+        }
+    }
+
+    /**
+     * API wrapper: persist course policies from JSON and return ok.
+     */
+    public function update(Request $request, Syllabus $syllabus)
+    {
+        try {
+            $this->syncFromRequest($request, $syllabus);
+            return response()->json(['ok' => true]);
+        } catch (\Throwable $e) {
+            \Log::error('CoursePolicies::update failed', ['syllabus_id' => $syllabus->id, 'error' => $e->getMessage()]);
+            return response()->json(['ok' => false, 'message' => 'Failed to save course policies'], 500);
         }
     }
 
