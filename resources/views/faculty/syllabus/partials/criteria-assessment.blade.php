@@ -206,8 +206,8 @@
                   </div>
                   <div class="sub-list" aria-live="polite" data-init='{{ json_encode($sec['value'] ?? []) }}'>
                     <div class="sub-line">
-                      <input type="text" name="criteria_{{ $sec['key'] ?? ($idx+1) }}_task" class="sub-input cis-input" placeholder="Task" />
-                      <input type="text" name="criteria_{{ $sec['key'] ?? ($idx+1) }}_percent" class="sub-percent cis-number" placeholder="0%" />
+                      <input type="text" name="criteria_{{ $sec['key'] ?? ($idx+1) }}_task_0" class="sub-input cis-input" placeholder="Task" data-index="0" />
+                      <input type="text" name="criteria_{{ $sec['key'] ?? ($idx+1) }}_percent_0" class="sub-percent cis-number" placeholder="0%" data-index="0" />
                     </div>
                   </div>
                   <div class="criteria-actions-row">
