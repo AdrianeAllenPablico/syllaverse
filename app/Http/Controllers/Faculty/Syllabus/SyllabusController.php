@@ -322,7 +322,7 @@ class SyllabusController extends Controller
     {
         try {
             $request->validate([
-                'program_id' => 'nullable|exists:programs,id',
+                'program_id' => 'required|exists:programs,id',
                 'faculty_id' => 'nullable|exists:users,id',
                 'course_id' => 'required|exists:courses,id',
                 'academic_year' => 'required|string',
@@ -406,6 +406,51 @@ class SyllabusController extends Controller
             $course = Course::with(['ilos', 'prerequisites'])->find($request->course_id);
             $this->courseInfo->seedFromCourse($syllabus, $course);
             $this->ilos->seedFromCourse($syllabus, $course);
+
+            // Seed Criteria categories from contact hours (Lecture vs Laboratory)
+            try {
+                $lec = (int) ($course->contact_hours_lec ?? 0);
+                $lab = (int) ($course->contact_hours_lab ?? 0);
+                $total = $lec + $lab;
+                if ($total > 0) {
+                    // Compute percent weights that sum to 100
+                    $lecPct = (int) round(($lec / $total) * 100);
+                    $labPct = max(0, 100 - $lecPct);
+                    // Build headings e.g., "Lecture (40%)", "Laboratory (60%)"
+                    $sections = [];
+                    if ($lec > 0) {
+                        $sections[] = [
+                            'key' => 'lecture',
+                            'heading' => 'Lecture (' . $lecPct . '%)',
+                            'value' => [],
+                        ];
+                    }
+                    if ($lab > 0) {
+                        $sections[] = [
+                            'key' => 'laboratory',
+                            'heading' => 'Laboratory (' . $labPct . '%)',
+                            'value' => [],
+                        ];
+                    }
+                    // Persist normalized categories with positions
+                    $this->criteria->sync($sections, $syllabus);
+
+                    // Also store titles in course-info for Blade consumption when needed
+                    try {
+                        $ci = $syllabus->courseInfo ?: \App\Models\SyllabusCourseInfo::where('syllabus_id', $syllabus->id)->first();
+                        if ($ci) {
+                            $ci->update([
+                                'criteria_lecture_title' => ($lec > 0) ? ('Lecture (' . $lecPct . '%)') : null,
+                                'criteria_laboratory_title' => ($lab > 0) ? ('Laboratory (' . $labPct . '%)') : null,
+                            ]);
+                        }
+                    } catch (\Throwable $e) {
+                        \Log::warning('SyllabusController::store failed updating courseInfo criteria titles', ['error' => $e->getMessage(), 'syllabus_id' => $syllabus->id]);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('SyllabusController::store criteria seed from contact hours failed', ['error' => $e->getMessage(), 'syllabus_id' => $syllabus->id]);
+            }
 
         // Copy master IGAs into per-syllabus IGAs if master table exists
         try {

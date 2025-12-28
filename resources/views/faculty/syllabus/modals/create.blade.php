@@ -359,11 +359,11 @@
           <div class="row g-3">
             {{-- Syllabus Title removed as per new requirements --}}
             <div class="col-md-6">
-              <label class="form-label">Program</label>
-              <select name="program_id" class="form-select">
+              <label class="form-label">Program <span class="text-danger">*</span></label>
+              <select name="program_id" class="form-select" required>
                 <option value="">-- Select Program --</option>
                 @foreach($programs as $program)
-                  <option value="{{ $program->id }}">{{ $program->code }} - {{ $program->name }}</option>
+                  <option value="{{ $program->id }}" @selected(old('program_id') == $program->id)>{{ $program->code }} - {{ $program->name }}</option>
                 @endforeach
               </select>
             </div>
