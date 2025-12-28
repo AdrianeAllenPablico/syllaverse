@@ -38,9 +38,18 @@
       </button>
       @if(!$isPendingReview)
       <button id="syllabusSaveBtn" type="button" class="btn btn-danger d-flex flex-column align-items-center gap-1 toolbar-btn" title="Save">
-        <i class="bi bi-save fs-5"></i>
+        <i class="bi bi-floppy fs-5"></i>
         <span class="small">Save</span>
         <span id="unsaved-count-badge" class="badge bg-warning text-dark mt-1 w-100 text-center" style="display:none;">0</span>
+      </button>
+      <!-- Undo / Redo buttons -->
+      <button id="syllabusUndoBtn" type="button" class="btn btn-outline-secondary d-flex flex-column align-items-center gap-1 toolbar-btn mt-3" title="Undo">
+        <i class="bi bi-arrow-counterclockwise fs-5"></i>
+        <span class="small">Undo</span>
+      </button>
+      <button id="syllabusRedoBtn" type="button" class="btn btn-outline-secondary d-flex flex-column align-items-center gap-1 toolbar-btn mt-2" title="Redo">
+        <i class="bi bi-arrow-clockwise fs-5"></i>
+        <span class="small">Redo</span>
       </button>
       @endif
       @if((($reviewMode && !$fromApprovals) || $isApproved || (!$reviewMode && !$isDraft && !$isLockedSubmitted)))
@@ -983,19 +992,15 @@
     if (!form) return;
     const undoBtn = document.getElementById('undoBtn');
     const redoBtn = document.getElementById('redoBtn');
-  const autoToggle = document.getElementById('autoSaveToggle');
     const saveBtn = document.getElementById('syllabusSaveBtn');
 
     const past = []; // previous states
     const future = []; // undone states
     const MAX_STACK = 25;
     let applyingSnapshot = false;
-    let autoSaveEnabled = false;
-    let autoSaveTimer = null;
+    // Auto-save removed
 
-    // Load persisted auto-save preference
-    try { autoSaveEnabled = localStorage.getItem('sv_auto_save') === 'true'; } catch(e) {}
-  updateAutoSaveUI();
+    // Auto-save removed: do not read persisted preference
 
     function captureSnapshot(){
       // Build a map name -> values; handles multiple fields with same name
@@ -1094,7 +1099,6 @@
       clearTimeout(changeTimer);
       changeTimer = setTimeout(()=>{
         pushPast(captureSnapshot());
-        scheduleAutoSave();
       }, 350);
     }
     form.addEventListener('input', onUserChange);
@@ -1122,33 +1126,9 @@
       else if ((e.ctrlKey && key === 'y') || (e.ctrlKey && e.shiftKey && key === 'z')) { e.preventDefault(); if (redoBtn && !redoBtn.disabled) redoBtn.click(); }
     });
 
-    // Auto-Save toggle + UI (switch)
-    if (autoToggle) autoToggle.addEventListener('change', function(){
-      autoSaveEnabled = !!autoToggle.checked;
-      try { localStorage.setItem('sv_auto_save', autoSaveEnabled ? 'true' : 'false'); } catch(e){}
-      updateAutoSaveUI();
-      if (autoSaveEnabled) scheduleAutoSave();
-    });
+    // Auto-save removed: toggle and scheduling disabled
 
-    function updateAutoSaveUI(){
-      if (!autoToggle) return;
-      autoToggle.checked = !!autoSaveEnabled;
-      autoToggle.setAttribute('aria-checked', autoSaveEnabled ? 'true' : 'false');
-      autoToggle.title = autoSaveEnabled ? 'Auto-Save: On' : 'Auto-Save: Off';
-    }
-
-    function scheduleAutoSave(){
-      if (!autoSaveEnabled) return;
-      if (!saveBtn) return;
-      if (window._syllabusSaveLock) return;
-      clearTimeout(autoSaveTimer);
-      autoSaveTimer = setTimeout(()=>{
-        if (window._syllabusSaveLock) return;
-        if (saveBtn) {
-          try { saveBtn.click(); } catch(e){}
-        }
-      }, 1500);
-    }
+    // Auto-save removed: no UI updates or scheduling
 
     // Expose for debugging
     try { window._svUndoRedo = { past, future, capture: captureSnapshot, apply: applySnapshot }; } catch(e){}

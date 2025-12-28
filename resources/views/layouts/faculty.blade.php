@@ -87,7 +87,11 @@
   @vite('resources/js/faculty/layout.js')              {{-- Sidebar/drawer logic --}}
   @vite('resources/js/superadmin/alert-timer.js')      {{-- Shared alert auto-hide --}}
   @vite('resources/js/components/alert-overlay.js')    {{-- Overlay controller (listens to sv:alert) --}}
-  @vite('resources/js/faculty/syllabus.js')
+  @vite('resources/js/faculty/utilities/syllabus-back.js')
+  @vite('resources/js/faculty/utilities/syllabus-save-state.js')
+  @vite('resources/js/faculty/utilities/syllabus-save.js')
+  @vite('resources/js/faculty/utilities/syllabus-undo.js')
+  @vite('resources/js/faculty/utilities/syllabus-redo.js')
   @vite('resources/js/faculty/syllabus-course-info.js')
   @vite('resources/js/faculty/syllabus-sdg.js')
   @vite('resources/js/faculty/syllabus-textbook.js')

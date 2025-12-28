@@ -102,7 +102,6 @@ class SyllabusCourseInfoController extends Controller
 
         $lec = (int) ($course->contact_hours_lec ?? 0);
         $lab = (int) ($course->contact_hours_lab ?? 0);
-        $creditText = null;
         $contactText = null;
 
         if ($sourceContactText !== '') {
@@ -113,12 +112,9 @@ class SyllabusCourseInfoController extends Controller
             if ($parsed['lab'] !== null) {
                 $lab = $parsed['lab'];
             }
-            $contactText = $sourceContactText;
-        } else {
-            $total = $lec + $lab;
-            $contactText = $this->formatContactText($lec, $lab);
-            $creditText = $total ? ("{$total} ({$lec} hrs lec; {$lab} hrs lab)") : null;
         }
+        // Always compose standardized contact hours text from available lec/lab
+        $contactText = $this->formatContactText($lec, $lab);
 
         $faculty ??= Auth::user();
         $currentUserId = Auth::id();
@@ -166,7 +162,7 @@ class SyllabusCourseInfoController extends Controller
                 ? $course->prerequisites->map(fn ($c) => ($c->code ? ($c->code . ' - ') : '') . ($c->title ?? ''))->implode("\n")
                 : null,
             'course_description' => $course->description ?? null,
-            'credit_hours_text' => $creditText ?? null,
+            'credit_hours_text' => $this->formatCreditHoursText($lec, $lab),
             'semester' => $syllabus->semester ?? null,
             'year_level' => $syllabus->year_level ?? null,
             'academic_year' => $syllabus->academic_year ?? null,
@@ -179,8 +175,6 @@ class SyllabusCourseInfoController extends Controller
             'revision_no' => $syllabus->revision_no ?? null,
             'revision_date' => optional($syllabus->revision_date)->format('F d, Y') ?? null,
             'contact_hours' => $contactText,
-            'contact_hours_lec' => $lec ? (string) ($lec . ' hours lecture') : null,
-            'contact_hours_lab' => $lab ? (string) ($lab . ' hours laboratory') : null,
             'criteria_lecture' => $course->criteria_lecture ?? null,
             'criteria_laboratory' => $course->criteria_laboratory ?? null,
         ];
@@ -195,25 +189,9 @@ class SyllabusCourseInfoController extends Controller
     {
         if (! empty($payload['contact_hours'])) {
             $parsed = $this->parseContactTextForLecLab((string) $payload['contact_hours']);
-            if ($parsed['lec'] !== null) {
-                $payload['contact_hours_lec'] = $parsed['lec'];
-            }
-            if ($parsed['lab'] !== null) {
-                $payload['contact_hours_lab'] = $parsed['lab'];
-            }
-        }
-
-        $lecText = $payload['contact_hours_lec'] ?? null;
-        $labText = $payload['contact_hours_lab'] ?? null;
-
-        $lecNum = $this->extractNumber($lecText);
-        $labNum = $this->extractNumber($labText);
-
-        if ($lecNum !== null || $labNum !== null) {
-            $lecNum = $lecNum ?: 0;
-            $labNum = $labNum ?: 0;
-            $total = $lecNum + $labNum;
-            $payload['credit_hours_text'] = $total ? "{$total} ({$lecNum} hrs lec; {$labNum} hrs lab)" : null;
+            $lecNum = $parsed['lec'] ?? 0;
+            $labNum = $parsed['lab'] ?? 0;
+            $payload['credit_hours_text'] = $this->formatCreditHoursText($lecNum ?: 0, $labNum ?: 0);
         }
 
         return $payload;
@@ -309,6 +287,17 @@ class SyllabusCourseInfoController extends Controller
         return null;
     }
 
+    protected function formatCreditHoursText(int $lec, int $lab): ?string
+    {
+        $total = ($lec ?: 0) + ($lab ?: 0);
+        if ($total <= 0) return null;
+        $parts = [];
+        if ($lec > 0) { $parts[] = $lec . ' hrs lec'; }
+        if ($lab > 0) { $parts[] = $lab . ' hrs lab'; }
+        $suffix = $parts ? ('(' . implode('; ', $parts) . ')') : '';
+        return trim($total . ' ' . $suffix);
+    }
+
     protected function extractNumber($value): ?int
     {
         if (is_null($value) || $value === '') {
@@ -335,8 +324,7 @@ class SyllabusCourseInfoController extends Controller
             'course_title', 'course_code', 'course_category', 'course_prerequisites', 'semester', 'year_level',
             'credit_hours_text', 'instructor_name', 'employee_code', 'reference_cmo', 'instructor_designation',
             'date_prepared', 'instructor_email', 'revision_no', 'academic_year', 'revision_date', 'course_description',
-            'criteria_lecture', 'criteria_laboratory', 'contact_hours', 'contact_hours_lec', 'contact_hours_lab',
-            'tla_strategies',
+            'criteria_lecture', 'criteria_laboratory', 'contact_hours', 'tla_strategies',
         ];
     }
 }

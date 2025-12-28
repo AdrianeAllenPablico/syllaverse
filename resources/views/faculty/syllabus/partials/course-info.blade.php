@@ -21,6 +21,37 @@
   } else {
     $contactHoursValue = $contactHoursRaw !== '' ? preg_replace('/;\s*/', "\n", $contactHoursRaw) : '';
   }
+  // Derive credit hours text if not explicitly saved
+  $creditHoursTextRaw = trim((string) ($local?->credit_hours_text ?? ''));
+  $creditHoursOld = old('credit_hours_text');
+    if ($creditHoursOld !== null) {
+      $creditHoursValue = (string) $creditHoursOld;
+    } else {
+      if ($creditHoursTextRaw !== '') {
+        $creditHoursValue = $creditHoursTextRaw;
+      } else {
+        // Parse from contact hours free text e.g., "3 hours lecture; 2 hours laboratory"
+        $lec = null; $lab = null;
+        if ($contactHoursRaw !== '') {
+          if (preg_match('/(\d+)\s*(?:hrs?|hours?).*lec/i', $contactHoursRaw, $m)) { $lec = (int) $m[1]; }
+          if (preg_match('/(\d+)\s*(?:hrs?|hours?).*lab/i', $contactHoursRaw, $m2)) { $lab = (int) $m2[1]; }
+          $lecNum = $lec ?: 0;
+          $labNum = $lab ?: 0;
+          $total = $lecNum + $labNum;
+          if ($total > 0) {
+            $parts = [];
+            if ($lecNum > 0) { $parts[] = $lecNum . ' hrs lec'; }
+            if ($labNum > 0) { $parts[] = $labNum . ' hrs lab'; }
+            $suffix = count($parts) ? ('(' . implode('; ', $parts) . ')') : '';
+            $creditHoursValue = trim((string)$total . ' ' . $suffix);
+          } else {
+            $creditHoursValue = '';
+          }
+        } else {
+          $creditHoursValue = '';
+        }
+      }
+    }
   // compute criteria percentage totals for display in headers (e.g., "Lecture (40%)")
   $lecturePercentSum = 0;
   if (!empty(trim((string) ($local?->criteria_lecture ?? '')))) {
@@ -110,9 +141,9 @@
       <th class="align-top text-start cis-label">Credit Hours
       </th>
       <td>
-  <textarea id="credit_hours_text" name="credit_hours_text" class="cis-textarea cis-field autosize"
-            placeholder="-" aria-live="polite" rows="1"
-            style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">{{ old('credit_hours_text', $local?->credit_hours_text ?? '') }}</textarea>
+      <textarea id="credit_hours_text" name="credit_hours_text" class="cis-textarea cis-field autosize"
+        placeholder="-" aria-live="polite" rows="1"
+        style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">{{ $creditHoursValue }}</textarea>
       </td>
     </tr>
 

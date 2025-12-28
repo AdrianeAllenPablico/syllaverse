@@ -178,7 +178,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial state: no department filtering
 
   // Removed legacy dropdown filtering code (now using simple select); ensure initial empty state set above.
-  renderEmpty('No course selected');
+  
+  // Check URL for course_id parameter and auto-select + load
+  const urlParams = new URLSearchParams(window.location.search);
+  const courseIdFromUrl = urlParams.get('course_id');
+  if (courseIdFromUrl && courseSelect) {
+    // Set the course filter to the URL parameter
+    courseSelect.value = courseIdFromUrl;
+    updateAddBtnState();
+    // Load ILOs for this course
+    loadIlos({ show: true });
+  } else {
+    renderEmpty('No course selected');
+  }
 
   // Require a picked course before opening Add ILO modal
   const isCoursePicked = () => !!getSelectedCourseId();

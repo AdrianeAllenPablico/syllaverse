@@ -2,7 +2,9 @@
 // Description: Handles IGA functionality for syllabus - add, remove, load predefined, autosize, sortable, delete
 
 import Sortable from 'sortablejs';
-import { initAutosize as syllabusInitAutosize, markDirty, updateUnsavedCount } from './syllabus';
+// Local no-ops for removed unsaved tracking helpers
+const markDirty = () => {};
+const updateUnsavedCount = () => {};
 
 document.addEventListener('DOMContentLoaded', () => {
   const list = document.getElementById('syllabus-iga-sortable');
@@ -202,51 +204,38 @@ document.addEventListener('DOMContentLoaded', () => {
       if (val.trim() === '' && selStart === 0) {
         e.preventDefault(); e.stopPropagation();
         const row = el.closest('tr.iga-row');
-        const id = row.getAttribute('data-id');
-        if (!id || id.startsWith('new-')) {
-          const prev = row.previousElementSibling;
-          try { row.remove(); } catch (e) { row.remove(); }
+        const prev = row.previousElementSibling;
+        
+        // Just remove from UI
+        row.remove();
+        
+        // Check if any rows remain, if not show placeholder
+        const remainingRows = list.querySelectorAll('tr.iga-row');
+        if (remainingRows.length === 0) {
+          const placeholder = document.createElement('tr');
+          placeholder.id = 'iga-placeholder';
+          placeholder.innerHTML = `
+            <td colspan="2" class="text-center text-muted py-4">
+              <p class="mb-2">No IGAs added yet.</p>
+              <p class="mb-0"><small>Click the <strong>+</strong> button above to add an IGA or <strong>Load Predefined</strong> to import IGAs.</small></p>
+            </td>
+          `;
+          list.appendChild(placeholder);
+        } else {
           updateVisibleCodes();
-          if (prev) { const prevTa = prev.querySelector('textarea.autosize'); if (prevTa) { prevTa.focus(); prevTa.selectionStart = prevTa.value.length; } }
-          return;
         }
         
-        try {
-          const res = await fetch((window.syllabusBasePath || '/faculty/syllabi') + `/igas/${id}`, { 
-            method: 'DELETE', 
-            headers: { 
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 
-              'Accept': 'application/json' 
-            } 
-          });
-          
-          if (!res.ok) throw new Error('Failed to delete IGA');
-          
-          const data = await res.json();
-          const prev = row.previousElementSibling;
-          
-          // Remove the row from DOM
-          row.remove();
-          
-          // Update remaining IGAs with new positions and codes
-          await updateIgaPositions();
-          
-          // Focus previous row
-          if (prev) { 
-            const prevTa = prev.querySelector('textarea.autosize'); 
-            if (prevTa) { 
-              prevTa.focus(); 
-              prevTa.selectionStart = prevTa.value.length; 
-            } 
-          }
-          
-          if (window.showAlertOverlay) {
-            window.showAlertOverlay('success', data.message || 'IGA deleted successfully');
-          }
-        } catch (err) {
-          console.error('Failed to delete IGA:', err);
-          alert('Failed to delete IGA. Please try again.');
+        // Focus previous row
+        if (prev) { 
+          const prevTa = prev.querySelector('textarea.autosize'); 
+          if (prevTa) { 
+            prevTa.focus(); 
+            prevTa.selectionStart = prevTa.value.length; 
+          } 
         }
+        
+        // Mark as unsaved
+        try { updateUnsavedCount(); } catch (e) { }
       }
     }
   });
@@ -255,71 +244,28 @@ document.addEventListener('DOMContentLoaded', () => {
   list.addEventListener('click', async (e) => {
     const btn = e.target.closest('.btn-delete-iga'); if (!btn) return;
     const row = btn.closest('tr.iga-row');
-    const id = row.getAttribute('data-id'); 
-    if (!id || id.startsWith('new-')) { 
-      try { row.remove(); } catch (e) { row.remove(); } 
-      
-      // Check if any rows remain, if not show placeholder
-      const rows = list.querySelectorAll('tr.iga-row');
-      if (rows.length === 0) {
-        const placeholder = document.createElement('tr');
-        placeholder.id = 'iga-placeholder';
-        placeholder.innerHTML = `
-          <td colspan="2" class="text-center text-muted py-4">
-            <p class="mb-2">No IGAs added yet.</p>
-            <p class="mb-0"><small>Click the <strong>+</strong> button above to add an IGA or <strong>Load Predefined</strong> to import IGAs.</small></p>
-          </td>
-        `;
-        list.appendChild(placeholder);
-      } else {
-        updateVisibleCodes();
-      }
-      return; 
+    
+    // Just remove from UI
+    row.remove();
+    
+    // Check if any rows remain, if not show placeholder
+    const rows = list.querySelectorAll('tr.iga-row');
+    if (rows.length === 0) {
+      const placeholder = document.createElement('tr');
+      placeholder.id = 'iga-placeholder';
+      placeholder.innerHTML = `
+        <td colspan="2" class="text-center text-muted py-4">
+          <p class="mb-2">No IGAs added yet.</p>
+          <p class="mb-0"><small>Click the <strong>+</strong> button above to add an IGA or <strong>Load Predefined</strong> to import IGAs.</small></p>
+        </td>
+      `;
+      list.appendChild(placeholder);
+    } else {
+      updateVisibleCodes();
     }
     
-    try {
-      const res = await fetch((window.syllabusBasePath || '/faculty/syllabi') + `/igas/${id}`, { 
-        method: 'DELETE', 
-        headers: { 
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 
-          'Accept': 'application/json' 
-        } 
-      });
-      
-      if (!res.ok) throw new Error('Failed to delete IGA');
-      
-      const data = await res.json();
-      
-      // Remove the row from DOM
-      row.remove();
-      
-      // Check if any rows remain, if not show placeholder
-      const remainingRows = list.querySelectorAll('tr.iga-row');
-      if (remainingRows.length === 0) {
-        const placeholder = document.createElement('tr');
-        placeholder.id = 'iga-placeholder';
-        placeholder.innerHTML = `
-          <td colspan="2" class="text-center text-muted py-4">
-            <p class="mb-2">No IGAs added yet.</p>
-            <p class="mb-0"><small>Click the <strong>+</strong> button above to add an IGA or <strong>Load Predefined</strong> to import IGAs.</small></p>
-          </td>
-        `;
-        list.appendChild(placeholder);
-      } else {
-        // Update remaining IGAs with new positions and codes
-        await updateIgaPositions();
-      }
-      
-      if (window.showAlertOverlay) {
-        window.showAlertOverlay('success', data.message || 'IGA deleted successfully');
-      } else {
-        alert(data.message || 'IGA deleted successfully');
-      }
-      
-    } catch (err) {
-      console.error('Failed to delete IGA:', err);
-      alert('Failed to delete IGA. Please try again.');
-    }
+    // Mark as unsaved
+    try { updateUnsavedCount(); } catch (e) { }
   });
 
   // Update IGA positions and codes on server after deletion or reorder
@@ -548,12 +494,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalInstance = bootstrap.Modal.getInstance(loadPredefinedModal);
         if (modalInstance) modalInstance.hide();
 
-        // Show success message
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('success', data.message || 'Predefined IGAs loaded successfully');
-        } else {
-          alert(data.message || 'Predefined IGAs loaded successfully');
-        }
+        // Log success message
+        console.log(data.message || 'Predefined IGAs loaded successfully');
 
       } catch (error) {
         console.error('Error loading predefined IGAs:', error);

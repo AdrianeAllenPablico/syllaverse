@@ -194,7 +194,7 @@
 
 /* Constrain syllabus card width and center content */
 .syllabus-content-wrapper {
-	max-width: 960px;
+	max-width: 1200px;
 	width: 100%;
 	margin-left: auto;
 	margin-right: auto;

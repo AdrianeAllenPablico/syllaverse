@@ -62,7 +62,7 @@
   .cis-criteria textarea { width:100%; border:none; background:transparent; padding:0; font-weight:400; font-family: inherit; font-size: inherit; line-height:1.15; color:#000; resize:none; overflow:hidden; }
   .cis-criteria .sub-list { margin-top:6px; flex: 1 1 auto; }
   .cis-criteria .sub-line { margin-left:18px; display:flex; gap:8px; align-items:flex-start; }
-  .cis-criteria .sub-input { flex:1 1 auto; max-width: 50%; }
+  .cis-criteria .sub-input { flex:1 1 auto; }
   .cis-criteria .sub-percent { flex:0 0 64px; width:64px; text-align:right; font-family: 'Times New Roman', Times, serif; font-size: 10pt; font-weight: 400; line-height: 1.15; }
   .cis-criteria textarea:focus { outline: none; box-shadow: none; background-color: transparent; }
   .cis-criteria .section-head { display:flex; justify-content:flex-start; align-items:flex-start; gap:8px; }
@@ -81,7 +81,7 @@
   }
   /* board layout with fixed side controls and adaptable sections */
   .cis-criteria .criteria-board { display: flex; align-items: stretch; gap: 0; }
-  .cis-criteria .sections-container { flex: 1 1 auto; display: flex; gap: 8px; }
+  .cis-criteria .sections-container { flex: 1 1 auto; display: flex; gap: 16px; }
   .cis-criteria .sections-container .section { flex: 1 1 0; min-width: 240px; }
   .cis-criteria .criteria-side-btn {
     padding: 0 8px;

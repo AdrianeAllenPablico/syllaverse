@@ -457,6 +457,20 @@
           const phase2Footer = document.getElementById('phase2Footer');
           const modalBody = document.querySelector('#selectSyllabusMetaModal .modal-body');
           const modalHeader = document.querySelector('#selectSyllabusMetaModal .modal-header');
+          const recipientRadios = document.querySelectorAll('input[name="recipient_type"]');
+          const facultySelection = document.getElementById('facultySelection');
+          const toggleFacultySelection = () => {
+            const selected = document.querySelector('input[name="recipient_type"]:checked');
+            const show = selected && (selected.value === 'shared' || selected.value === 'others');
+            if (facultySelection) {
+              facultySelection.style.display = show ? 'block' : 'none';
+            }
+          };
+          if (recipientRadios && recipientRadios.length) {
+            recipientRadios.forEach(r => r.addEventListener('change', toggleFacultySelection));
+            // initialize on load
+            toggleFacultySelection();
+          }
           if (nextBtn) {
             nextBtn.addEventListener('click', () => {
               if (phase1) phase1.style.display = 'none';

@@ -16,7 +16,7 @@ class SyllabusCourseInfo extends Model
         'semester', 'year_level', 'credit_hours_text', 'instructor_name', 'employee_code',
         'reference_cmo', 'instructor_designation', 'date_prepared', 'instructor_email',
     'revision_no', 'academic_year', 'revision_date', 'course_description',
-    'contact_hours', 'contact_hours_lec', 'contact_hours_lab',
+    'contact_hours',
     'tla_strategies',
     // Keep canonical criteria fields so Blade partials can render them after save
     'criteria_lecture', 'criteria_laboratory',

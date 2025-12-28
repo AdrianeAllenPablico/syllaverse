@@ -84,8 +84,19 @@ class SyllabusController extends Controller
             ->latest()
             ->get();
 
-        $programs = Program::all();
-        $courses = Course::all();
+        // Filter programs/courses to the user's active department for create modal options
+        $currentUser = auth()->user();
+        $currentDeptId = optional($currentUser?->appointments()
+            ->where('status','active')
+            ->where('scope_type','Department')
+            ->first())->scope_id;
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('programs', 'department_id') && $currentDeptId) {
+            $programs = Program::where('department_id', $currentDeptId)->get();
+        } else {
+            $programs = Program::all();
+        }
+        $courses = $currentDeptId ? Course::where('department_id', $currentDeptId)->get() : Course::all();
 
         return view('faculty.syllabus.index', compact('syllabi', 'programs', 'courses'));
     }
@@ -332,7 +343,26 @@ class SyllabusController extends Controller
                 'others' => $facultyMembers[0] ?? Auth::id(), // First selected faculty becomes owner
             };
 
-            $syllabus = Syllabus::create([
+            // Build a safe fallback title only if the 'title' column still exists
+            $fallbackTitle = null;
+            if (Schema::hasColumn('syllabi', 'title')) {
+                $courseForTitle = Course::find($request->course_id);
+                $courseCode = trim((string) ($courseForTitle?->code ?? ''));
+                $courseName = trim((string) ($courseForTitle?->title ?? ''));
+                $ay = trim((string) $request->academic_year);
+                $sem = trim((string) $request->semester);
+                // Example: "CS101 – Intro to CS (2025-2026, 1st Semester)"
+                $composed = trim(collect([$courseCode, $courseName])->filter()->implode(' – '));
+                $suffix = ($ay !== '' || $sem !== '') ? '(' . trim(collect([$ay, $sem])->filter()->implode(', ')) . ')' : '';
+                $fallbackTitle = trim(collect([$composed, $suffix])->filter()->implode(' '));
+                if ($fallbackTitle === '') {
+                    // As a last resort, prevent NOT NULL violation with a hyphen
+                    $fallbackTitle = '-';
+                }
+            }
+
+            // Create model instance so we can set non-fillable attributes like 'title' before first save
+            $syllabus = new Syllabus([
                 'faculty_id' => $ownerId,
                 'program_id' => $request->program_id,
                 'course_id' => $request->course_id,
@@ -340,6 +370,10 @@ class SyllabusController extends Controller
                 'semester' => $request->semester,
                 'year_level' => $request->year_level,
             ]);
+            if ($fallbackTitle !== null) {
+                $syllabus->title = $fallbackTitle;
+            }
+            $syllabus->save();
 
             // Create faculty-syllabus relationships via dedicated controller
             $this->facultySyllabus->createRelationships($syllabus, $recipientType, $facultyMembers);
@@ -499,8 +533,19 @@ class SyllabusController extends Controller
             'iloCdioSdg'
         ])->findOrFail($id);
 
-        $programs = Program::all();
-        $courses = Course::all();
+        // Filter programs/courses to the user's active department for create modal options
+        $currentUser = auth()->user();
+        $currentDeptId = optional($currentUser?->appointments()
+            ->where('status','active')
+            ->where('scope_type','Department')
+            ->first())->scope_id;
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('programs', 'department_id') && $currentDeptId) {
+            $programs = Program::where('department_id', $currentDeptId)->get();
+        } else {
+            $programs = Program::all();
+        }
+        $courses = $currentDeptId ? Course::where('department_id', $currentDeptId)->get() : Course::all();
 
         // load mission/vision defaults through the dedicated partial controller helper
         $missionVisionDefaults = $this->missionVision->defaults($syllabus);
@@ -669,23 +714,19 @@ class SyllabusController extends Controller
 
         // Build CIS-style variables
         $course = $syllabus->course;
-    $program = $syllabus->program;
-    $faculty = $syllabus->faculty ?? auth()->user();
-    $courseInfo = $syllabus->courseInfo;
+        $program = $syllabus->program;
+        $faculty = $syllabus->faculty ?? auth()->user();
+        $courseInfo = $syllabus->courseInfo;
 
-    // prefer free-text contact_hours when present, else fall back to numeric lec/lab
-    $contactText = trim((string) ($courseInfo?->contact_hours ?? ''));
-    if ($contactText !== '') {
-        $lec = (int) ($courseInfo?->contact_hours_lec ?? $course->contact_hours_lec ?? 0);
-        $lab = (int) ($courseInfo?->contact_hours_lab ?? $course->contact_hours_lab ?? 0);
-        $total = $lec + $lab;
-        // keep contactText as provided
-    } else {
-        $lec = (int) ($courseInfo?->contact_hours_lec ?? $course->contact_hours_lec ?? 0);
-        $lab = (int) ($courseInfo?->contact_hours_lab ?? $course->contact_hours_lab ?? 0);
-        $total = $lec + $lab;
-        $contactText = $total ? "{$total} ({$lec} hrs lec; {$lab} hrs lab)" : '-';
-    }
+        // prefer free-text contact_hours when present
+        $contactText = trim((string) ($courseInfo?->contact_hours ?? ''));
+        // compute credit hours: use per-syllabus value when present, else fallback to course lec+lab sum
+        $credit = (int) ($courseInfo?->credit_hours ?? 0);
+        if (!$credit) {
+            $lec = (int) ($course->contact_hours_lec ?? 0);
+            $lab = (int) ($course->contact_hours_lab ?? 0);
+            $credit = $lec + $lab;
+        }
 
     
         $prereqs = $course
@@ -733,7 +774,7 @@ class SyllabusController extends Controller
         $table->addCell(2200)->addText('Semester/Year', ['bold' => true]);
         $table->addCell(3800)->addText(trim(($syllabus->semester ?? '') . (isset($syllabus->year_level) ? ' / ' . $syllabus->year_level : '')));
         $table->addCell(2200)->addText('Credit Hours', ['bold' => true]);
-        $table->addCell(3800)->addText("{$total} ({$lec} hrs lec; {$lab} hrs lab)");
+        $table->addCell(3800)->addText($credit ? (string) $credit : '-');
 
         // Row group: Course Instructor label spans 3 rows. Value changes each row.
         // Row 1: Name | Emp No  + Reference CMO

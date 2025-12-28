@@ -67,16 +67,20 @@ class SyllabusIloController extends Controller
             // allow nullable description so empty/placeholder ILO rows can be created client-side
             'ilos.*.description' => 'nullable|string|max:1000',
             'ilos.*.position' => 'required|integer',
+            'deleted_ids' => 'nullable|array',
+            'deleted_ids.*' => 'integer|exists:syllabus_ilos,id',
         ]);
 
         $incomingIds = collect($request->ilos)->pluck('id')->filter();
         $existingIds = SyllabusIlo::where('syllabus_id', $syllabus->id)->pluck('id');
 
-        // 🔥 Determine deletions
-        $toDelete = $existingIds->diff($incomingIds);
+        // 🔥 Determine deletions from both explicit deleted_ids and missing from payload
+        $explicitDeletes = collect($request->input('deleted_ids', []));
+        $toDelete = $existingIds->diff($incomingIds)->merge($explicitDeletes)->unique();
+        
         if ($toDelete->count()) {
             \Log::debug('SyllabusIloController.update: deleting removed ILOs', [ 'delete_ids' => $toDelete->values() ]);
-            SyllabusIlo::whereIn('id', $toDelete)->delete();
+            SyllabusIlo::where('syllabus_id', $syllabus->id)->whereIn('id', $toDelete)->delete();
         } else {
             \Log::debug('SyllabusIloController.update: no deletions');
         }
@@ -392,6 +396,40 @@ class SyllabusIloController extends Controller
         }
 
         return response()->json(['message' => 'ILO order updated successfully.']);
+    }
+
+    // 📥 Get predefined ILOs from master data (without saving)
+    public function getPredefinedIlos(Request $request, $syllabusId)
+    {
+        $syllabus = Syllabus::where('faculty_id', Auth::id())->findOrFail($syllabusId);
+
+        if (!$syllabus->course_id) {
+            return response()->json(['message' => 'No course associated with this syllabus.'], 400);
+        }
+
+        // Get predefined ILOs for this course
+        $predefinedIlos = \App\Models\IntendedLearningOutcome::where('course_id', $syllabus->course_id)
+            ->orderBy('position')
+            ->get();
+
+        if ($predefinedIlos->isEmpty()) {
+            return response()->json(['message' => 'No predefined ILOs found for this course.'], 404);
+        }
+
+        // Return ILOs without saving to database
+        $ilos = [];
+        foreach ($predefinedIlos as $index => $predefined) {
+            $ilos[] = [
+                'code' => 'ILO' . ($index + 1),
+                'description' => $predefined->description,
+                'position' => $index + 1,
+            ];
+        }
+
+        return response()->json([
+            'message' => 'Predefined ILOs fetched successfully.',
+            'ilos' => $ilos,
+        ]);
     }
 
     // 📥 Load predefined ILOs from master data (replaces existing ILOs)

@@ -43,10 +43,10 @@ class SyllabusMissionVisionController extends Controller
             return;
         }
 
-        // Build dynamic validation rules: require only the fields that are present
+        // Build dynamic validation rules: accept any string, including empty
         $rules = [];
-        if ($request->has('mission')) $rules['mission'] = 'required|string';
-        if ($request->has('vision')) $rules['vision'] = 'required|string';
+        if ($request->has('mission')) $rules['mission'] = 'nullable|string';
+        if ($request->has('vision')) $rules['vision'] = 'nullable|string';
 
         $payload = $request->validate($rules);
 
@@ -84,11 +84,13 @@ class SyllabusMissionVisionController extends Controller
         $vision = $missionVision?->vision;
 
         // Mission and vision are university-wide (no department-specific overrides)
-        if ($mission === null || $mission === '') {
+        // Only fall back to defaults if value is truly absent (null),
+        // not when it is intentionally saved as an empty string.
+        if ($mission === null) {
             $mission = GeneralInformation::where('section', 'mission')->whereNull('department_id')->first()?->content ?? '';
         }
 
-        if ($vision === null || $vision === '') {
+        if ($vision === null) {
             $vision = GeneralInformation::where('section', 'vision')->whereNull('department_id')->first()?->content ?? '';
         }
 

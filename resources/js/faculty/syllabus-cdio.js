@@ -1,6 +1,21 @@
 // Frontend helpers for syllabus CDIO list: sortable, renumbering, keyboard shortcuts
 import Sortable from 'sortablejs';
-import { initAutosize, markDirty, updateUnsavedCount } from './syllabus';
+// Local helpers (syllabus.js removed)
+const markDirty = () => {};
+const updateUnsavedCount = () => {};
+function autosize(el) { try { el.style.height = 'auto'; el.style.height = (el.scrollHeight || 0) + 'px'; } catch (e) { /* noop */ } }
+function initAutosize() {
+  const areas = document.querySelectorAll('textarea.autosize');
+  areas.forEach((ta) => {
+    if (!ta.__autosizeBound) {
+      ta.__autosizeBound = true;
+      const resize = () => autosize(ta);
+      ta.addEventListener('input', resize);
+      ta.addEventListener('change', resize);
+    }
+    autosize(ta);
+  });
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   const list = document.getElementById('syllabus-cdio-sortable');

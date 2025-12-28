@@ -134,6 +134,7 @@ Route::middleware([FacultyAuth::class])->group(function () {
     Route::delete('/faculty/syllabi/ilos/{ilo}', [\App\Http\Controllers\Faculty\Syllabus\SyllabusIloController::class, 'destroy'])->name('faculty.syllabi.ilos.destroy');
     // Reorder + recode ILOs (positions array)
     Route::post('/faculty/syllabi/{syllabus}/ilos/reorder', [\App\Http\Controllers\Faculty\Syllabus\SyllabusIloController::class, 'reorder'])->name('faculty.syllabi.ilos.reorder');
+    Route::get('/faculty/syllabi/{syllabus}/get-predefined-ilos', [SyllabusIloController::class, 'getPredefinedIlos'])->name('faculty.syllabi.ilos.get-predefined');
     Route::post('/faculty/syllabi/{syllabus}/load-predefined-ilos', [SyllabusIloController::class, 'loadPredefinedIlos'])->name('faculty.syllabi.ilos.load-predefined');
 
     // ---------- Assessment Tasks & Distribution Map ----------

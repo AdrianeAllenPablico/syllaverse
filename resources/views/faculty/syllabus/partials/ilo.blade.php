@@ -129,13 +129,10 @@
                   </td>
                   <td>
                     <div class="d-flex align-items-center gap-2">
-                      <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-                        <i class="bi bi-grip-vertical"></i>
-                      </span>
                       <textarea
                         name="ilos[]"
                         class="cis-textarea cis-field autosize flex-grow-1"
-                        placeholder="Title"
+                        placeholder="Description"
                         rows="1"
                         style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;"
                         required>{{ old("ilos.$index", $ilo->description) }}</textarea>
@@ -310,18 +307,14 @@
         confirmLoadBtn.addEventListener('click', async function() {
           const syllabusId = listRef.dataset.syllabusId;
           if (!syllabusId) {
-            if (window.showAlertOverlay) {
-              window.showAlertOverlay('error', 'Syllabus ID not found');
-            } else {
-              alert('Syllabus ID not found');
-            }
+            alert('Syllabus ID not found');
             return;
           }
 
           try {
             confirmLoadBtn.disabled = true;
-            const response = await fetch(`/faculty/syllabi/${syllabusId}/load-predefined-ilos`, {
-              method: 'POST',
+            const response = await fetch(`/faculty/syllabi/${syllabusId}/get-predefined-ilos`, {
+              method: 'GET',
               headers: {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
@@ -336,11 +329,7 @@
             const data = await response.json();
             
             if (!data.ilos || data.ilos.length === 0) {
-              if (window.showAlertOverlay) {
-                window.showAlertOverlay('error', 'No predefined ILOs found for this course.');
-              } else {
-                alert('No predefined ILOs found for this course.');
-              }
+              alert('No predefined ILOs found for this course.');
               return;
             }
 
@@ -349,11 +338,11 @@
               listRef.removeChild(listRef.firstChild);
             }
 
-            // Add new rows from predefined ILOs (now preserving server IDs via data-id attribute)
+            // Add new rows from predefined ILOs (without saving to database - use temporary IDs)
             data.ilos.forEach((ilo, index) => {
               const code = `ILO${index + 1}`;
               const newRow = document.createElement('tr');
-              newRow.setAttribute('data-id', ilo.id); // Preserve ID so subsequent saves perform updates, not recreates
+              newRow.setAttribute('data-id', `new-${Date.now()}-${index}`); // Temporary ID - will be saved when user clicks Save
               newRow.innerHTML = `
                 <td class="text-center align-middle">
                   <div class="ilo-badge fw-semibold">${code}</div>
@@ -366,13 +355,13 @@
                     <textarea
                       name="ilos[]"
                       class="cis-textarea cis-field autosize flex-grow-1"
-                      placeholder="-"
+                      placeholder="Description"
                       rows="1"
                       style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;"
-                      data-original="${(ilo.description || '').replace(/"/g, '&quot;')}"
+                      data-original=""
                       required>${ilo.description || ''}</textarea>
                     <input type="hidden" name="code[]" value="${code}">
-                    <button type="button" class="btn btn-sm btn-outline-danger btn-delete-ilo ms-2" title="Delete ILO" style="display:${ilo.id ? '' : 'none'};">
+                    <button type="button" class="btn btn-sm btn-outline-danger btn-delete-ilo ms-2" title="Delete ILO">
                       <i class="bi bi-trash"></i>
                     </button>
                   </div>
@@ -393,18 +382,11 @@
             const modal = bootstrap.Modal.getInstance(loadPredefinedModal);
             if (modal) modal.hide();
             
-            // Show success notification
-            if (window.showAlertOverlay) {
-              window.showAlertOverlay('success', `Successfully loaded ${data.ilos.length} predefined ILO(s)`);
-            }
+            console.log(`Successfully loaded ${data.ilos.length} predefined ILO(s). Click Save to persist changes.`);
             
           } catch (error) {
             console.error('Error loading predefined ILOs:', error);
-            if (window.showAlertOverlay) {
-              window.showAlertOverlay('error', error.message || 'An error occurred while loading predefined ILOs');
-            } else {
-              alert(error.message || 'An error occurred while loading predefined ILOs');
-            }
+            alert(error.message || 'An error occurred while loading predefined ILOs');
           } finally {
             confirmLoadBtn.disabled = false;
           }

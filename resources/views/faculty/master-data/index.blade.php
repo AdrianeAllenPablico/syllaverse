@@ -45,6 +45,36 @@
 @endsection
 
 @push('scripts')
+<script>
+// Handle tab switching from URL parameter
+document.addEventListener('DOMContentLoaded', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const tabParam = urlParams.get('tab');
+  
+  if (tabParam) {
+    // Find the tab button and activate it
+    const tabButton = document.getElementById(`${tabParam}-main-tab`);
+    const tabPane = document.getElementById(`${tabParam}-main`);
+    
+    if (tabButton && tabPane) {
+      // Deactivate current active tab
+      document.querySelectorAll('.nav-link.active, .tab-pane.active').forEach(el => {
+        el.classList.remove('active', 'show');
+        el.setAttribute('aria-selected', 'false');
+      });
+      
+      // Activate requested tab
+      tabButton.classList.add('active');
+      tabButton.setAttribute('aria-selected', 'true');
+      tabPane.classList.add('active', 'show');
+      
+      // Trigger Bootstrap tab event
+      const tab = new bootstrap.Tab(tabButton);
+      tab.show();
+    }
+  }
+});
+</script>
 @vite('resources/js/faculty/master-data/so.js')
 @vite('resources/js/faculty/master-data/sdg.js')
 @vite('resources/js/faculty/master-data/iga.js')

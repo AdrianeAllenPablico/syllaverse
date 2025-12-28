@@ -1,15 +1,32 @@
 // -----------------------------------------------------------------------------
 // File: resources/js/faculty/syllabus-ilo.js
-// Description: Minimal ILO behaviors (add/delete/renumber + autosize + drag reorder). Saving
-//              is handled by window.saveIlo defined in syllabus.js.
+// Description: Minimal ILO behaviors (add/delete/renumber + autosize + drag reorder).
 // -----------------------------------------------------------------------------
 
-import { initAutosize, updateUnsavedCount } from './syllabus';
-import Sortable from 'sortablejs';
+// Local helpers (syllabus.js removed)
+const updateUnsavedCount = () => {};
+function autosize(el) { try { el.style.height = 'auto'; el.style.height = (el.scrollHeight || 0) + 'px'; } catch (e) { /* noop */ } }
+function initAutosize() {
+  const areas = document.querySelectorAll('textarea.autosize');
+  areas.forEach((ta) => {
+    if (!ta.__autosizeBound) {
+      ta.__autosizeBound = true;
+      const resize = () => autosize(ta);
+      ta.addEventListener('input', resize);
+      ta.addEventListener('change', resize);
+    }
+    autosize(ta);
+  });
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   const list = document.getElementById('syllabus-ilo-sortable');
   if (!list) return; // tolerate pages without ILO list
+
+  // Track deleted ILO IDs globally to send with save payload
+  if (!window._iloDeletedIds) {
+    window._iloDeletedIds = [];
+  }
 
   function getIloRows() {
     return Array.from(list.querySelectorAll('tr')).filter(r => r.querySelector('textarea[name="ilos[]"]') || r.querySelector('.ilo-badge'));
@@ -56,30 +73,17 @@ document.addEventListener('DOMContentLoaded', () => {
   async function deleteRowAndPersist(row) {
     if (!row) return false;
 
+    // Track the ID if it's a saved ILO
     const rawId = row.getAttribute('data-id');
     const hasServerId = rawId && /^\d+$/.test(rawId);
-
-    // Check if this is a blank saved ILO
-    const textarea = row.querySelector('textarea[name="ilos[]"]');
-    const isBlank = textarea && textarea.value.trim() === '';
-
+    
     if (hasServerId) {
-      try {
-        await requestBackendDeletion(rawId);
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('success', 'ILO deleted successfully');
-        }
-      } catch (err) {
-        console.error('Failed to delete ILO on server', err);
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', err?.message || 'Failed to delete ILO');
-        } else {
-          alert(err?.message || 'Failed to delete ILO.');
-        }
-        return false;
-      }
+      // Add to global deletion tracking list
+      window._iloDeletedIds.push(Number(rawId));
+      console.log('ILO Delete Tracked:', { id: rawId, totalDeleted: window._iloDeletedIds.length });
     }
 
+    // Just remove from UI without backend deletion
     row.remove();
     
     // Check if any rows remain, if not show placeholder
@@ -97,6 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       renumber();
     }
+    
+    // Mark as unsaved
+    try { updateUnsavedCount(); } catch (e) { /* noop */ }
     
     return true;
   }
@@ -134,10 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </td>
       <td>
         <div class="d-flex align-items-center gap-2">
-          <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-            <i class="bi bi-grip-vertical"></i>
-          </span>
-          <textarea name="ilos[]" class="cis-textarea cis-field autosize flex-grow-1" placeholder="-" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;"></textarea>
+          <textarea name="ilos[]" class="cis-textarea cis-field autosize flex-grow-1" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;"></textarea>
           <input type="hidden" name="code[]" value="">
           <button type="button" class="btn btn-sm btn-outline-danger btn-delete-ilo ms-2" title="Delete ILO">
             <i class="bi bi-trash"></i>
@@ -203,22 +207,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Initialize Sortable for drag-and-drop reordering
-  if (list && typeof Sortable !== 'undefined') {
-    Sortable.create(list, {
-      handle: '.drag-handle',
-      animation: 150,
-      ghostClass: 'sortable-ghost',
-      onEnd: function() {
-        renumber();
-        try { updateUnsavedCount(); } catch (e) { /* noop */ }
-      }
-    });
-  }
-
   // Initial run
   renumber();
   try { initAutosize(); } catch (e) { /* noop */ }
+
+  // Wire save function to toolbar save button
+  const toolbarSaveBtn = document.getElementById('syllabusSaveBtn');
+  if (toolbarSaveBtn) {
+    toolbarSaveBtn.addEventListener('click', async (e) => {
+      // Check if this is the main save button click
+      if (e.isTrusted && window.saveIlo) {
+        try {
+          await window.saveIlo();
+        } catch (err) {
+          console.error('Failed to save ILOs from toolbar:', err);
+        }
+      }
+    }, true); // Use capture phase to run before other handlers
+  }
 });
 
 // Persist ILOs (create/update + order). Inserts new rows typed before save.
@@ -267,8 +273,17 @@ window.saveIlo = async function saveIlo() {
 
   const payloadIlos = descriptors.map(d => d.entry);
 
-  // If there is nothing to save, short-circuit
-  if (!payloadIlos.length) return { message: 'No ILO changes' };
+  // Get deleted IDs from the module scope
+  const deletedIds = window._iloDeletedIds || [];
+  
+  // Debug logging
+  console.log('ILO Save Debug:', {
+    syllabusId,
+    totalRows: rows.length,
+    payloadIlos: payloadIlos.length,
+    deletedIds: deletedIds.length,
+    deletedIdsList: deletedIds
+  });
 
   const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
   try {
@@ -286,8 +301,14 @@ window.saveIlo = async function saveIlo() {
     method: 'PUT',
     headers,
     credentials: 'same-origin',
-    body: JSON.stringify({ ilos: payloadIlos })
+    body: JSON.stringify({ 
+      ilos: payloadIlos,
+      deleted_ids: deletedIds
+    })
   });
+  
+  console.log('ILO Save Response:', { status: res.status, ok: res.ok });
+  
   if (!res.ok) {
     let body = null; let text = '';
     try {
@@ -315,5 +336,17 @@ window.saveIlo = async function saveIlo() {
   try { document.getElementById('unsaved-ilos')?.classList.add('d-none'); } catch (e) {}
   try { list.querySelectorAll('textarea[name="ilos[]"]').forEach(ta => ta.setAttribute('data-original', ta.value || '')); } catch (e) {}
   try { updateUnsavedCount(); } catch (e) {}
+  
+  // Clear deleted IDs list after successful save
+  if (window._iloDeletedIds) {
+    window._iloDeletedIds.length = 0;
+  }
+  
+  console.log('ILO Save Success:', { 
+    created: data.created_ids?.length || 0, 
+    updated: data.updated_ids?.length || 0,
+    deleted: data.deleted_ids?.length || 0
+  });
+  
   return data;
 };
