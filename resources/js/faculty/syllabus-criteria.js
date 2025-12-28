@@ -3,6 +3,206 @@
 
 (function(){
 	let lastSavedCriteria = null; // cache snapshot from server to reseed on add/remove
+	// Action-based undo/redo
+	let actions = [];
+	let redoActions = [];
+	const HISTORY_LIMIT = 50;
+	let prevSerialized = null;
+	let recordTimer = null;
+
+	function snapshotsEqual(a, b){
+		try {
+			return JSON.stringify(a) === JSON.stringify(b);
+		} catch(e){ return false; }
+	}
+
+	function recordHistory(){
+		try {
+			const snap = collectCriteriaSections();
+			const serialized = JSON.stringify(snap);
+			if (prevSerialized && prevSerialized === serialized){
+				return; // skip duplicate consecutive snapshots
+			}
+			prevSerialized = serialized;
+			actions.push({ type: 'snapshot', snapshot: JSON.parse(JSON.stringify(snap)) });
+			redoActions = [];
+			if (actions.length > HISTORY_LIMIT){ actions.shift(); }
+		} catch(e){}
+	}
+
+	function recordHistoryDebounced(){
+		try { clearTimeout(recordTimer); } catch(e){}
+		recordTimer = setTimeout(recordHistory, 250);
+	}
+
+	function rebuildFromSnapshot(sections){
+		const container = getContainer();
+		if (!container) return;
+		container.innerHTML = '';
+		const max = Math.min(3, Array.isArray(sections) ? sections.length : 0);
+		for (let i = 0; i < max; i++){
+			const s = sections[i] || {};
+			const key = s.key || `section_${i+1}`;
+			const heading = (s.heading || '').trim();
+			const value = Array.isArray(s.value) ? s.value : [];
+			const section = createSectionElement(i);
+			section.dataset.sectionKey = key;
+			const cat = section.querySelector('.category');
+			if (cat){
+				cat.value = heading;
+				cat.name = `criteria_${key}_category`;
+				cat.dataset.section = key;
+			}
+			const list = section.querySelector('.sub-list');
+			if (list){
+				list.dataset.init = JSON.stringify(value);
+			}
+			container.appendChild(section);
+			seedSubList(section);
+		}
+		updateButtonStates();
+		try { if (window.feather && typeof window.feather.replace === 'function') window.feather.replace(); } catch(e){}
+		try { document.dispatchEvent(new Event('criteriaChanged')); } catch(e){}
+	}
+
+	function applySnapshot(sections){
+		lastSavedCriteria = Array.isArray(sections) ? sections : [];
+		rebuildFromSnapshot(lastSavedCriteria);
+		prevSerialized = JSON.stringify(lastSavedCriteria);
+	}
+	function pushAction(action){
+		try {
+			actions.push(action);
+			if (actions.length > HISTORY_LIMIT){ actions.shift(); }
+			redoActions = [];
+		} catch(e){}
+	}
+
+	function getSectionElByKey(key){
+		const container = getContainer();
+		if (!container) return null;
+		return container.querySelector(`.section[data-section-key="${CSS.escape(key)}"]`);
+	}
+
+	function applyEditInput(action, dir){
+		const key = action.sectionKey;
+		const sec = getSectionElByKey(key);
+		if (!sec) return;
+		const value = dir === 'undo' ? action.oldValue : action.newValue;
+		if (action.field === 'heading'){
+			const cat = sec.querySelector('.category');
+			if (cat) cat.value = value;
+			return;
+		}
+		// row fields
+		const idx = action.index ?? 0;
+		const line = sec.querySelectorAll('.sub-line')[idx];
+		if (!line) return;
+		if (action.field === 'description'){
+			const inp = line.querySelector('.sub-input');
+			if (inp) inp.value = value;
+		} else if (action.field === 'percent'){
+			const inp = line.querySelector('.sub-percent');
+			if (inp) inp.value = ensurePercent(value);
+		}
+	}
+
+	function applyAddRow(action, dir){
+		const sec = getSectionElByKey(action.sectionKey);
+		if (!sec) return;
+		const list = sec.querySelector('.sub-list');
+		if (!list) return;
+		if (dir === 'undo'){
+			const lines = list.querySelectorAll('.sub-line');
+			if (lines.length) lines[lines.length - 1].remove();
+		} else {
+			const idx = list.querySelectorAll('.sub-line').length;
+			const line = createSubLine(action.snapshot || null, action.sectionKey, idx);
+			list.appendChild(line);
+		}
+	}
+
+	function applyRemoveRow(action, dir){
+		const sec = getSectionElByKey(action.sectionKey);
+		if (!sec) return;
+		const list = sec.querySelector('.sub-list');
+		if (!list) return;
+		if (dir === 'undo'){
+			const idx = list.querySelectorAll('.sub-line').length;
+			const line = createSubLine(action.snapshot || null, action.sectionKey, idx);
+			list.appendChild(line);
+		} else {
+			const lines = list.querySelectorAll('.sub-line');
+			if (lines.length) lines[lines.length - 1].remove();
+		}
+	}
+
+	function applyAddSection(action, dir){
+		const container = getContainer();
+		if (!container) return;
+		if (dir === 'undo'){
+			const secs = container.querySelectorAll('.section');
+			if (secs.length) secs[secs.length - 1].remove();
+			updateButtonStates();
+			return;
+		}
+		const idx = sectionCount();
+		if (idx >= 3) return;
+		const section = createSectionElement(idx);
+		section.dataset.sectionKey = action.key || section.dataset.sectionKey;
+		const cat = section.querySelector('.category');
+		if (cat){
+			cat.value = action.heading || '';
+			cat.name = `criteria_${section.dataset.sectionKey}_category`;
+			cat.dataset.section = section.dataset.sectionKey;
+		}
+		const list = section.querySelector('.sub-list');
+		if (list){ list.dataset.init = JSON.stringify(action.value || []); }
+		container.appendChild(section);
+		seedSubList(section);
+		updateButtonStates();
+	}
+
+	function applyRemoveSection(action, dir){
+		const container = getContainer();
+		if (!container) return;
+		if (dir === 'undo'){
+			// re-add section from snapshot
+			applyAddSection({ key: action.key, heading: action.heading, value: action.value }, 'redo');
+		} else {
+			const secs = container.querySelectorAll('.section');
+			if (secs.length) secs[secs.length - 1].remove();
+			updateButtonStates();
+		}
+	}
+
+	function performUndo(){
+		const a = actions.pop();
+		if (!a) return;
+		redoActions.push(a);
+		switch (a.type){
+			case 'editInput': return applyEditInput(a, 'undo');
+			case 'addRow': return applyAddRow(a, 'undo');
+			case 'removeRow': return applyRemoveRow(a, 'undo');
+			case 'addSection': return applyAddSection(a, 'undo');
+			case 'removeSection': return applyRemoveSection(a, 'undo');
+			case 'snapshot': return applySnapshot(a.snapshot);
+		}
+	}
+
+	function performRedo(){
+		const a = redoActions.pop();
+		if (!a) return;
+		actions.push(a);
+		switch (a.type){
+			case 'editInput': return applyEditInput(a, 'redo');
+			case 'addRow': return applyAddRow(a, 'redo');
+			case 'removeRow': return applyRemoveRow(a, 'redo');
+			case 'addSection': return applyAddSection(a, 'redo');
+			case 'removeSection': return applyRemoveSection(a, 'redo');
+			case 'snapshot': return applySnapshot(a.snapshot);
+		}
+	}
 	function getContainer(){
 		return document.getElementById('criteria-sections-container');
 	}
@@ -82,6 +282,7 @@
 		}
 		const line = createSubLine(initial, sectionKey, index);
 		list.appendChild(line);
+		pushAction({ type: 'addRow', sectionKey, index, snapshot: initial || { description: '', percent: '' } });
 		try { document.dispatchEvent(new Event('criteriaChanged')); } catch(e){}
 		const focusEl = line.querySelector('.sub-input');
 		if (focusEl) { try { focusEl.focus(); } catch(e){} }
@@ -94,7 +295,14 @@
 		const lines = list.querySelectorAll('.sub-line');
 		if (!lines.length) return;
 		const last = lines[lines.length - 1];
-		if (last) last.remove();
+		if (last){
+			const desc = (last.querySelector('.sub-input')?.value || '').trim();
+			const pct  = ensurePercent((last.querySelector('.sub-percent')?.value || '').trim());
+			const index = lines.length - 1;
+			last.remove();
+			const sectionKey = sectionEl.dataset.sectionKey || (sectionEl.querySelector('.category')?.dataset.section) || 'section';
+			pushAction({ type: 'removeRow', sectionKey, index, snapshot: { description: desc, percent: pct } });
+		}
 		try { document.dispatchEvent(new Event('criteriaChanged')); } catch(e){}
 	}
 
@@ -169,6 +377,16 @@
 		updateButtonStates();
 		try { if (window.feather && typeof window.feather.replace === 'function') window.feather.replace(); } catch(e){}
 		try { document.dispatchEvent(new Event('criteriaChanged')); } catch(e){}
+		const key = section.dataset.sectionKey;
+		const heading = (section.querySelector('.category')?.value || '').trim();
+		const list = section.querySelector('.sub-list');
+		let value = [];
+		try {
+			const raw = list?.dataset?.init || '[]';
+			const parsed = JSON.parse(raw);
+			if (Array.isArray(parsed)) value = parsed;
+		} catch(e){}
+		pushAction({ type: 'addSection', index: count, key, heading, value });
 	}
 
 	function removeSection(){
@@ -177,7 +395,26 @@
 		const sections = container.querySelectorAll('.section');
 		if (sections.length <= 1) { updateButtonStates(); return; }
 		const last = sections[sections.length - 1];
-		if (last) last.remove();
+		if (last){
+			const key = last.dataset.sectionKey || `section_${sections.length}`;
+			const heading = (last.querySelector('.category')?.value || '').trim();
+			const list = last.querySelector('.sub-list');
+			let value = [];
+			try {
+				const initRaw = list?.dataset?.init || '[]';
+				const parsed = JSON.parse(initRaw);
+				if (Array.isArray(parsed)) value = parsed;
+				else {
+					// Build from DOM if dataset not present
+					value = Array.from(list.querySelectorAll('.sub-line')).map(line => ({
+						description: (line.querySelector('.sub-input')?.value || '').trim(),
+						percent: ensurePercent((line.querySelector('.sub-percent')?.value || '').trim())
+					}));
+				}
+			} catch(e){}
+			last.remove();
+			pushAction({ type: 'removeSection', index: sections.length - 1, key, heading, value });
+		}
 		updateButtonStates();
 		try { document.dispatchEvent(new Event('criteriaChanged')); } catch(e){}
 	}
@@ -210,6 +447,8 @@
 		document.querySelectorAll('.cis-criteria .section').forEach(function(section){
 			seedSubList(section);
 		});
+		// Record initial snapshot for undo/redo fallback
+		recordHistory();
 		// Event delegation so newly added sections' bottom buttons work
 		const container = getContainer();
 		if (container){
@@ -234,7 +473,35 @@
 			};
 			container.addEventListener('blur', function(e){ normalize(e.target); }, true);
 			container.addEventListener('change', function(e){ normalize(e.target); }, true);
+			// Track input previous values and push granular edit actions
+			container.addEventListener('focusin', function(e){
+				const t = e.target;
+				if (!t || !t.classList) return;
+				if (t.classList.contains('category') || t.classList.contains('sub-input') || t.classList.contains('sub-percent')){
+					t.dataset.prevValue = t.value || '';
+				}
+			});
+			container.addEventListener('blur', function(e){
+				const t = e.target;
+				if (!t || !t.classList) return;
+				if (!(t.classList.contains('category') || t.classList.contains('sub-input') || t.classList.contains('sub-percent'))) return;
+				const prev = t.dataset.prevValue ?? '';
+				const now = t.value || '';
+				if (prev === now) return;
+				const sec = t.closest('.section');
+				const sectionKey = sec?.dataset?.sectionKey || (sec?.querySelector('.category')?.dataset?.section) || 'section';
+				let field = 'heading';
+				let index = null;
+				if (t.classList.contains('sub-input')){ field = 'description'; index = (t.closest('.sub-line')?.querySelector('.sub-input')?.dataset?.index) ?? null; }
+				if (t.classList.contains('sub-percent')){ field = 'percent'; index = (t.closest('.sub-line')?.querySelector('.sub-percent')?.dataset?.index) ?? null; }
+				pushAction({ type: 'editInput', sectionKey, field, index: index != null ? parseInt(index, 10) : null, oldValue: prev, newValue: now });
+				try { delete t.dataset.prevValue; } catch(_){}
+			}, true);
 		}
+
+		// Toolbar Undo/Redo handlers (action-based)
+		document.addEventListener('sv:undo', function(){ try { performUndo(); } catch(e){} });
+		document.addEventListener('sv:redo', function(){ try { performRedo(); } catch(e){} });
 		updateButtonStates();
 	}
 
@@ -296,6 +563,8 @@
 					}
 				});
 			}
+			// Record server-confirmed snapshot as action
+			pushAction({ type: 'snapshot', snapshot: lastSavedCriteria });
 			try { document.dispatchEvent(new Event('criteriaSaved')); } catch (e) {}
 			if (showAlert) { try { alert('Criteria saved successfully'); } catch(e){} }
 			return true;
