@@ -23,7 +23,7 @@ class SyllabusSoController extends Controller
     public function update(Request $request, $syllabusId)
     {
         $request->validate([
-            'sos' => 'required|array',
+            'sos' => 'nullable|array',
             'sos.*.id' => 'nullable|integer|exists:syllabus_sos,id',
             'sos.*.code' => 'required|string',
             'sos.*.title' => 'nullable|string|max:255',
@@ -31,7 +31,15 @@ class SyllabusSoController extends Controller
             'sos.*.position' => 'required|integer',
         ]);
 
-        $incomingIds = collect($request->sos)->pluck('id')->filter();
+        $payload = $request->input('sos', []);
+
+        // If client intentionally sends no SOs, treat as clearing the list
+        if (empty($payload)) {
+            SyllabusSo::where('syllabus_id', $syllabusId)->delete();
+            return response()->json(['success' => true, 'message' => 'SOs cleared.', 'ids' => []]);
+        }
+
+        $incomingIds = collect($payload)->pluck('id')->filter();
         $existingIds = SyllabusSo::where('syllabus_id', $syllabusId)->pluck('id');
 
         // Delete removed SOs
@@ -41,8 +49,8 @@ class SyllabusSoController extends Controller
         }
 
         $createdIds = [];
-        \DB::transaction(function() use ($request, &$createdIds, $syllabusId) {
-            foreach ($request->sos as $soData) {
+        \DB::transaction(function() use (&$createdIds, $syllabusId, $payload) {
+            foreach ($payload as $soData) {
                 $attrs = [
                     'syllabus_id' => $syllabusId,
                     'code' => $soData['code'] ?? null,
@@ -102,7 +110,7 @@ class SyllabusSoController extends Controller
         return response()->json(['message' => 'SO deleted successfully.']);
     }
 
-    // 📥 Load predefined SOs from master data (replaces existing SOs)
+    // 📥 Load predefined SOs from master data (UI-only preview; no DB writes)
     public function loadPredefinedSos(Request $request, $syllabus)
     {
         // Authorization check - faculty only
@@ -127,31 +135,22 @@ class SyllabusSoController extends Controller
             return response()->json(['message' => 'No predefined SOs found.'], 404);
         }
 
-        // Delete existing SOs for this syllabus
-        SyllabusSo::where('syllabus_id', $syllabus->id)->delete();
-
-        // Create new SOs from predefined data
-        $newSos = [];
-        foreach ($predefinedSos as $index => $predefined) {
-            $so = SyllabusSo::create([
-                'syllabus_id' => $syllabus->id,
+        // Build a non-persistent preview payload for the UI
+        $previewSos = [];
+        foreach ($predefinedSos as $index => $predef) {
+            $previewSos[] = [
                 'code' => 'SO' . ($index + 1),
-                'title' => $predefined->title,
-                'description' => $predefined->description,
+                'title' => $predef->title,
+                'description' => $predef->description,
                 'position' => $index + 1,
-            ]);
-            $newSos[] = [
-                'id' => $so->id,
-                'code' => $so->code,
-                'title' => $so->title,
-                'description' => $so->description,
-                'position' => $so->position,
+                'origin' => 'master',
+                'origin_id' => $predef->id,
             ];
         }
 
         return response()->json([
-            'message' => count($newSos) . ' SO' . (count($newSos) !== 1 ? 's' : '') . ' loaded successfully.',
-            'sos' => $newSos,
+            'message' => count($previewSos) . ' SO' . (count($previewSos) !== 1 ? 's' : '') . ' loaded for preview. Save to persist.',
+            'sos' => $previewSos,
         ]);
     }
 

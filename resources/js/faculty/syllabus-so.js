@@ -1,8 +1,6 @@
 // File: resources/js/faculty/syllabus-so.js
 // Description: Handles AJAX save for Student Outcomes (SO) – Syllaverse
 
-import Sortable from 'sortablejs';
-
 document.addEventListener('DOMContentLoaded', () => {
   const soForm = document.querySelector('#soForm');
   if (!soForm) return;
@@ -49,9 +47,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const list = document.getElementById('syllabus-so-sortable');
     if (!list) return { message: 'No SO list present' };
+
+    // Ensure codes reflect current order prior to serialization
+    try { renumberSOs(); } catch (e) { /* noop */ }
     
-    // Build sos array from table rows
-    const rows = Array.from(list.querySelectorAll('tr'));
+    // Build sos array from table rows (exclude placeholder)
+    const rows = Array.from(list.querySelectorAll('tr')).filter(r => r.id !== 'so-placeholder');
     const sos = rows.map((row, index) => {
       const dataId = row.getAttribute('data-id') || '';
       const id = (dataId && !dataId.startsWith('new-')) ? parseInt(dataId) : null;
@@ -102,6 +103,17 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
       }
+
+      // Mark textareas as unchanged baseline after successful save
+      rows.forEach((row) => {
+        row.querySelectorAll('textarea.autosize').forEach((ta) => {
+          ta.setAttribute('data-original', ta.value || '');
+        });
+      });
+
+      // Optionally hide a top-level unsaved indicator if present
+      const unsaved = document.getElementById('unsaved-sos');
+      if (unsaved) unsaved.classList.add('d-none');
       
       return result;
     } catch (err) {
@@ -114,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const list = document.getElementById('syllabus-so-sortable');
     if (!list) return;
     
-    const rows = Array.from(list.querySelectorAll('tr'));
+    const rows = Array.from(list.querySelectorAll('tr')).filter(r => r.id !== 'so-placeholder');
     rows.forEach((row, index) => {
       const newCode = `SO${index + 1}`;
       const badge = row.querySelector('.so-badge');
@@ -146,9 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td>
           <div class="d-flex align-items-center gap-2">
-            <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-              <i class="bi bi-grip-vertical"></i>
-            </span>
             <div class="flex-grow-1 w-100">
               <textarea
                 name="so_titles[]"
@@ -180,18 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Initialize Sortable for drag and drop
   const soList = document.getElementById('syllabus-so-sortable');
-  if (soList && typeof Sortable !== 'undefined') {
-    Sortable.create(soList, {
-      handle: '.drag-handle',
-      animation: 150,
-      draggable: 'tr',
-      onEnd: function(evt) {
-        renumberSOs();
-      }
-    });
-  }
 
   // Helper function to update SO positions after delete
   async function updateSoPositions() {
@@ -235,89 +233,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Delete button handler
+  // Delete button handler (UI-only; no immediate backend delete)
   if (soList) {
-    soList.addEventListener('click', async (e) => {
+    soList.addEventListener('click', (e) => {
       const btn = e.target.closest('.btn-delete-so');
       if (!btn) return;
-      
+
       const row = btn.closest('tr');
-      const id = row.getAttribute('data-id');
-      
-      // If unsaved row, just remove it
-      if (!id || id.startsWith('new-')) {
-        row.remove();
-        
-        // Check if any rows remain, if not show placeholder
-        const remainingRows = soList.querySelectorAll('tr:not(#so-placeholder)');
-        if (remainingRows.length === 0) {
-          const placeholder = document.createElement('tr');
-          placeholder.id = 'so-placeholder';
-          placeholder.innerHTML = `
-            <td colspan="2" class="text-center text-muted py-4">
-              <p class="mb-2">No SOs added yet.</p>
-              <p class="mb-0"><small>Click the <strong>+</strong> button above to add an SO or <strong>Load Predefined</strong> to import SOs.</small></p>
-            </td>
-          `;
-          soList.appendChild(placeholder);
-        } else {
-          renumberSOs();
-        }
-        return;
-      }
-      
-      // For saved rows, call backend to delete immediately
-      btn.disabled = true;
-      
-      try {
-        const tokenMeta = document.querySelector('meta[name="csrf-token"]');
-        const headers = { 'Accept': 'application/json' };
-        if (tokenMeta) headers['X-CSRF-TOKEN'] = tokenMeta.getAttribute('content');
-        
-        const response = await fetch(`/faculty/syllabi/sos/${id}`, {
-          method: 'DELETE',
-          headers: headers
-        });
-        
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.message || 'Failed to delete SO');
-        }
-        
-        // Remove row from UI after successful deletion
-        row.remove();
-        
-        // Check if any rows remain, if not show placeholder
-        const remainingRows = soList.querySelectorAll('tr:not(#so-placeholder)');
-        if (remainingRows.length === 0) {
-          const placeholder = document.createElement('tr');
-          placeholder.id = 'so-placeholder';
-          placeholder.innerHTML = `
-            <td colspan="2" class="text-center text-muted py-4">
-              <p class="mb-2">No SOs added yet.</p>
-              <p class="mb-0"><small>Click the <strong>+</strong> button above to add an SO or <strong>Load Predefined</strong> to import SOs.</small></p>
-            </td>
-          `;
-          soList.appendChild(placeholder);
-        } else {
-          renumberSOs();
-          // Update positions of remaining SOs
-          await updateSoPositions();
-        }
-        
-        // Show success message
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('success', 'SO deleted successfully');
-        }
-        
-      } catch (error) {
-        console.error('Error deleting SO:', error);
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', error.message || 'Failed to delete SO.');
-        } else {
-          alert('Failed to delete SO: ' + error.message);
-        }
-        btn.disabled = false;
+      if (!row) return;
+
+      // Remove row from UI only
+      row.remove();
+
+      // If no rows remain, show placeholder; otherwise renumber
+      const remainingRows = soList.querySelectorAll('tr:not(#so-placeholder)');
+      if (remainingRows.length === 0) {
+        const placeholder = document.createElement('tr');
+        placeholder.id = 'so-placeholder';
+        placeholder.innerHTML = `
+          <td colspan="2" class="text-center text-muted py-4">
+            <p class="mb-2">No SOs added yet.</p>
+            <p class="mb-0"><small>Click the <strong>+</strong> button above to add an SO or <strong>Load Predefined</strong> to import SOs.</small></p>
+          </td>
+        `;
+        soList.appendChild(placeholder);
+      } else {
+        renumberSOs();
       }
     });
   }
@@ -411,11 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
     confirmLoadBtn.addEventListener('click', async function() {
       const syllabusId = soList.dataset.syllabusId;
       if (!syllabusId) {
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', 'Syllabus ID not found');
-        } else {
-          alert('Syllabus ID not found');
-        }
+        alert('Syllabus ID not found');
         return;
       }
 
@@ -424,11 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
 
       if (selectedIds.length === 0) {
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', 'Please select at least one SO to load.');
-        } else {
-          alert('Please select at least one SO to load.');
-        }
+        alert('Please select at least one SO to load.');
         return;
       }
 
@@ -452,11 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await response.json();
 
         if (!data.sos || data.sos.length === 0) {
-          if (window.showAlertOverlay) {
-            window.showAlertOverlay('error', 'No predefined SOs found for this course.');
-          } else {
-            alert('No predefined SOs found for this course.');
-          }
+          alert('No predefined SOs found for this course.');
           return;
         }
 
@@ -465,20 +394,18 @@ document.addEventListener('DOMContentLoaded', () => {
           soList.removeChild(soList.firstChild);
         }
 
-        // Add new rows from predefined SOs
+        // Add new rows from predefined SOs (UI-only; treat as new unsaved rows)
         data.sos.forEach((so, index) => {
           const code = `SO${index + 1}`;
           const newRow = document.createElement('tr');
-          newRow.setAttribute('data-id', so.id);
+          // Always assign a client-only id so Save creates them
+          newRow.setAttribute('data-id', `new-${Date.now()}-${index}`);
           newRow.innerHTML = `
             <td class="text-center align-middle">
               <div class="so-badge fw-semibold">${code}</div>
             </td>
             <td>
               <div class="d-flex align-items-center gap-2">
-                <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-                  <i class="bi bi-grip-vertical"></i>
-                </span>
                 <div class="flex-grow-1 w-100">
                   <textarea
                     name="so_titles[]"
@@ -512,18 +439,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalInstance = bootstrap.Modal.getInstance(loadPredefinedModal);
         if (modalInstance) modalInstance.hide();
 
-        // Show success notification
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('success', `Successfully loaded ${data.sos.length} predefined SO(s)`);
-        }
+        // Success: no overlay; optional console log
+        console.log(`Loaded ${data.sos.length} predefined SO(s) for preview. Click Save to persist.`);
 
       } catch (error) {
         console.error('Error loading predefined SOs:', error);
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', error.message || 'An error occurred while loading predefined SOs');
-        } else {
-          alert(error.message || 'An error occurred while loading predefined SOs');
-        }
+        alert(error.message || 'An error occurred while loading predefined SOs');
       } finally {
         confirmLoadBtn.disabled = false;
       }

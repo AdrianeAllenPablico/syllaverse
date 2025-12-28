@@ -1,7 +1,5 @@
 // File: resources/js/faculty/syllabus-iga.js
-// Description: Handles IGA functionality for syllabus - add, remove, load predefined, autosize, sortable, delete
-
-import Sortable from 'sortablejs';
+// Description: Handles IGA functionality for syllabus - add, remove, load predefined, autosize, delete (drag disabled)
 // Local no-ops for removed unsaved tracking helpers
 const markDirty = () => {};
 const updateUnsavedCount = () => {};
@@ -105,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </td>
         <td>
           <div class="d-flex align-items-center gap-2">
-            <span class="drag-handle text-muted" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
+            
             <div class="flex-grow-1 w-100">
               <textarea name="iga_titles[]" class="cis-textarea cis-field autosize" placeholder="Title" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;" required></textarea>
               <textarea name="igas[]" class="cis-textarea cis-field autosize" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;" required></textarea>
@@ -121,19 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Enable sortable drag-reorder
-  Sortable.create(list, {
-    handle: '.drag-handle',
-    animation: 150,
-    fallbackOnBody: true,
-    draggable: 'tr',
-    swapThreshold: 0.65,
-    onEnd: function(evt) {
-      updateVisibleCodes();
-      try { markDirty('unsaved-igas'); } catch (e) { }
-      try { updateUnsavedCount(); } catch (e) { }
-    }
-  });
+  // Drag-reorder disabled; codes update on add/delete only
 
   // Expose save function for top-level save
   window.saveIga = async function() {
@@ -477,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </td>
             <td>
               <div class="d-flex align-items-center gap-2">
-                <span class="drag-handle text-muted" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
+                
                 <div class="flex-grow-1 w-100">
                   <textarea name="iga_titles[]" class="cis-textarea cis-field autosize" placeholder="Title" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;" required>${iga.title || ''}</textarea>
                   <textarea name="igas[]" class="cis-textarea cis-field autosize" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;" required>${iga.description || ''}</textarea>

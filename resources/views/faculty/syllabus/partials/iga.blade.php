@@ -51,8 +51,7 @@
   #iga-right-wrap > table td:first-child, #iga-right-wrap > table th:first-child { padding: 6.4px !important; }
   /* Remove bottom border from IGA code cells with rowspan */
   #iga-right-wrap > table tbody tr.iga-title-row td:first-child { border-bottom: 0 !important; }
-  /* Drag handle styling for IGA reorder */
-  .drag-handle { width: 28px; display: inline-flex; justify-content: center; cursor: grab; align-self: center; }
+  /* Drag handle removed; reorder disabled */
   /* Make textarea fill remaining space and autosize */
   .cis-textarea { width: 100%; box-sizing: border-box; resize: none; }
   /* Align IGA textareas styling with Course Title textareas (single-line autosize) */
@@ -130,7 +129,7 @@
                   </td>
                   <td>
                     <div class="d-flex align-items-center gap-2">
-                      <span class="drag-handle text-muted" title="Drag to reorder"><i class="bi bi-grip-vertical"></i></span>
+                      <!-- drag handle removed -->
                       <div class="flex-grow-1 w-100">
                         <textarea
                           name="iga_titles[]"
