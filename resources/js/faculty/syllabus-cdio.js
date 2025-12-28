@@ -1,5 +1,4 @@
-// Frontend helpers for syllabus CDIO list: sortable, renumbering, keyboard shortcuts
-import Sortable from 'sortablejs';
+// Frontend helpers for syllabus CDIO list: renumbering, keyboard shortcuts (drag disabled)
 // Local helpers (syllabus.js removed)
 const markDirty = () => {};
 const updateUnsavedCount = () => {};
@@ -33,14 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try { updateUnsavedCount(); } catch (e) {}
   }
 
-  Sortable.create(list, {
-    handle: '.drag-handle',
-    animation: 150,
-    fallbackOnBody: true,
-    draggable: 'tr',
-    swapThreshold: 0.65,
-    onEnd() { updateVisibleCodes(); try { markDirty('unsaved-cdios'); } catch (e) {} }
-  });
+  // Drag-and-drop disabled; codes update on add/delete only
 
   // Observe DOM changes and renumber after microtask
   try {
@@ -89,39 +81,24 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
         
-        fetch((window.syllabusBasePath || '/faculty/syllabi') + `/cdios/${id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' } })
-        .then(res => res.json()).then(data => { 
-          if (window.showAlertOverlay) {
-            window.showAlertOverlay('success', data.message || 'CDIO deleted.');
-          }
-          
-          // Remove the row from DOM
-          const prev = row.previousElementSibling;
-          row.remove();
-          
-          // Check if any rows remain, if not show placeholder
-          const remainingRows = list.querySelectorAll('tr:not(#cdio-placeholder)');
-          if (remainingRows.length === 0) {
-            const placeholder = document.createElement('tr');
-            placeholder.id = 'cdio-placeholder';
-            placeholder.innerHTML = `
-              <td colspan="2" class="text-center text-muted py-4">
-                <p class="mb-2">No CDIOs added yet.</p>
-                <p class="mb-0"><small>Click the <strong>+</strong> button above to add a CDIO.</small></p>
-              </td>
-            `;
-            list.appendChild(placeholder);
-          } else {
-            updateVisibleCodes();
-          }
-          
-          if (prev) { const prevTa = prev.querySelector('textarea.autosize'); if (prevTa) { prevTa.focus(); prevTa.selectionStart = prevTa.value.length; } }
-        }).catch(err => { 
-          console.error(err); 
-          if (window.showAlertOverlay) {
-            window.showAlertOverlay('error', 'Failed to delete CDIO.');
-          }
-        });
+        // UI-only delete for saved rows; persistence on Save
+        const prev = row.previousElementSibling;
+        row.remove();
+        const remainingRows = list.querySelectorAll('tr:not(#cdio-placeholder)');
+        if (remainingRows.length === 0) {
+          const placeholder = document.createElement('tr');
+          placeholder.id = 'cdio-placeholder';
+          placeholder.innerHTML = `
+            <td colspan="2" class="text-center text-muted py-4">
+              <p class="mb-2">No CDIOs added yet.</p>
+              <p class="mb-0"><small>Click the <strong>+</strong> button above to add a CDIO.</small></p>
+            </td>
+          `;
+          list.appendChild(placeholder);
+        } else {
+          updateVisibleCodes();
+        }
+        if (prev) { const prevTa = prev.querySelector('textarea.autosize'); if (prevTa) { prevTa.focus(); prevTa.selectionStart = prevTa.value.length; } }
       }
     }
   });
@@ -153,36 +130,22 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     
-    fetch((window.syllabusBasePath || '/faculty/syllabi') + `/cdios/${id}`, { method: 'DELETE', credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' } })
-    .then(res => res.json()).then(data => { 
-      if (window.showAlertOverlay) {
-        window.showAlertOverlay('success', data.message || 'CDIO deleted.');
-      }
-      
-      // Remove the row from DOM
-      row.remove();
-      
-      // Check if any rows remain, if not show placeholder
-      const remainingRows = list.querySelectorAll('tr:not(#cdio-placeholder)');
-      if (remainingRows.length === 0) {
-        const placeholder = document.createElement('tr');
-        placeholder.id = 'cdio-placeholder';
-        placeholder.innerHTML = `
-          <td colspan="2" class="text-center text-muted py-4">
-            <p class="mb-2">No CDIOs added yet.</p>
-            <p class="mb-0"><small>Click the <strong>+</strong> button above to add a CDIO.</small></p>
-          </td>
-        `;
-        list.appendChild(placeholder);
-      } else {
-        updateVisibleCodes();
-      }
-    }).catch(err => { 
-      console.error(err); 
-      if (window.showAlertOverlay) {
-        window.showAlertOverlay('error', 'Failed to delete CDIO.');
-      }
-    });
+    // UI-only delete; persistence on Save
+    row.remove();
+    const remainingRows = list.querySelectorAll('tr:not(#cdio-placeholder)');
+    if (remainingRows.length === 0) {
+      const placeholder = document.createElement('tr');
+      placeholder.id = 'cdio-placeholder';
+      placeholder.innerHTML = `
+        <td colspan="2" class="text-center text-muted py-4">
+          <p class="mb-2">No CDIOs added yet.</p>
+          <p class="mb-0"><small>Click the <strong>+</strong> button above to add a CDIO.</small></p>
+        </td>
+      `;
+      list.appendChild(placeholder);
+    } else {
+      updateVisibleCodes();
+    }
   });
 
   // Inline save of a single row (send title + description)
@@ -208,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <td class="text-center align-middle"><div class="cdio-badge"></div></td>
       <td>
         <div class="d-flex align-items-center gap-2">
-          <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab; display:flex; align-items:center;"><i class="bi bi-grip-vertical"></i></span>
+          
           <div class="flex-grow-1 w-100">
             <textarea name="cdio_titles[]" class="cis-textarea cis-field autosize" placeholder="Title" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;" required></textarea>
             <textarea name="cdios[]" class="cis-textarea cis-field autosize" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;" required></textarea>
@@ -341,27 +304,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (confirmLoadBtn && list) {
     confirmLoadBtn.addEventListener('click', async function() {
       const syllabusId = list.dataset.syllabusId;
-      if (!syllabusId) {
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', 'Syllabus ID not found');
-        } else {
-          alert('Syllabus ID not found');
-        }
-        return;
-      }
+        if (!syllabusId) { alert('Syllabus ID not found'); return; }
 
       // Get selected CDIO IDs
       const selectedCheckboxes = document.querySelectorAll('.cdio-checkbox:checked');
       const selectedIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
 
-      if (selectedIds.length === 0) {
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', 'Please select at least one CDIO to load.');
-        } else {
-          alert('Please select at least one CDIO to load.');
-        }
-        return;
-      }
+      if (selectedIds.length === 0) { alert('Please select at least one CDIO to load.'); return; }
 
       try {
         confirmLoadBtn.disabled = true;
@@ -382,15 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const data = await response.json();
 
-        if (!data.cdios || data.cdios.length === 0) {
-          if (window.showAlertOverlay) {
-            window.showAlertOverlay('error', 'No predefined CDIOs found.');
-          } else {
-            alert('No predefined CDIOs found.');
-          }
-          confirmLoadBtn.disabled = false;
-          return;
-        }
+        if (!data.cdios || data.cdios.length === 0) { alert('No predefined CDIOs found.'); confirmLoadBtn.disabled = false; return; }
 
         // Remove placeholder if it exists
         const placeholder = document.getElementById('cdio-placeholder');
@@ -401,18 +342,18 @@ document.addEventListener('DOMContentLoaded', () => {
           list.removeChild(list.firstChild);
         }
 
-        // Add new rows from predefined CDIOs
+        // Add new rows from predefined CDIOs (UI-only; treat as new unsaved rows)
         data.cdios.forEach((cdio, index) => {
           const code = `CDIO${index + 1}`;
           const newRow = document.createElement('tr');
-          newRow.setAttribute('data-id', cdio.id);
+          newRow.setAttribute('data-id', `new-${Date.now()}-${index}`);
           newRow.innerHTML = `
             <td class="text-center align-middle">
               <div class="cdio-badge">${code}</div>
             </td>
             <td>
               <div class="d-flex align-items-center gap-2">
-                <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;"><i class="bi bi-grip-vertical"></i></span>
+                
                 <div class="flex-grow-1 w-100">
                   <textarea
                     name="cdio_titles[]"
@@ -449,10 +390,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Re-initialize feather icons if available
         if (typeof feather !== 'undefined') feather.replace();
 
-        // Show success message
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('success', data.message || 'CDIOs loaded successfully');
-        }
+        // Success: no overlay; optional console log
+        console.log(data.message || 'CDIOs loaded for preview');
 
         // Close modal
         const modalInstance = bootstrap.Modal.getInstance(loadPredefinedModal);
@@ -462,11 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       } catch (error) {
         console.error('Error loading predefined CDIOs:', error);
-        if (window.showAlertOverlay) {
-          window.showAlertOverlay('error', error.message || 'Failed to load predefined CDIOs');
-        } else {
-          alert(error.message || 'Failed to load predefined CDIOs');
-        }
+        alert(error.message || 'Failed to load predefined CDIOs');
         confirmLoadBtn.disabled = false;
       }
     });
@@ -493,7 +428,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (! form) return { ok: true };
     const tbody = document.querySelector('#syllabus-cdio-sortable');
     const items = [];
-    Array.from(tbody.querySelectorAll('tr')).forEach((tr, idx) => {
+    Array.from(tbody.querySelectorAll('tr')).filter(tr => tr.id !== 'cdio-placeholder').forEach((tr, idx) => {
+      // Ensure code reflects current order before serialization
+      const badge = tr.querySelector('.cdio-badge'); if (badge) badge.textContent = `CDIO${idx+1}`;
+      const codeHidden = tr.querySelector('input[name="code[]"]'); if (codeHidden) codeHidden.value = `CDIO${idx+1}`;
       const title = tr.querySelector('textarea[name="cdio_titles[]"]')?.value || '';
       const desc = tr.querySelector('textarea[name="cdios[]"]')?.value || '';
       const code = tr.querySelector('input[name="code[]"]')?.value || (`CDIO${idx+1}`);

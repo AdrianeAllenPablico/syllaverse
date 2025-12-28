@@ -93,31 +93,22 @@ class SyllabusCdioController extends Controller
             return response()->json(['message' => 'No predefined CDIOs found.'], 404);
         }
 
-        // Delete existing CDIOs for this syllabus
-        SyllabusCdio::where('syllabus_id', $syllabus->id)->delete();
-
-        // Create new CDIOs from predefined data
-        $newCdios = [];
-        foreach ($predefinedCdios as $index => $predefined) {
-            $cdio = SyllabusCdio::create([
-                'syllabus_id' => $syllabus->id,
+        // Build a non-persistent preview payload for the UI
+        $previewCdios = [];
+        foreach ($predefinedCdios as $index => $predef) {
+            $previewCdios[] = [
                 'code' => 'CDIO' . ($index + 1),
-                'title' => $predefined->title,
-                'description' => $predefined->description,
+                'title' => $predef->title,
+                'description' => $predef->description,
                 'position' => $index + 1,
-            ]);
-            $newCdios[] = [
-                'id' => $cdio->id,
-                'code' => $cdio->code,
-                'title' => $cdio->title,
-                'description' => $cdio->description,
-                'position' => $cdio->position,
+                'origin' => 'master',
+                'origin_id' => $predef->id,
             ];
         }
 
         return response()->json([
-            'message' => count($newCdios) . ' CDIO' . (count($newCdios) !== 1 ? 's' : '') . ' loaded successfully.',
-            'cdios' => $newCdios,
+            'message' => count($previewCdios) . ' CDIO' . (count($previewCdios) !== 1 ? 's' : '') . ' loaded for preview. Save to persist.',
+            'cdios' => $previewCdios,
         ]);
     }
 

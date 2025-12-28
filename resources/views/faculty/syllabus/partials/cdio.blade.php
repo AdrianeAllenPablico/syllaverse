@@ -52,7 +52,7 @@
     /* Uniform 6.4px padding for CDIO code header and code cells */
     #cdio-right-wrap > table thead th.cis-label:first-child { padding: 6.4px !important; }
     #cdio-right-wrap > table td:first-child, #cdio-right-wrap > table th:first-child { padding: 6.4px !important; }
-    .drag-handle { width: 28px; display: inline-flex; justify-content: center; align-self: center; }
+    /* drag handle removed */
     /* Make textarea fill remaining space and autosize */
     .cis-textarea { width: 100%; box-sizing: border-box; resize: none; }
     /* Align CDIO textareas styling with Course Title textareas (single-line autosize) */
@@ -121,7 +121,7 @@
                   </td>
                   <td>
                     <div class="d-flex align-items-center gap-2">
-                      <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;"><i class="bi bi-grip-vertical"></i></span>
+                      <!-- drag handle removed -->
                       <div class="flex-grow-1 w-100">
                         <textarea
                           name="cdio_titles[]"
@@ -296,7 +296,7 @@
       <div class="modal-body">
         <div class="alert alert-warning mb-3">
           <i data-feather="alert-triangle" style="width:16px;height:16px;vertical-align:text-bottom;"></i>
-          <strong>Warning:</strong> Loading predefined CDIOs will replace all current CDIOs.
+          <strong>Warning:</strong> Loading predefined CDIOs will replace the current CDIOs in the UI. Changes are only saved when you click the main Save.
         </div>
         <p class="mb-2 fw-semibold">Select CDIOs to load:</p>
         <div class="mb-3">
