@@ -187,6 +187,25 @@
 		const removeBtn = getRemoveBtn();
 		if (addBtn) addBtn.addEventListener('click', addSection);
 		if (removeBtn) removeBtn.addEventListener('click', removeSection);
+		// Capture initial server-rendered snapshot so re-adds work after reload
+		(function initSnapshotFromDOM(){
+			const container = getContainer();
+			if (!container) return;
+			const sections = [];
+			container.querySelectorAll('.section').forEach(function(sec, idx){
+				const key = sec.dataset.sectionKey || `section_${idx+1}`;
+				const heading = (sec.querySelector('.section-head .category')?.value || '').trim();
+				let init = [];
+				try {
+					const raw = sec.querySelector('.sub-list')?.dataset?.init || '[]';
+					const parsed = JSON.parse(raw);
+					if (Array.isArray(parsed)) init = parsed;
+				} catch(e){}
+				sections.push({ key, heading, value: init });
+			});
+			if (sections.length){ lastSavedCriteria = sections; }
+		})();
+
 		// Seed existing sections only; subline handlers use event delegation below
 		document.querySelectorAll('.cis-criteria .section').forEach(function(section){
 			seedSubList(section);
