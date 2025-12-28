@@ -6,6 +6,7 @@
  */
 
 document.addEventListener('DOMContentLoaded', function () {
+  const MODULE_NAME = 'courseInfo';
   const syllabusId = document.getElementById('syllabus-document')?.dataset.syllabusId;
 
   /**
@@ -133,4 +134,22 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
   };
+
+  // Track active module when any course info field is focused or hovered
+  try {
+    const fields = [
+      'course_title', 'course_code', 'course_category', 'course_prerequisites',
+      'semester', 'year_level', 'credit_hours_text', 'instructor_name', 'employee_code',
+      'reference_cmo', 'instructor_designation', 'date_prepared', 'instructor_email',
+      'revision_no', 'academic_year', 'revision_date', 'course_description',
+      'tla_strategies', 'contact_hours', 'contact_hours_lec', 'contact_hours_lab'
+    ];
+    const markActive = function(){ try { window.SVActiveModuleName = MODULE_NAME; window.SVLastActiveModule = MODULE_NAME; } catch(e){} };
+    fields.forEach((name) => {
+      const el = document.querySelector(`[name="${name}"]`);
+      if (el){ el.addEventListener('focus', markActive); el.addEventListener('mouseenter', markActive); }
+    });
+  } catch(e) { /* noop */ }
+
+  // Global toolbar triggers sv:undo/sv:redo; course info marks active via focus/hover
 });

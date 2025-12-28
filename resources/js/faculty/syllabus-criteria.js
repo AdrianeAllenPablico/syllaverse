@@ -2,6 +2,7 @@
 // Assumes markup from criteria-assessment.blade.php
 
 (function(){
+	const MODULE_NAME = 'criteria';
 	let lastSavedCriteria = null; // cache snapshot from server to reseed on add/remove
 	// Action-based undo/redo
 	let actions = [];
@@ -82,6 +83,28 @@
 		const container = getContainer();
 		if (!container) return null;
 		return container.querySelector(`.section[data-section-key="${CSS.escape(key)}"]`);
+	}
+
+	function getActiveSectionKey(){
+		try {
+			const container = getContainer();
+			const ae = document.activeElement;
+			if (container && ae && container.contains(ae)){
+				const sec = ae.closest('.section');
+				if (sec && sec.dataset && sec.dataset.sectionKey) return sec.dataset.sectionKey;
+			}
+			return window.SVCriteriaLastSectionKey || null;
+		} catch(e){ return null; }
+	}
+
+	function focusToSectionEnd(sectionKey){
+		try {
+			const sec = getSectionElByKey(sectionKey);
+			if (!sec) return;
+			const lines = sec.querySelectorAll('.sub-line');
+			const target = lines.length ? lines[lines.length - 1].querySelector('.sub-input') : sec.querySelector('.category');
+			if (target) target.focus();
+		} catch(e){}
 	}
 
 	function applyEditInput(action, dir){
@@ -177,34 +200,77 @@
 	}
 
 	function performUndo(){
-		const a = actions.pop();
-		if (!a) return;
+		if (!actions.length) return;
+		const targetKey = getActiveSectionKey();
+		let idx = -1;
+		for (let i = actions.length - 1; i >= 0; i--){
+			const act = actions[i];
+			if (act.type === 'snapshot'){ idx = i; break; }
+			if (targetKey && act.sectionKey && act.sectionKey === targetKey){ idx = i; break; }
+			if (!targetKey && (act.type === 'addSection' || act.type === 'removeSection' || act.type === 'addRow' || act.type === 'removeRow')){ idx = i; break; }
+		}
+		if (idx < 0) idx = actions.length - 1;
+		const a = actions.splice(idx, 1)[0];
 		redoActions.push(a);
 		switch (a.type){
-			case 'editInput': return applyEditInput(a, 'undo');
-			case 'addRow': return applyAddRow(a, 'undo');
-			case 'removeRow': return applyRemoveRow(a, 'undo');
-			case 'addSection': return applyAddSection(a, 'undo');
-			case 'removeSection': return applyRemoveSection(a, 'undo');
-			case 'snapshot': return applySnapshot(a.snapshot);
+			case 'editInput': applyEditInput(a, 'undo'); break;
+			case 'addRow': applyAddRow(a, 'undo'); break;
+			case 'removeRow': applyRemoveRow(a, 'undo'); break;
+			case 'addSection': applyAddSection(a, 'undo'); break;
+			case 'removeSection': applyRemoveSection(a, 'undo'); break;
+			case 'snapshot': applySnapshot(a.snapshot); break;
 		}
+		const keyForFocus = a.sectionKey || targetKey || null;
+		if (keyForFocus) focusToSectionEnd(keyForFocus);
 	}
 
 	function performRedo(){
-		const a = redoActions.pop();
-		if (!a) return;
+		if (!redoActions.length) return;
+		const targetKey = getActiveSectionKey();
+		let idx = -1;
+		for (let i = redoActions.length - 1; i >= 0; i--){
+			const act = redoActions[i];
+			if (act.type === 'snapshot'){ idx = i; break; }
+			if (targetKey && act.sectionKey && act.sectionKey === targetKey){ idx = i; break; }
+			if (!targetKey && (act.type === 'addSection' || act.type === 'removeSection' || act.type === 'addRow' || act.type === 'removeRow')){ idx = i; break; }
+		}
+		if (idx < 0) idx = redoActions.length - 1;
+		const a = redoActions.splice(idx, 1)[0];
 		actions.push(a);
 		switch (a.type){
-			case 'editInput': return applyEditInput(a, 'redo');
-			case 'addRow': return applyAddRow(a, 'redo');
-			case 'removeRow': return applyRemoveRow(a, 'redo');
-			case 'addSection': return applyAddSection(a, 'redo');
-			case 'removeSection': return applyRemoveSection(a, 'redo');
-			case 'snapshot': return applySnapshot(a.snapshot);
+			case 'editInput': applyEditInput(a, 'redo'); break;
+			case 'addRow': applyAddRow(a, 'redo'); break;
+			case 'removeRow': applyRemoveRow(a, 'redo'); break;
+			case 'addSection': applyAddSection(a, 'redo'); break;
+			case 'removeSection': applyRemoveSection(a, 'redo'); break;
+			case 'snapshot': applySnapshot(a.snapshot); break;
 		}
+		const keyForFocus = a.sectionKey || targetKey || null;
+		if (keyForFocus) focusToSectionEnd(keyForFocus);
 	}
 	function getContainer(){
 		return document.getElementById('criteria-sections-container');
+	}
+
+	function getRootEl(){
+		try {
+			const el = document.querySelector('.cis-criteria');
+			if (el) return el;
+			const c = getContainer();
+			return c ? c.closest('.cis-criteria') : null;
+		} catch(e){ return null; }
+	}
+
+	function isFocusInsideModule(){
+		const root = getRootEl();
+		const ae = document.activeElement;
+		return !!(root && ae && root.contains(ae));
+	}
+
+	function isEventForModule(e){
+		const requested = e && e.detail && e.detail.module ? String(e.detail.module) : null;
+		if (requested) return requested === MODULE_NAME;
+		return isFocusInsideModule();
 	}
 	function getAddBtn(){
 		return document.querySelector('.cis-criteria .criteria-add-section-btn');
@@ -424,6 +490,13 @@
 		const removeBtn = getRemoveBtn();
 		if (addBtn) addBtn.addEventListener('click', addSection);
 		if (removeBtn) removeBtn.addEventListener('click', removeSection);
+
+		const root = getRootEl();
+		if (root){
+			root.addEventListener('focusin', function(){ try { window.SVLastActiveModule = MODULE_NAME; window.SVActiveModuleName = MODULE_NAME; } catch(e){} });
+			root.addEventListener('mouseenter', function(){ try { window.SVLastActiveModule = MODULE_NAME; window.SVActiveModuleName = MODULE_NAME; } catch(e){} });
+			// Global toolbar will dispatch sv:undo/sv:redo; we mark active module only.
+		}
 		// Capture initial server-rendered snapshot so re-adds work after reload
 		(function initSnapshotFromDOM(){
 			const container = getContainer();
@@ -479,6 +552,11 @@
 				if (!t || !t.classList) return;
 				if (t.classList.contains('category') || t.classList.contains('sub-input') || t.classList.contains('sub-percent')){
 					t.dataset.prevValue = t.value || '';
+					try {
+						const sec = t.closest('.section');
+						if (sec && sec.dataset && sec.dataset.sectionKey) window.SVCriteriaLastSectionKey = sec.dataset.sectionKey;
+						try { window.SVActiveModuleName = MODULE_NAME; window.SVLastActiveModule = MODULE_NAME; } catch(e){}
+					} catch(e){}
 				}
 			});
 			container.addEventListener('blur', function(e){
@@ -497,11 +575,11 @@
 				pushAction({ type: 'editInput', sectionKey, field, index: index != null ? parseInt(index, 10) : null, oldValue: prev, newValue: now });
 				try { delete t.dataset.prevValue; } catch(_){}
 			}, true);
+
+			// Keyboard shortcuts handled by global toolbar; no local interception
 		}
 
-		// Toolbar Undo/Redo handlers (action-based)
-		document.addEventListener('sv:undo', function(){ try { performUndo(); } catch(e){} });
-		document.addEventListener('sv:redo', function(){ try { performRedo(); } catch(e){} });
+		// Global toolbar will invoke window.performCriteriaUndo/Redo directly; no local event listeners
 		updateButtonStates();
 	}
 
@@ -576,7 +654,10 @@
 	}
 
 	// Expose globally for toolbar integration
-	try { window.saveCriteria = saveCriteria; } catch(e){}
+	try {
+		window.saveCriteria = saveCriteria;
+		// Undo/Redo temporarily disabled; no exports
+	} catch(e){}
 
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', bind, { once: true });

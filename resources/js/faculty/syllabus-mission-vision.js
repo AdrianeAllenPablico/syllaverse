@@ -4,6 +4,7 @@
  */
 
 (function(){
+  const MODULE_NAME = 'missionVision';
   function getForm() {
     return document.getElementById('syllabusForm')
         || document.querySelector('form#syllabusForm')
@@ -89,6 +90,14 @@
 
   // Optional: hook up local button if present (non-blocking)
   document.addEventListener('DOMContentLoaded', function(){
+    // Track active module when mission/vision inputs are focused or hovered
+    try {
+      const missionEl = document.getElementById('mission-text') || document.querySelector('[name="mission"]');
+      const visionEl = document.getElementById('vision-text') || document.querySelector('[name="vision"]');
+      const markActive = function(){ try { window.SVActiveModuleName = MODULE_NAME; window.SVLastActiveModule = MODULE_NAME; } catch(e){} };
+      if (missionEl){ missionEl.addEventListener('focus', markActive); missionEl.addEventListener('mouseenter', markActive); }
+      if (visionEl){ visionEl.addEventListener('focus', markActive); visionEl.addEventListener('mouseenter', markActive); }
+    } catch(e) {}
     try {
       const btn = document.getElementById('saveMissionVisionBtn');
       const statusEl = document.getElementById('saveMissionVisionStatus');
@@ -110,5 +119,7 @@
         }
       });
     } catch (e) {}
+
+    // Global toolbar triggers sv:undo/sv:redo; mission/vision mark active via focus/hover
   });
 })();

@@ -4,18 +4,8 @@
 
 (function(){
   function performRedo(){
-    try {
-      if (window.SVRedo && typeof window.SVRedo.run === 'function') {
-        return window.SVRedo.run();
-      }
-    } catch (e) { /* noop */ }
-    try {
-      // Fallback: attempt browser redo for focused editable elements
-      if (typeof document.execCommand === 'function') {
-        document.execCommand('redo');
-      }
-    } catch (e) { /* noop */ }
-    try { document.dispatchEvent(new CustomEvent('sv:redo')); } catch (e) {}
+    // Temporarily disabled: global Redo is a no-op until redesigned
+    return;
   }
 
   document.addEventListener('DOMContentLoaded', function(){
