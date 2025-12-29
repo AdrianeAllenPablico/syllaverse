@@ -110,21 +110,7 @@
         <div class="sv-partial" data-partial-key="course-policies">@include('faculty.syllabus.partials.course-policies')</div>
         <div class="sv-partial" data-partial-key="tla">@include('faculty.syllabus.partials.tla')</div>
         @if(!($fromApprovals && $submissionStatus === 'final_approval'))
-        <!-- AI Mapping Tools moved from right toolbar: placed above Assessment Mapping -->
-        <div class="sv-ai-mapping-actions d-flex flex-wrap gap-2 align-items-center mb-3">
-          <button type="button" class="btn btn-outline-danger btn-sm" id="svAiAssessmentScheduleBtn" aria-label="AI: Assessment Schedule">
-            <i class="bi bi-stars"></i> Assessment Schedule
-          </button>
-          <button type="button" class="btn btn-outline-danger btn-sm" id="svAiIloSoCpaBtn" aria-label="AI: ILO–SO &amp; CPA">
-            <i class="bi bi-stars"></i> ILO–SO &amp; CPA
-          </button>
-          <button type="button" class="btn btn-outline-danger btn-sm" id="svAiIloIgaBtn" aria-label="AI: ILO–IGA">
-            <i class="bi bi-stars"></i> ILO–IGA
-          </button>
-          <button type="button" class="btn btn-outline-danger btn-sm" id="svAiIloCdioSdgBtn" aria-label="AI: ILO–CDIO–SDG">
-            <i class="bi bi-stars"></i> ILO–CDIO–SDG
-          </button>
-        </div>
+        <!-- Removed AI Mapping action buttons per request -->
         <!-- Shared AI Progress (kept IDs for existing JS hooks) -->
         <div id="svAiMapProgressWrap" class="mt-2" style="display:none;">
           <div class="d-flex align-items-center justify-content-between mb-1">
