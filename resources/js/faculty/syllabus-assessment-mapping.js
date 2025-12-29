@@ -470,12 +470,12 @@ if (saveBtn) {
 
 		window.saveAssessmentMappings()
 			.then(data => {
-				alert('Assessment mappings saved successfully!');
+				console.info('Assessment mappings saved successfully.');
 				btn.disabled = false;
 				btn.textContent = originalText;
 			})
 			.catch(error => {
-				alert('Failed to save: ' + error.message);
+				console.error('Failed to save assessment mappings:', error);
 				btn.disabled = false;
 				btn.textContent = originalText;
 			});

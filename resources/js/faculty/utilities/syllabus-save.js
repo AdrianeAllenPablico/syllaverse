@@ -77,6 +77,12 @@
 		return true;
 	}
 
+	async function saveIloSoCpa(){
+		if (typeof window.saveIloSoCpa !== 'function') return false;
+		await window.saveIloSoCpa();
+		return true;
+	}
+
 	document.addEventListener('DOMContentLoaded', function(){
 		const btn = document.getElementById('syllabusSaveBtn');
 		if (!btn) return;
@@ -98,6 +104,7 @@
 				try { results.push(await saveTla()); } catch (e) { console.error('TLA save failed:', e); results.push(false); }
 				try { results.push(await saveAssessmentMappings()); } catch (e) { console.error('Assessment Mapping save failed:', e); results.push(false); }
 				try { results.push(await saveSo()); } catch (e) { console.error('SO save failed:', e); results.push(false); }
+				try { results.push(await saveIloSoCpa()); } catch (e) { console.error('ILO-SO-CPA save failed:', e); results.push(false); }
 				try { results.push(await saveAssessmentTasks()); } catch (e) { console.error('Assessment Tasks save failed:', e); results.push(false); }
 				try { results.push(await saveMissionVision()); } catch (e) { console.error('Mission/Vision save failed:', e); results.push(false); }
 

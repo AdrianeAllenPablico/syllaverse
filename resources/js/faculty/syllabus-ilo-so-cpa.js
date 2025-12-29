@@ -507,7 +507,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	};
 	
 	// Save ILO-SO-CPA mapping function
-	window.saveIloSoCpaMapping = function(showAlert = true) {
+	window.saveIloSoCpaMapping = function(showAlert = false) {
 		const mappingTable = mapping.querySelector('.mapping');
 		const headerRow2 = mappingTable.querySelectorAll('tr')[1];
 		const tbody = mappingTable.querySelector('tbody') || mappingTable;
@@ -583,7 +583,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		
 		if (!syllabusId) {
 			const error = new Error('Syllabus ID not found. Please save the syllabus first.');
-			if (showAlert) alert(error.message);
 			return Promise.reject(error);
 		}
 		
@@ -610,15 +609,13 @@ document.addEventListener('DOMContentLoaded', function() {
 		})
 		.then(data => {
 			if (data.success) {
-				if (showAlert) alert('ILO-SO-CPA mapping saved successfully!');
 				return data;
 			} else {
 				throw new Error(data.message || 'Unknown error');
 			}
 		})
 		.catch(error => {
-			console.error('Error:', error);
-			if (showAlert) alert('Error saving mapping: ' + error.message);
+			console.error('Error saving ILO-SO-CPA mapping:', error);
 			throw error;
 		});
 	};
