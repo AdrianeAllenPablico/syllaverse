@@ -195,6 +195,19 @@
 	}
 </style>
 
+<style>
+	/* Enforce narrower ILO column like ILO–IGA */
+	.ilo-so-cpa-mapping .mapping col:first-child { width: 60px !important; }
+	.ilo-so-cpa-mapping .mapping th:nth-child(1),
+	.ilo-so-cpa-mapping .mapping td:nth-child(1) {
+		width: 60px !important;
+		max-width: 60px !important;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+</style>
+
 <div class="ilo-so-cpa-mapping mb-4" 
      data-so-columns="{{ json_encode($soColumns ?? []) }}"
      data-mappings="{{ json_encode($syllabus->iloSoCpa ?? []) }}">
@@ -205,16 +218,16 @@
 					<div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%) rotate(-90deg); writing-mode:horizontal-tb; white-space:nowrap; max-width:500px; overflow:hidden; text-overflow:ellipsis;">ILO-SO and ILO-CPA<br>Mapping</div>
 				</th>
 				<th style="border:none; padding:0;">
-					<table class="mapping" style="width:100%; border:none; border-collapse:collapse; table-layout:auto;">
+					<table class="mapping" style="width:100%; border:none; border-collapse:collapse; table-layout:fixed;">
 						<colgroup>
-							<col style="width:90px">
-							<col style="width:80px">
-							<col style="width:80px">
-							<col style="width:80px">
-							<col style="width:80px">
+							<col style="width:60px">
+							<col>
+							<col>
+							<col>
+							<col>
 						</colgroup>
 					<tr>
-						<th rowspan="2" style="border:none; border-bottom:1px solid #343a40; border-right:1px solid #343a40; width:90px; height:30px; padding:0.2rem 0.5rem; font-weight:700; font-family:Georgia, serif; font-size:13px; line-height:1.4; color:#111; text-align:center; vertical-align:middle; position:relative;">
+						<th rowspan="2" style="border:none; border-bottom:1px solid #343a40; border-right:1px solid #343a40; width:60px; max-width:60px; height:30px; padding:0.2rem 0.5rem; font-weight:700; font-family:Georgia, serif; font-size:13px; line-height:1.4; color:#111; text-align:center; vertical-align:middle; position:relative; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
 							<div class="ilo-header-controls">
 								<button type="button" class="btn btn-sm ilo-remove-btn" onclick="removeIloRow()" title="Remove ILO row" aria-label="Remove ILO row">
 										<i data-feather="minus"></i>
@@ -248,7 +261,7 @@
 							</th>
 						</tr>
 						<tr>
-							<td style="border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; font-family:Georgia, serif; font-size:13px; text-align:center; vertical-align:middle; color:#999; font-style:italic;">No ILO</td>
+							<td style="border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; font-family:Georgia, serif; font-size:13px; text-align:center; vertical-align:middle; color:#999; font-style:italic; width:60px; max-width:60px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">No ILO</td>
 							<td style="border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle; background-color:#f8f9fa;">
 								<textarea class="form-control form-control-sm" placeholder="-" rows="1" style="width:100%; min-height:22px; border:none; padding:0.2rem 0.5rem; font-family:Georgia,serif; font-size:13px; text-align:center; box-sizing:border-box; resize:none; overflow:hidden; background-color:#f8f9fa; cursor:not-allowed;" disabled></textarea>
 							</td>

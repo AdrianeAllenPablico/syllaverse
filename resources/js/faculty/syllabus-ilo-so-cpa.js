@@ -5,6 +5,37 @@ document.addEventListener('DOMContentLoaded', function() {
 	const mapping = document.querySelector('.ilo-so-cpa-mapping');
 	if (!mapping) return;
 
+	// Evenly distribute non-ILO columns while keeping ILO at 60px
+	function equalizeNonIloColumns() {
+		const mappingTable = mapping.querySelector('.mapping');
+		if (!mappingTable) return;
+		const colgroup = mappingTable.querySelector('colgroup');
+		if (!colgroup) return;
+		const cols = Array.from(colgroup.children);
+		if (cols.length < 2) return; // need at least ILO + one more
+		const iloWidthPx = 60; // match ILO-IGA width
+		const nonIloCount = cols.length - 1;
+		// Use pixel-based widths to avoid rounding gaps; make the last column absorb remainder
+		requestAnimationFrame(() => {
+			const totalWidth = mappingTable.clientWidth || mappingTable.offsetWidth;
+			if (totalWidth && totalWidth > iloWidthPx && nonIloCount > 0) {
+				const available = totalWidth - iloWidthPx;
+				const per = Math.floor(available / nonIloCount);
+				for (let i = 1; i < cols.length - 1; i++) {
+					cols[i].style.width = per + 'px';
+				}
+				const remainder = available - per * (nonIloCount - 1);
+				cols[cols.length - 1].style.width = Math.max(0, remainder) + 'px';
+			} else {
+				// Fallback to percentage equalization
+				const widthCalc = `calc((100% - ${iloWidthPx}px) / ${nonIloCount})`;
+				for (let i = 1; i < cols.length; i++) {
+					cols[i].style.width = widthCalc;
+				}
+			}
+		});
+	}
+
 	// Hide partial label text if it overflows
 	function checkPartialLabelOverflow() {
 		const partialLabel = mapping.querySelector('.partial-label');
@@ -347,12 +378,13 @@ document.addEventListener('DOMContentLoaded', function() {
 				
 				// CPA inputs remain enabled (no need to change their state)
 			});
+				// After converting placeholder, keep columns even
+				equalizeNonIloColumns();
 			return;
 		}
 		
 		// Add column to colgroup (before C, P, A columns)
 		const newCol = document.createElement('col');
-		newCol.style.width = '80px';
 		colgroup.insertBefore(newCol, colgroup.children[colgroup.children.length - 3]);
 
 		// Update header colspan to span SOs + C/P/A
@@ -385,6 +417,29 @@ document.addEventListener('DOMContentLoaded', function() {
 		newSoHeader.appendChild(soInput);
 		
 		headerRow2.insertBefore(newSoHeader, cHeader);
+
+		// Re-apply controls: minus on first SO header, plus on last SO header
+		const hdr2AllAfterAdd = Array.from(headerRow2.querySelectorAll('th'));
+		const iloIdxAfter = hdr2AllAfterAdd.findIndex(th => th.textContent.includes('ILOs'));
+		const cIdxAfter = hdr2AllAfterAdd.findIndex(th => th.textContent.trim() === 'C');
+		const soHeadersNow = hdr2AllAfterAdd.slice(iloIdxAfter + 1, cIdxAfter);
+		// Remove any existing controls from SO headers
+		soHeadersNow.forEach(th => th.querySelectorAll('.so-header-controls, .a-header-controls').forEach(ctrl => ctrl.remove()));
+		// Add remove to first
+		if (soHeadersNow.length > 0) {
+			const firstSo = soHeadersNow[0];
+			const removeCtrl = document.createElement('div');
+			removeCtrl.className = 'so-header-controls';
+			removeCtrl.innerHTML = '<button type="button" class="btn btn-sm so-remove-btn" onclick="removeSoColumn()" title="Remove SO column" aria-label="Remove SO column"><i data-feather="minus"></i></button>';
+			firstSo.prepend(removeCtrl);
+			// Add add to last
+			const lastSo = soHeadersNow[soHeadersNow.length - 1];
+			const addCtrl = document.createElement('div');
+			addCtrl.className = 'a-header-controls';
+			addCtrl.innerHTML = '<button type="button" class="btn btn-sm so-add-btn" onclick="addSoColumn()" title="Add SO column" aria-label="Add SO column"><i data-feather="plus"></i></button>';
+			lastSo.appendChild(addCtrl);
+			try { if (typeof feather !== 'undefined') feather.replace(); } catch(_) {}
+		}
 		
 		// Add new SO cell to each data row (before C cell)
 		dataRows.forEach(row => {
@@ -407,6 +462,8 @@ document.addEventListener('DOMContentLoaded', function() {
 			newCell.appendChild(newTextarea);
 			row.insertBefore(newCell, cCell);
 		});
+			// After adding a column, ensure even widths
+			equalizeNonIloColumns();
 		updateInputStates();
 	};
 	
@@ -472,6 +529,15 @@ document.addEventListener('DOMContentLoaded', function() {
 					soCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle; background:#f9f9f9;';
 				}
 			});
+
+			// Ensure the SO group header colspan covers 1 SO + C/P/A
+			const soHeaderSpan = headerRow1.querySelectorAll('th')[1];
+			if (soHeaderSpan) {
+				soHeaderSpan.setAttribute('colspan', String(1 + 3));
+			}
+
+				// After converting to placeholder, keep columns even
+				equalizeNonIloColumns();
 			return;
 		}
 		
@@ -492,6 +558,26 @@ document.addEventListener('DOMContentLoaded', function() {
 		// Remove last SO header
 		const lastSoHeader = soHeaders[soHeaders.length - 1];
 		lastSoHeader.remove();
+
+		// Re-apply controls on remaining SO headers
+		const hdr2AllAfterRemove = Array.from(headerRow2.querySelectorAll('th'));
+		const iloIdxAfterRemove = hdr2AllAfterRemove.findIndex(th => th.textContent.includes('ILOs'));
+		const cIdxAfterRemove = hdr2AllAfterRemove.findIndex(th => th.textContent.trim() === 'C');
+		const soHeadersRemaining = hdr2AllAfterRemove.slice(iloIdxAfterRemove + 1, cIdxAfterRemove);
+		soHeadersRemaining.forEach(th => th.querySelectorAll('.so-header-controls, .a-header-controls').forEach(ctrl => ctrl.remove()));
+		if (soHeadersRemaining.length > 0) {
+			const firstSo = soHeadersRemaining[0];
+			const removeCtrl = document.createElement('div');
+			removeCtrl.className = 'so-header-controls';
+			removeCtrl.innerHTML = '<button type="button" class="btn btn-sm so-remove-btn" onclick="removeSoColumn()" title="Remove SO column" aria-label="Remove SO column"><i data-feather="minus"></i></button>';
+			firstSo.prepend(removeCtrl);
+			const lastSo = soHeadersRemaining[soHeadersRemaining.length - 1];
+			const addCtrl = document.createElement('div');
+			addCtrl.className = 'a-header-controls';
+			addCtrl.innerHTML = '<button type="button" class="btn btn-sm so-add-btn" onclick="addSoColumn()" title="Add SO column" aria-label="Add SO column"><i data-feather="plus"></i></button>';
+			lastSo.appendChild(addCtrl);
+			try { if (typeof feather !== 'undefined') feather.replace(); } catch(_) {}
+		}
 		
 		// Remove last SO cell from each data row
 		dataRows.forEach(row => {
@@ -504,6 +590,11 @@ document.addEventListener('DOMContentLoaded', function() {
 				cells[lastSoIndex].remove();
 			}
 		});
+
+		// After removing a column, ensure even widths
+		equalizeNonIloColumns();
+
+		// Allow non-ILO columns to use natural widths (no forced sizing)
 	};
 	
 	// Save ILO-SO-CPA mapping function
@@ -789,6 +880,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	setTimeout(() => {
 		loadSavedData();
 		updateInputStates();
+		equalizeNonIloColumns();
 	}, 100);
 	
 	// Legacy function for compatibility with existing save flow
@@ -906,6 +998,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 			checkPartialLabelOverflow();
 			updateInputStates();
+			// Keep non-ILO columns evenly distributed
+			equalizeNonIloColumns();
 			// Re-render feather icons for control buttons after DOM changes
 			if (window.feather && typeof window.feather.replace === 'function') { try { window.feather.replace(); } catch(_){} }
 			// Restore focus if possible
