@@ -90,7 +90,6 @@
   @vite('resources/js/faculty/utilities/syllabus-back.js')
   @vite('resources/js/faculty/utilities/syllabus-save-state.js')
   @vite('resources/js/faculty/utilities/syllabus-save.js')
-  @vite('resources/js/faculty/utilities/syllabus-cdio.js')
   @vite('resources/js/faculty/utilities/syllabus-undo.js')
   @vite('resources/js/faculty/utilities/syllabus-redo.js')
   @vite('resources/js/faculty/syllabus-course-info.js')

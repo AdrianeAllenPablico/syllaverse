@@ -70,13 +70,7 @@
       <!-- (Removed) AI Assist button -->
       @endif
 
-      @if((($reviewMode && !$fromApprovals) || !$isLockedSubmitted || $isApproved || ($isFinalApproved && !$fromApprovals)))
-      <!-- Settings button + floating overlay panel (no dropdown wrapper) -->
-      <button class="btn btn-outline-secondary d-flex flex-column align-items-center gap-1 toolbar-btn mt-3" type="button" id="syllabusSettingsBtn" title="Settings">
-        <i class="bi bi-gear fs-5"></i>
-        <span class="small">Settings</span>
-      </button>
-      @endif
+      {{-- Settings button removed per request --}}
     </div>
   </div>
 
@@ -879,7 +873,78 @@
       }
     } catch(e) { /* noop */ }
 
-    // Settings: CDIO visibility toggle is handled by syllabus-cdio.js utility.
+    // Settings: CDIO visibility toggle (persisted per syllabus in localStorage)
+    try {
+      const docEl = document;
+      const container = docEl.getElementById('syllabus-document');
+      const syllabusId = container ? container.getAttribute('data-syllabus-id') : '';
+      const cdioPartial = docEl.querySelector('.sv-partial[data-partial-key="cdio"]');
+      const key = 'sv_show_cdio_' + (syllabusId || 'default');
+      function applyCdioVisibility(show){ if (cdioPartial) cdioPartial.style.display = show ? '' : 'none'; }
+      let showCdio = true; // default: visible
+      try { const v = localStorage.getItem(key); if (v !== null) showCdio = (v === 'true'); } catch(e) {}
+      applyCdioVisibility(showCdio);
+      // settings panel creation and wiring (only if toolbar button exists)
+      const settingsBtn = docEl.getElementById('syllabusSettingsBtn');
+      if (settingsBtn) {
+        let settingsPanel = docEl.getElementById('syllabusSettingsPanel');
+        if (!settingsPanel) {
+          settingsPanel = docEl.createElement('div');
+          settingsPanel.id = 'syllabusSettingsPanel';
+          settingsPanel.className = 'sv-settings-panel';
+          settingsPanel.innerHTML = `
+            <div class="form-check form-switch d-flex align-items-center gap-2">
+              <input class="form-check-input" type="checkbox" id="toggleCdioVisibility">
+              <label class="form-check-label" for="toggleCdioVisibility">Show CDIO section</label>
+            </div>
+          `;
+          document.body.appendChild(settingsPanel);
+        }
+
+        const toggleCdio = docEl.getElementById('toggleCdioVisibility');
+        if (toggleCdio) {
+          toggleCdio.checked = !!showCdio;
+          toggleCdio.setAttribute('aria-checked', showCdio ? 'true' : 'false');
+          toggleCdio.addEventListener('change', function(){
+            const val = !!toggleCdio.checked;
+            applyCdioVisibility(val);
+            try { localStorage.setItem(key, val ? 'true' : 'false'); } catch(e) {}
+          });
+        }
+
+        function positionPanel() {
+          if (!settingsBtn || !settingsPanel) return;
+          const rect = settingsBtn.getBoundingClientRect();
+          const gap = 8;
+          let left = rect.right + gap;
+          let top = rect.top;
+          // keep within viewport horizontally
+          const maxLeft = window.innerWidth - settingsPanel.offsetWidth - gap;
+          if (left > maxLeft) left = rect.left - settingsPanel.offsetWidth - gap;
+          if (left < gap) left = gap;
+          // keep within viewport vertically
+          const maxTop = window.innerHeight - settingsPanel.offsetHeight - gap;
+          if (top > maxTop) top = maxTop;
+          if (top < gap) top = gap;
+          settingsPanel.style.left = left + 'px';
+          settingsPanel.style.top = top + 'px';
+        }
+
+        function openPanel(){ settingsPanel.style.display = 'block'; positionPanel(); }
+        function closePanel(){ settingsPanel.style.display = 'none'; }
+        function isOpen(){ return settingsPanel && settingsPanel.style.display !== 'none'; }
+
+        settingsBtn.addEventListener('click', function(){ isOpen() ? closePanel() : openPanel(); });
+        document.addEventListener('click', function(e){
+          if (!isOpen()) return;
+          const t = e.target;
+          if (t === settingsBtn || (settingsPanel && settingsPanel.contains(t))) return;
+          closePanel();
+        });
+        window.addEventListener('resize', function(){ if (isOpen()) positionPanel(); });
+        document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closePanel(); });
+      }
+    } catch(e) { console.warn('IGA toggle init failed', e); }
 
     // AI chat initialization moved to standalone module (syllabus-ai-chat.js)
     // Hide right toolbar only when locked-submitted outside review and not approved
