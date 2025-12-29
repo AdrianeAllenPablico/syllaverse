@@ -475,7 +475,7 @@ document.addEventListener('DOMContentLoaded', function() {
 	};
 	
 	// Save ILO-IGA mapping function
-	window.saveIloIga = function(showAlert = true) {
+	window.saveIloIga = function(showAlert = false) {
 		const mappingTable = mapping.querySelector('.mapping');
 		const headerRow2 = mappingTable.querySelectorAll('tr')[1];
 		const tbody = mappingTable.querySelector('tbody') || mappingTable;
@@ -539,7 +539,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		
 		if (!syllabusId) {
 			const error = new Error('Syllabus ID not found. Please save the syllabus first.');
-			if (showAlert) alert(error.message);
 			return Promise.reject(error);
 		}
 		
@@ -566,7 +565,6 @@ document.addEventListener('DOMContentLoaded', function() {
 		})
 		.then(data => {
 			if (data.success) {
-				if (showAlert) alert('ILO-IGA mapping saved successfully!');
 				// After successful save, refresh the partial via AJAX to rehydrate state
 				try { if (typeof window.ajaxRefreshIloIgaPartial === 'function') window.ajaxRefreshIloIgaPartial(); } catch(_){}
 				return data;
@@ -575,8 +573,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			}
 		})
 		.catch(error => {
-			console.error('Error:', error);
-			if (showAlert) alert('Error saving mapping: ' + error.message);
+			console.error('Error saving ILO-IGA mapping:', error);
 			throw error;
 		});
 	};

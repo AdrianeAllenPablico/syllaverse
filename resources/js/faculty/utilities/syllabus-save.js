@@ -35,6 +35,12 @@
 		return true;
 	}
 
+	async function saveIloIga(){
+		if (typeof window.saveIloIga !== 'function') return false;
+		await window.saveIloIga();
+		return true;
+	}
+
 	async function saveCdio(){
 		if (typeof window.saveCdio !== 'function') return false;
 		await window.saveCdio();
@@ -98,6 +104,7 @@
 				try { results.push(await saveCriteria()); } catch (e) { console.error('Criteria save failed:', e); results.push(false); }
 				try { results.push(await saveIlo()); } catch (e) { console.error('ILO save failed:', e); results.push(false); }
 				try { results.push(await saveIga()); } catch (e) { console.error('IGA save failed:', e); results.push(false); }
+				try { results.push(await saveIloIga()); } catch (e) { console.error('ILO-IGA save failed:', e); results.push(false); }
 				try { results.push(await saveCdio()); } catch (e) { console.error('CDIO save failed:', e); results.push(false); }
 				try { results.push(await saveSdg()); } catch (e) { console.error('SDG save failed:', e); results.push(false); }
 				try { results.push(await saveCoursePolicies()); } catch (e) { console.error('Course Policies save failed:', e); results.push(false); }
