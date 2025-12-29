@@ -53,6 +53,15 @@
 		return true;
 	}
 
+	async function saveIloCdioSdg(){
+		const fn = (typeof window.saveIloCdioSdgMapping === 'function')
+			? window.saveIloCdioSdgMapping
+			: (typeof window.saveIloCdioSdg === 'function' ? window.saveIloCdioSdg : null);
+		if (!fn) return false;
+		await fn();
+		return true;
+	}
+
 	async function saveCoursePolicies(){
 		if (typeof window.saveCoursePolicies !== 'function') return false;
 		await window.saveCoursePolicies();
@@ -107,6 +116,7 @@
 				try { results.push(await saveIloIga()); } catch (e) { console.error('ILO-IGA save failed:', e); results.push(false); }
 				try { results.push(await saveCdio()); } catch (e) { console.error('CDIO save failed:', e); results.push(false); }
 				try { results.push(await saveSdg()); } catch (e) { console.error('SDG save failed:', e); results.push(false); }
+				try { results.push(await saveIloCdioSdg()); } catch (e) { console.error('ILO-CDIO-SDG save failed:', e); results.push(false); }
 				try { results.push(await saveCoursePolicies()); } catch (e) { console.error('Course Policies save failed:', e); results.push(false); }
 				try { results.push(await saveTla()); } catch (e) { console.error('TLA save failed:', e); results.push(false); }
 				try { results.push(await saveAssessmentMappings()); } catch (e) { console.error('Assessment Mapping save failed:', e); results.push(false); }

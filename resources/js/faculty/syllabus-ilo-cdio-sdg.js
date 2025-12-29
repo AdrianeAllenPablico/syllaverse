@@ -1291,7 +1291,7 @@ window.removeSdgColumn = function() {
 /**
  * Save ILO-CDIO-SDG mapping to the database
  */
-window.saveIloCdioSdgMapping = function(showAlert = true) {
+window.saveIloCdioSdgMapping = function(showAlert = false) {
     const container = document.querySelector('.ilo-cdio-sdg-mapping');
     if (!container) {
         const error = new Error('ILO-CDIO-SDG mapping container not found.');
@@ -1442,7 +1442,6 @@ window.saveIloCdioSdgMapping = function(showAlert = true) {
     })
     .then(data => {
         if (data.success) {
-            if (showAlert) alert('ILO-CDIO-SDG mapping saved successfully!');
             // After successful save, refresh the partial via AJAX to rehydrate state
             try { if (typeof window.ajaxRefreshIloCdioSdgPartial === 'function') window.ajaxRefreshIloCdioSdgPartial(); } catch(_){ }
             return data;
@@ -1452,7 +1451,6 @@ window.saveIloCdioSdgMapping = function(showAlert = true) {
     })
     .catch(error => {
         console.error('Error saving ILO-CDIO-SDG mapping:', error);
-        if (showAlert) alert('Error saving mapping: ' + error.message);
         throw error;
     });
 };
