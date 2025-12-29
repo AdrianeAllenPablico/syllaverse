@@ -25,7 +25,8 @@ class SyllabusTLAController extends Controller
     public function update(Request $request, $id)
     {
         $request->validate([
-            'tla' => 'required|array',
+            // Allow empty array to clear all TLA rows
+            'tla' => 'present|array',
             'tla.*.ch' => 'nullable|string|max:255',
             'tla.*.topic' => 'nullable|string|max:1000',
             'tla.*.wks' => 'nullable|string|max:10',
@@ -191,13 +192,18 @@ public function generateWithAI(Request $request, Syllabus $syllabus)
 
     protected function getSyllabusForAction($id)
     {
-        // Check if user is authenticated as faculty
+        // Find syllabus by ID first
+        $syllabus = Syllabus::findOrFail($id);
+
+        // If authenticated, enforce edit permission consistent with other actions
         if (auth()->check()) {
-            return Syllabus::where('faculty_id', auth()->id())->findOrFail($id);
+            $userId = auth()->id();
+            if (method_exists($syllabus, 'canBeEditedBy') && !$syllabus->canBeEditedBy($userId)) {
+                abort(403, 'Unauthorized');
+            }
         }
-        
-        // Fallback: just find the syllabus (for testing or other contexts)
-        return Syllabus::findOrFail($id);
+
+        return $syllabus;
     }
 
 

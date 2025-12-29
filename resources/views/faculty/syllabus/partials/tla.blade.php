@@ -20,16 +20,28 @@
       color: #111 !important;
     }
     .tla-partial #tlaTable th,
-    .tla-partial #tlaTable td { padding: 0.25rem 0.5rem !important; vertical-align: middle; }
-    .tla-partial #tlaTable textarea.cis-textarea { border:0 !important; background:transparent !important; resize:vertical; }
+    .tla-partial #tlaTable td { padding: 0.25rem 0.5rem !important; vertical-align: top !important; }
+    .tla-partial #tlaTable tr { height: auto !important; }
+    .tla-partial #tlaTable textarea.cis-textarea,
+    .tla-partial #tlaTable textarea.form-control {
+      border:0 !important;
+      background:transparent !important;
+      resize: none !important;
+      overflow-y: hidden !important;
+      display:block !important;
+      width:100% !important;
+      box-sizing: border-box !important;
+      white-space: pre-wrap; /* keep line breaks */
+      overflow-wrap: break-word; /* break long words */
+    }
     /* Remove previous yellow focus effect; keep neutral focus */
     .tla-partial #tlaTable textarea.cis-textarea.cis-field:focus { background:transparent !important; outline:none !important; box-shadow:none !important; }
     .tla-partial #tlaTable input.cis-input { height:28px; }
     /* Remove padding from specific column inputs for compact layout */
     .tla-partial #tlaTable td.tla-ch input.form-control,
     .tla-partial #tlaTable td.tla-wks input.form-control,
-    .tla-partial #tlaTable td.tla-ilo input.form-control,
-    .tla-partial #tlaTable td.tla-so input.form-control,
+    .tla-partial #tlaTable td.tla-ilo textarea.form-control,
+    .tla-partial #tlaTable td.tla-so textarea.form-control,
     .tla-partial #tlaTable td.tla-delivery input.form-control,
     .tla-partial #tlaTable td.tla-delivery textarea.form-control {
       padding: 0 !important;
@@ -277,11 +289,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!tlaBody || !form) return;
 
     const rows = Array.from(tlaBody.querySelectorAll('tr:not(#tla-placeholder)'));
-    
-    if (rows.length === 0) {
-      console.log('No TLA rows to save');
-      return;
-    }
 
     const tlaData = rows.map((row, index) => ({
       ch: row.querySelector('[name*="[ch]"]')?.value ?? '',
@@ -329,7 +336,15 @@ document.addEventListener('DOMContentLoaded', function() {
           // Also update row data-tla-id if it exists
           row.setAttribute('data-tla-id', result.rows[index].id);
         }
+
+        // Mark current values as original to clear unsaved state
+        row.querySelectorAll('input, textarea').forEach(el => {
+          try { el.setAttribute('data-original', (el.value ?? '')); } catch(e) {}
+        });
       });
+
+      // Recalculate unsaved count if available
+      try { if (typeof window.updateUnsavedCount === 'function') window.updateUnsavedCount(); } catch(e) {}
     } else {
       throw new Error(result.message || 'Failed to save TLA rows');
     }
