@@ -5,3 +5,20 @@ import './faculty/syllabus-ilo-so-cpa';
 import './faculty/syllabus-ilo-iga';
 // Include syllabus ILO→CDIO→SDG mapping helper so window.saveIloCdioSdg is exported
 import './faculty/syllabus-ilo-cdio-sdg';
+
+// Load core ILO behaviors (add/delete/renumber + autosize)
+import './faculty/syllabus-ilo';
+
+// Wire snapshot manager (ILO and mappings snapshots live here)
+import './faculty/ai/snapshot';
+import { initMissionVisionUndo } from './faculty/utilities/syllabus-undo';
+import { initMissionVisionRedo } from './faculty/utilities/syllabus-redo';
+
+try {
+	// Initialize mission & vision undo/redo
+	initMissionVisionUndo();
+	initMissionVisionRedo();
+} catch(e) { /* noop */ }
+
+// Optional: ILO insert utilities (emit insert:done events)
+// Optional ILO insert utilities were removed; no-op import

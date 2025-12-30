@@ -15,6 +15,7 @@ Description: Institutional Vision & Mission section (refactored for semantic, ac
         <textarea
           id="vision-text"
           name="vision"
+          form="syllabusForm"
           class="cis-textarea cis-field autosize"
           placeholder="-"
           rows="1"
@@ -28,6 +29,7 @@ Description: Institutional Vision & Mission section (refactored for semantic, ac
         <textarea
           id="mission-text"
           name="mission"
+          form="syllabusForm"
           class="cis-textarea cis-field autosize"
           placeholder="-"
           rows="1"
@@ -41,7 +43,7 @@ Description: Institutional Vision & Mission section (refactored for semantic, ac
 <!-- Local save button removed; toolbar Save handles mission & vision -->
 
 @push('scripts')
-  @vite(['resources/js/faculty/syllabus-mission-vision.js', 'resources/js/faculty/mission-vision-input-handler.js'])
+  @vite(['resources/js/faculty/syllabus-mission-vision.js'])
   <script>
     (function(){
       function sanitize(val){
