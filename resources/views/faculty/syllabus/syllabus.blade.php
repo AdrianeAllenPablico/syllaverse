@@ -970,8 +970,8 @@
       } catch(e) {}
     }
     if (!form) return;
-    const undoBtn = document.getElementById('undoBtn');
-    const redoBtn = document.getElementById('redoBtn');
+    const undoBtn = document.getElementById('syllabusUndoBtn') || document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('syllabusRedoBtn') || document.getElementById('redoBtn');
     const saveBtn = document.getElementById('syllabusSaveBtn');
 
     const past = []; // previous states
@@ -982,11 +982,22 @@
 
     // Auto-save removed: do not read persisted preference
 
+    function getFormElements(){
+      const inside = Array.from(form ? form.querySelectorAll('input, textarea, select') : []);
+      const associated = Array.from(document.querySelectorAll('[form="syllabusForm"]')).filter(el => {
+        const t = (el.tagName || '').toUpperCase();
+        return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT';
+      });
+      // Merge and avoid duplicates
+      const merged = inside.concat(associated.filter(el => !inside.includes(el)));
+      return merged;
+    }
+
     function captureSnapshot(){
       // Build a map name -> values; handles multiple fields with same name
       const groups = {};
       const radiosHandled = new Set();
-      const elements = Array.from(form.querySelectorAll('input, textarea, select'));
+      const elements = getFormElements();
       elements.forEach(el => {
         if (!el.name) return;
         const name = el.name;
@@ -1031,7 +1042,7 @@
       applyingSnapshot = true;
       Object.keys(snap).forEach(name => {
         const value = snap[name];
-        const nodes = Array.from(form.elements).filter(function(n){ return n.name === name; });
+        const nodes = getFormElements().filter(function(n){ return n.name === name; });
         if (!nodes || nodes.length === 0) return;
         const first = nodes[0];
         if (first.type === 'radio') {
@@ -1064,8 +1075,16 @@
     }
 
     function updateButtons(){
-      if (undoBtn) undoBtn.disabled = past.length <= 1; // first snapshot is initial
-      if (redoBtn) redoBtn.disabled = future.length === 0;
+      const activeMod = (window.SVActiveModuleName || window.SVLastActiveModule || '').toLowerCase();
+      // When Mission/Vision is the active module, mirror its local stacks for button states
+      if (activeMod === 'missionvision' && window.mvUndoRedo) {
+        if (undoBtn) undoBtn.disabled = (window.mvUndoRedo.past.length === 0);
+        if (redoBtn) redoBtn.disabled = (window.mvUndoRedo.future.length === 0);
+      } else {
+        // Default: use global form snapshot stacks
+        if (undoBtn) undoBtn.disabled = past.length <= 1; // first snapshot is initial
+        if (redoBtn) redoBtn.disabled = future.length === 0;
+      }
     }
 
     // Seed initial state
@@ -1073,19 +1092,34 @@
 
     // Debounced change listener to snapshot and maybe auto-save
     let changeTimer = null;
+    const GLOBAL_DEBOUNCE = (typeof window !== 'undefined' && typeof window.SV_GLOBAL_SNAPSHOT_DEBOUNCE_MS === 'number')
+      ? Math.max(30, window.SV_GLOBAL_SNAPSHOT_DEBOUNCE_MS)
+      : 80; // very-fast default; runtime override via window.SV_GLOBAL_SNAPSHOT_DEBOUNCE_MS
     function onUserChange(){
       if (applyingSnapshot) return;
       try { window.isDirty = true; } catch(e){}
+      // Immediately clear redo stack so Redo disables instantly on any edit
+      future.length = 0;
+      updateButtons();
       clearTimeout(changeTimer);
       changeTimer = setTimeout(()=>{
         pushPast(captureSnapshot());
-      }, 350);
+      }, GLOBAL_DEBOUNCE);
     }
     form.addEventListener('input', onUserChange);
     form.addEventListener('change', onUserChange);
+    // Also listen to elements associated to the canonical form via [form="syllabusForm"]
+    Array.from(document.querySelectorAll('[form="syllabusForm"]')).forEach(function(el){
+      el.addEventListener('input', onUserChange);
+      el.addEventListener('change', onUserChange);
+    });
 
     // Undo / Redo buttons
     if (undoBtn) undoBtn.addEventListener('click', function(){
+      try { document.dispatchEvent(new CustomEvent('sv:undo')); } catch(e) {}
+      const activeMod = (window.SVActiveModuleName || window.SVLastActiveModule || '').toLowerCase();
+      // If Mission/Vision handles undo, do not apply global snapshot
+      if (activeMod === 'missionvision' && window.mvUndoRedo) { updateButtons(); return; }
       if (past.length <= 1) return;
       const current = past.pop();
       future.push(current);
@@ -1093,6 +1127,10 @@
       applySnapshot(prev);
     });
     if (redoBtn) redoBtn.addEventListener('click', function(){
+      try { document.dispatchEvent(new CustomEvent('sv:redo')); } catch(e) {}
+      const activeMod = (window.SVActiveModuleName || window.SVLastActiveModule || '').toLowerCase();
+      // If Mission/Vision handles redo, do not apply global snapshot
+      if (activeMod === 'missionvision' && window.mvUndoRedo) { updateButtons(); return; }
       if (future.length === 0) return;
       const next = future.pop();
       past.push(next);
@@ -1112,6 +1150,22 @@
 
     // Expose for debugging
     try { window._svUndoRedo = { past, future, capture: captureSnapshot, apply: applySnapshot }; } catch(e){}
+
+    // Reset global form history and disable buttons after a successful Save
+    document.addEventListener('sv:save-state', function(e){
+      try {
+        const st = e && e.detail ? e.detail.state : '';
+        if (st === 'saved') {
+          // Clear global stacks and set a new baseline snapshot
+          past.length = 0;
+          future.length = 0;
+          past.push(captureSnapshot());
+          // Also disable Undo/Redo buttons immediately
+          if (undoBtn) undoBtn.disabled = true;
+          if (redoBtn) redoBtn.disabled = true;
+        }
+      } catch (_) {}
+    });
   });
 </script>
 @endpush
