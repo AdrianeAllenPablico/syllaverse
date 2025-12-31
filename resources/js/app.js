@@ -11,8 +11,7 @@ import './faculty/syllabus-ilo';
 
 // Wire snapshot manager (ILO and mappings snapshots live here)
 import './faculty/ai/snapshot';
-import './faculty/utilities/syllabus-undo';
-import './faculty/utilities/syllabus-redo';
+// Undo/Redo utilities removed per request
 
 // Optional: ILO insert utilities (emit insert:done events)
 // Optional ILO insert utilities were removed; no-op import
