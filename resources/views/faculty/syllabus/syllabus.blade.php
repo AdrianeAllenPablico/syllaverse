@@ -1068,6 +1068,11 @@
     }
 
     function pushPast(snap){
+      // Legacy local stack; prefer global SVHistoryCore if present
+      if (window.SVHistoryCore && typeof window.SVHistoryCore.get === 'function') {
+        updateButtons();
+        return;
+      }
       past.push(snap);
       while (past.length > MAX_STACK) past.shift();
       future.length = 0; // clear redo on new change
@@ -1075,36 +1080,38 @@
     }
 
     function updateButtons(){
-      const activeMod = (window.SVActiveModuleName || window.SVLastActiveModule || '').toLowerCase();
-      // When Mission/Vision is the active module, mirror its local stacks for button states
-      if (activeMod === 'missionvision' && window.mvUndoRedo) {
-        if (undoBtn) undoBtn.disabled = (window.mvUndoRedo.past.length === 0);
-        if (redoBtn) redoBtn.disabled = (window.mvUndoRedo.future.length === 0);
-      } else {
-        // Default: use global form snapshot stacks
-        if (undoBtn) undoBtn.disabled = past.length <= 1; // first snapshot is initial
-        if (redoBtn) redoBtn.disabled = future.length === 0;
+      // Prefer global unified history core if available
+      if (window.SVHistoryCore && typeof window.SVHistoryCore.get === 'function') {
+        const g = window.SVHistoryCore.get();
+        if (undoBtn) undoBtn.disabled = !(g && g.past && g.past.length > 1);
+        if (redoBtn) redoBtn.disabled = !(g && g.future && g.future.length > 0);
+        return;
       }
+      if (undoBtn) undoBtn.disabled = past.length <= 1; // first snapshot is initial
+      if (redoBtn) redoBtn.disabled = future.length === 0;
     }
 
-    // Seed initial state
-    pushPast(captureSnapshot());
+    // Seed initial state (legacy). If global core exists, it seeds itself.
+    if (!(window.SVHistoryCore && typeof window.SVHistoryCore.get === 'function')) {
+      pushPast(captureSnapshot());
+    } else {
+      updateButtons();
+    }
 
     // Debounced change listener to snapshot and maybe auto-save
     let changeTimer = null;
-    const GLOBAL_DEBOUNCE = (typeof window !== 'undefined' && typeof window.SV_GLOBAL_SNAPSHOT_DEBOUNCE_MS === 'number')
-      ? Math.max(30, window.SV_GLOBAL_SNAPSHOT_DEBOUNCE_MS)
-      : 80; // very-fast default; runtime override via window.SV_GLOBAL_SNAPSHOT_DEBOUNCE_MS
     function onUserChange(){
       if (applyingSnapshot) return;
       try { window.isDirty = true; } catch(e){}
-      // Immediately clear redo stack so Redo disables instantly on any edit
-      future.length = 0;
-      updateButtons();
       clearTimeout(changeTimer);
+      // When global core exists, rely on per-partial capture wiring and just refresh buttons
+      if (window.SVHistoryCore && typeof window.SVHistoryCore.get === 'function') {
+        changeTimer = setTimeout(()=>{ updateButtons(); }, 200);
+        return;
+      }
       changeTimer = setTimeout(()=>{
         pushPast(captureSnapshot());
-      }, GLOBAL_DEBOUNCE);
+      }, 350);
     }
     form.addEventListener('input', onUserChange);
     form.addEventListener('change', onUserChange);
@@ -1116,10 +1123,12 @@
 
     // Undo / Redo buttons
     if (undoBtn) undoBtn.addEventListener('click', function(){
-      try { document.dispatchEvent(new CustomEvent('sv:undo')); } catch(e) {}
-      const activeMod = (window.SVActiveModuleName || window.SVLastActiveModule || '').toLowerCase();
-      // If Mission/Vision handles undo, do not apply global snapshot
-      if (activeMod === 'missionvision' && window.mvUndoRedo) { updateButtons(); return; }
+      // Prefer global unified history
+      if (window.SVHistoryCore && typeof window.SVHistoryCore.undo === 'function') {
+        const ok = window.SVHistoryCore.undo();
+        updateButtons();
+        if (ok) return;
+      }
       if (past.length <= 1) return;
       const current = past.pop();
       future.push(current);
@@ -1127,10 +1136,12 @@
       applySnapshot(prev);
     });
     if (redoBtn) redoBtn.addEventListener('click', function(){
-      try { document.dispatchEvent(new CustomEvent('sv:redo')); } catch(e) {}
-      const activeMod = (window.SVActiveModuleName || window.SVLastActiveModule || '').toLowerCase();
-      // If Mission/Vision handles redo, do not apply global snapshot
-      if (activeMod === 'missionvision' && window.mvUndoRedo) { updateButtons(); return; }
+      // Prefer global unified history
+      if (window.SVHistoryCore && typeof window.SVHistoryCore.redo === 'function') {
+        const ok = window.SVHistoryCore.redo();
+        updateButtons();
+        if (ok) return;
+      }
       if (future.length === 0) return;
       const next = future.pop();
       past.push(next);
@@ -1150,22 +1161,6 @@
 
     // Expose for debugging
     try { window._svUndoRedo = { past, future, capture: captureSnapshot, apply: applySnapshot }; } catch(e){}
-
-    // Reset global form history and disable buttons after a successful Save
-    document.addEventListener('sv:save-state', function(e){
-      try {
-        const st = e && e.detail ? e.detail.state : '';
-        if (st === 'saved') {
-          // Clear global stacks and set a new baseline snapshot
-          past.length = 0;
-          future.length = 0;
-          past.push(captureSnapshot());
-          // Also disable Undo/Redo buttons immediately
-          if (undoBtn) undoBtn.disabled = true;
-          if (redoBtn) redoBtn.disabled = true;
-        }
-      } catch (_) {}
-    });
   });
 </script>
 @endpush

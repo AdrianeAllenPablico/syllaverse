@@ -11,14 +11,8 @@ import './faculty/syllabus-ilo';
 
 // Wire snapshot manager (ILO and mappings snapshots live here)
 import './faculty/ai/snapshot';
-import { initMissionVisionUndo } from './faculty/utilities/syllabus-undo';
-import { initMissionVisionRedo } from './faculty/utilities/syllabus-redo';
-
-try {
-	// Initialize mission & vision undo/redo
-	initMissionVisionUndo();
-	initMissionVisionRedo();
-} catch(e) { /* noop */ }
+import './faculty/utilities/syllabus-undo';
+import './faculty/utilities/syllabus-redo';
 
 // Optional: ILO insert utilities (emit insert:done events)
 // Optional ILO insert utilities were removed; no-op import

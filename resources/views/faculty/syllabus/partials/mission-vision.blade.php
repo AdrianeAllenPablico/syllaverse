@@ -43,7 +43,7 @@ Description: Institutional Vision & Mission section (refactored for semantic, ac
 <!-- Local save button removed; toolbar Save handles mission & vision -->
 
 @push('scripts')
-  @vite(['resources/js/faculty/syllabus-mission-vision.js'])
+  @vite(['resources/js/faculty/utilities/history/core.js','resources/js/faculty/utilities/history/mission-vision-history.js','resources/js/faculty/syllabus-mission-vision.js'])
   <script>
     (function(){
       function sanitize(val){
