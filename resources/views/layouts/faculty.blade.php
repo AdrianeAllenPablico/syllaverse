@@ -90,8 +90,7 @@
   @vite('resources/js/faculty/utilities/syllabus-back.js')
   @vite('resources/js/faculty/utilities/syllabus-save-state.js')
   @vite('resources/js/faculty/utilities/syllabus-save.js')
-  @vite('resources/js/faculty/utilities/syllabus-undo.js')
-  @vite('resources/js/faculty/utilities/syllabus-redo.js')
+  {{-- Undo/Redo utilities removed per request --}}
   @vite('resources/js/faculty/syllabus-course-info.js')
   @vite('resources/js/faculty/syllabus-sdg.js')
   @vite('resources/js/faculty/syllabus-textbook.js')

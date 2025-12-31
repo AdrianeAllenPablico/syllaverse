@@ -78,8 +78,7 @@ export default defineConfig({
                 'resources/js/faculty/utilities/syllabus-back.js',
                 'resources/js/faculty/utilities/syllabus-save-state.js',
                 'resources/js/faculty/utilities/syllabus-save.js',
-                'resources/js/faculty/utilities/syllabus-undo.js',
-                'resources/js/faculty/utilities/syllabus-redo.js',
+                // Undo/Redo removed per request
                 'resources/js/faculty/syllabus-sdg.js',
                 'resources/js/faculty/syllabus-textbook.js',
                 'resources/js/faculty/syllabus-tla.js',
