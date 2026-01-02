@@ -205,7 +205,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './s
       'course_title','course_code','course_category','course_prerequisites',
       'semester','year_level','credit_hours_text','instructor_name','employee_code',
       'reference_cmo','instructor_designation','date_prepared','instructor_email',
-      'revision_no','academic_year','revision_date','course_description','contact_hours'
+      'revision_no','academic_year','revision_date','course_description','tla_strategies','contact_hours'
     ];
     names.forEach(n => {
       const el = document.querySelector('[name="'+n+'"]');

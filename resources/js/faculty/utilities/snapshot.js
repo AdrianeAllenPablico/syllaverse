@@ -64,6 +64,7 @@ export function snapshotCourseInfo(){
     ['Period of Study', 'academic_year'],
     ['Revision Date', 'revision_date'],
     ['Course Rationale and Description', 'course_description'],
+    ['TLA Strategies', 'tla_strategies'],
     ['Contact Hours', 'contact_hours']
   ];
   
