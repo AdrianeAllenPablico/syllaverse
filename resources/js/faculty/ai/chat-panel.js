@@ -931,13 +931,10 @@
           </td>
           <td>
             <div class="d-flex align-items-center gap-2">
-              <span class="drag-handle text-muted" title="Drag to reorder" style="cursor: grab;">
-                <i class="bi bi-grip-vertical"></i>
-              </span>
               <textarea
                 name="ilos[]"
                 class="cis-textarea cis-field autosize flex-grow-1"
-                placeholder="-"
+                placeholder="Description"
                 rows="1"
                 style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;"
                 required>${iloText}</textarea>
@@ -952,6 +949,22 @@
         iloList.appendChild(newRow);
       });
 
+      // Renumber ILOs and trigger undo/redo tracking
+      try {
+        const rows = Array.from(iloList.querySelectorAll('tr')).filter(r => 
+          r.querySelector('textarea[name="ilos[]"]') || r.querySelector('.ilo-badge')
+        );
+        rows.forEach((row, i) => {
+          const code = `ILO${i + 1}`;
+          const badge = row.querySelector('.ilo-badge'); 
+          if (badge) badge.textContent = code;
+          const codeInput = row.querySelector('input[name="code[]"]'); 
+          if (codeInput) codeInput.value = code;
+        });
+        // Dispatch event for undo/redo tracking (matches history-core.js listener)
+        document.dispatchEvent(new CustomEvent('iloChanged'));
+      } catch (e) { /* noop */ }
+
       // Trigger initialization of the ILO list (autosize, renumbering, etc.)
       if (window.initAutosize) {
         try { window.initAutosize(); } catch (e) { /* noop */ }
@@ -961,16 +974,6 @@
       if (window.updateUnsavedCount) {
         try { window.updateUnsavedCount(); } catch (e) { /* noop */ }
       }
-
-      // Dispatch event if syllabus-ilo.js is listening
-      try {
-        document.dispatchEvent(new CustomEvent('ilo:changed', { 
-          detail: { 
-            count: rows.length,
-            action: 'insert_from_ai'
-          } 
-        }));
-      } catch (e) { /* noop */ }
 
       showInsertFeedback(`Successfully inserted ${rows.length} ILO(s)!`);
     } catch (error) {

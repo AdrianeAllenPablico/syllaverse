@@ -89,15 +89,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // Check if any rows remain, if not show placeholder
     const rows = getIloRows();
     if (rows.length === 0) {
-      const placeholder = document.createElement('tr');
-      placeholder.id = 'ilo-placeholder';
-      placeholder.innerHTML = `
-        <td colspan="2" class="text-center text-muted py-4">
-          <p class="mb-2">No ILOs added yet.</p>
-          <p class="mb-0"><small>Click the <strong>+</strong> button above to add an ILO or <strong>Load Predefined</strong> to import ILOs.</small></p>
-        </td>
-      `;
-      list.appendChild(placeholder);
+      // Only create placeholder if one doesn't already exist
+      if (!document.getElementById('ilo-placeholder')) {
+        const placeholder = document.createElement('tr');
+        placeholder.id = 'ilo-placeholder';
+        placeholder.innerHTML = `
+          <td colspan="2" class="text-center text-muted py-4">
+            <p class="mb-2">No ILOs added yet.</p>
+            <p class="mb-0"><small>Click the <strong>+</strong> button above to add an ILO or <strong>Load Predefined</strong> to import ILOs.</small></p>
+          </td>
+        `;
+        list.appendChild(placeholder);
+      }
     } else {
       renumber();
     }
@@ -130,6 +133,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } 
       }));
     } catch (e) { /* noop */ }
+    
+    // Dispatch event for undo/redo tracking (debounced in history-core)
+    try {
+      document.dispatchEvent(new CustomEvent('iloChanged'));
+    } catch (e) { /* noop */ }
+    // Trigger validation update
+    try { if (typeof window.updateProgressBar === 'function') window.updateProgressBar(); } catch (e) { /* noop */ }
   }
 
   function createRow() {
@@ -167,12 +177,21 @@ document.addEventListener('DOMContentLoaded', () => {
     renumber();
     const ta = row.querySelector('textarea.autosize'); if (ta) ta.focus();
     try { updateUnsavedCount(); } catch (e) { /* noop */ }
+    
+    // Set active module name
+    try { window.SVActiveModuleName = 'ilo'; } catch (e) { /* noop */ }
+    
     return row;
   }
 
   // Header buttons (optional)
   const addBtn = document.getElementById('ilo-add-header');
-  if (addBtn) addBtn.addEventListener('click', () => addRow(null));
+  if (addBtn) {
+    // Remove any existing listener to prevent duplicates
+    const newAddBtn = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(newAddBtn, addBtn);
+    newAddBtn.addEventListener('click', () => addRow(null));
+  }
 
   // Delegated delete button handling
   list.addEventListener('click', async (ev) => {
@@ -210,6 +229,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial run
   renumber();
   try { initAutosize(); } catch (e) { /* noop */ }
+
+  // Set active module name on focus/hover
+  list.addEventListener('focusin', () => { window.SVActiveModuleName = 'ilo'; }, true);
+  list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'ilo'; }, true);
+
+  // Delegated event listeners for textarea changes (for undo/redo tracking)
+  let textChangeTimeout;
+  list.addEventListener('input', (e) => {
+    if (e.target && e.target.tagName === 'TEXTAREA' && e.target.name === 'ilos[]') {
+      clearTimeout(textChangeTimeout);
+      textChangeTimeout = setTimeout(() => {
+        try { document.dispatchEvent(new CustomEvent('iloChanged')); } catch (err) { /* noop */ }
+      }, 250);
+    }
+  }, true);
+  
+  list.addEventListener('change', (e) => {
+    if (e.target && e.target.tagName === 'TEXTAREA' && e.target.name === 'ilos[]') {
+      try { document.dispatchEvent(new CustomEvent('iloChanged')); } catch (err) { /* noop */ }
+    }
+  }, true);
 
   // Toolbar Save is handled centrally by syllabus-save.js (aggregator)
 });

@@ -134,11 +134,51 @@ export function snapshotCriteria(){
   };
 }
 
+export function snapshotIlo(){
+  const list = document.getElementById('syllabus-ilo-sortable');
+  const ilos = [];
+  const lines = ['PARTIAL_BEGIN:ilo', 'TITLE: Intended Learning Outcomes', 'COLUMNS: Code | Description'];
+  
+  if (list) {
+    const rows = Array.from(list.querySelectorAll('tr')).filter(r => 
+      r.querySelector('textarea[name="ilos[]"]') || r.querySelector('.ilo-badge')
+    );
+    
+    rows.forEach((row, idx) => {
+      const dataId = row.getAttribute('data-id') || '';
+      const id = (/^\d+$/.test(dataId)) ? Number(dataId) : null;
+      const code = row.querySelector('input[name="code[]"]')?.value || `ILO${idx + 1}`;
+      const ta = row.querySelector('textarea[name="ilos[]"]');
+      const description = ta ? (ta.value || '').trim() : '';
+      
+      ilos.push({ id, code, description, position: idx + 1 });
+      
+      if (description) {
+        lines.push(`ROW: ${code} | ${description}`);
+      }
+    });
+  }
+  
+  lines.push('PARTIAL_END:ilo');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+  
+  return {
+    partial: 'ilo',
+    title: 'Intended Learning Outcomes',
+    ilos,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Global window exposure for debugging/inspection (optional)
 if (typeof window !== 'undefined') {
   window.SVSnapshot = {
     snapshotMissionVision,
     snapshotCourseInfo,
-    snapshotCriteria
+    snapshotCriteria,
+    snapshotIlo
   };
 }

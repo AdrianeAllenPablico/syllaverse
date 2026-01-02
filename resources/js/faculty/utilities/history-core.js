@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -102,6 +102,71 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './s
     }
   }
 
+  function applyIlo(snap){
+    const st = ensure('ilo');
+    st.isApplying = true;
+    try {
+      const list = document.getElementById('syllabus-ilo-sortable');
+      if (!list) return;
+      
+      // Clear existing rows
+      while (list.firstChild) {
+        list.removeChild(list.firstChild);
+      }
+      
+      const ilos = Array.isArray(snap?.ilos) ? snap.ilos : [];
+      
+      if (ilos.length === 0) {
+        // Show placeholder if no ILOs and one doesn't already exist
+        if (!document.getElementById('ilo-placeholder')) {
+          const placeholder = document.createElement('tr');
+          placeholder.id = 'ilo-placeholder';
+          placeholder.innerHTML = `
+            <td colspan="2" class="text-center text-muted py-4">
+              <p class="mb-2">No ILOs added yet.</p>
+              <p class="mb-0"><small>Click the <strong>+</strong> button above to add an ILO or <strong>Load Predefined</strong> to import ILOs.</small></p>
+            </td>
+          `;
+          list.appendChild(placeholder);
+        }
+      } else {
+        // Recreate ILO rows
+        ilos.forEach((ilo) => {
+          const tr = document.createElement('tr');
+          const dataId = ilo.id ? String(ilo.id) : `new-${Date.now()}-${ilo.position}`;
+          tr.setAttribute('data-id', dataId);
+          tr.innerHTML = `
+            <td class="text-center align-middle">
+              <div class="ilo-badge fw-semibold">${ilo.code || ''}</div>
+            </td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <textarea name="ilos[]" class="cis-textarea cis-field autosize flex-grow-1" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${ilo.description || ''}</textarea>
+                <input type="hidden" name="code[]" value="${ilo.code || ''}">
+                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-ilo ms-2" title="Delete ILO">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </td>`;
+          list.appendChild(tr);
+        });
+      }
+      
+      // Reinitialize autosize for textareas
+      try {
+        if (window.initAutosize) window.initAutosize();
+        list.querySelectorAll('textarea.autosize').forEach(ta => {
+          ta.style.height = 'auto';
+          ta.style.height = (ta.scrollHeight || 0) + 'px';
+        });
+      } catch(e) {}
+      
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function undo(){
     if (!globalHistory.length) return false;
     globalApplying = true;
@@ -118,6 +183,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './s
           break;
         case 'criteria':
           if (window.performCriteriaUndo) window.performCriteriaUndo();
+          break;
+        case 'ilo':
+          applyIlo(prev);
           break;
         default:
           break;
@@ -147,6 +215,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './s
         case 'criteria':
           if (window.performCriteriaRedo) window.performCriteriaRedo();
           break;
+        case 'ilo':
+          applyIlo(next);
+          break;
         default:
           break;
       }
@@ -173,6 +244,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './s
       try { const mv = snapshotMissionVision(); safeInitialize('missionVision', mv); } catch(e) {}
       try { const ci = snapshotCourseInfo(); safeInitialize('courseInfo', ci); } catch(e) {}
       try { const cr = snapshotCriteria(); safeInitialize('criteria', cr); } catch(e) {}
+      try { const ilo = snapshotIlo(); safeInitialize('ilo', ilo); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -237,6 +309,24 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './s
     updateButtons();
   }
 
+  function registerIloWatchers(){
+    const st = ensure('ilo');
+    const take = () => { if (st.isApplying || window.globalApplying) return; safePush('ilo', snapshotIlo()); };
+    const debounce = (fn, ms) => { let t; return function(){ clearTimeout(t); const ctx=this, args=arguments; t=setTimeout(()=>fn.apply(ctx,args), ms); }; };
+    const takeDebounced = debounce(take, 250);
+    const list = document.getElementById('syllabus-ilo-sortable');
+    if (list){
+      // Watch for DOM changes (row additions/removals) via custom events only
+      document.addEventListener('iloChanged', takeDebounced);
+      // Track module focus
+      list.addEventListener('focusin', () => { window.SVActiveModuleName = 'ilo'; }, true);
+      list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'ilo'; }, true);
+    }
+    // baseline snapshot (do not add to global history)
+    try { safeInitialize('ilo', snapshotIlo()); } catch(e) {}
+    updateButtons();
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     // wire toolbar buttons
     const undoBtn = document.getElementById('syllabusUndoBtn');
@@ -261,6 +351,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './s
     registerMissionVisionWatchers();
     registerCourseInfoWatchers();
     registerCriteriaWatchers();
+    registerIloWatchers();
   });
 
   // expose API
