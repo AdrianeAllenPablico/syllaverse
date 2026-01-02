@@ -266,3 +266,7 @@
   })();
 </script>
 @endpush
+
+@push('scripts')
+  @vite(['resources/js/faculty/utilities/history-core.js', 'resources/js/faculty/syllabus-criteria.js'])
+@endpush

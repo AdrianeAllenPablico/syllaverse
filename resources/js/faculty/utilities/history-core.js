@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -116,6 +116,9 @@ import { snapshotMissionVision, snapshotCourseInfo } from './snapshot.js';
         case 'courseInfo':
           applyCourseInfo(prev);
           break;
+        case 'criteria':
+          if (window.performCriteriaUndo) window.performCriteriaUndo();
+          break;
         default:
           break;
       }
@@ -140,6 +143,9 @@ import { snapshotMissionVision, snapshotCourseInfo } from './snapshot.js';
           break;
         case 'courseInfo':
           applyCourseInfo(next);
+          break;
+        case 'criteria':
+          if (window.performCriteriaRedo) window.performCriteriaRedo();
           break;
         default:
           break;
@@ -166,6 +172,7 @@ import { snapshotMissionVision, snapshotCourseInfo } from './snapshot.js';
       // Recompute baselines for known modules
       try { const mv = snapshotMissionVision(); safeInitialize('missionVision', mv); } catch(e) {}
       try { const ci = snapshotCourseInfo(); safeInitialize('courseInfo', ci); } catch(e) {}
+      try { const cr = snapshotCriteria(); safeInitialize('criteria', cr); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -209,6 +216,27 @@ import { snapshotMissionVision, snapshotCourseInfo } from './snapshot.js';
     updateButtons();
   }
 
+  function registerCriteriaWatchers(){
+    const st = ensure('criteria');
+    const take = () => { if (st.isApplying) return; safePush('criteria', snapshotCriteria()); };
+    const debounce = (fn, ms) => { let t; return function(){ clearTimeout(t); const ctx=this, args=arguments; t=setTimeout(()=>fn.apply(ctx,args), ms); }; };
+    const takeDebounced = debounce(take, 250);
+    const container = document.getElementById('criteria-sections-container');
+    if (container){
+      // Watch for input changes on all criteria inputs
+      container.addEventListener('input', takeDebounced, { capture: true });
+      container.addEventListener('change', take, { capture: true });
+      // Watch for DOM changes (section/row additions/removals) via custom events
+      document.addEventListener('criteriaChanged', takeDebounced);
+      // Track module focus
+      container.addEventListener('focusin', () => { window.SVActiveModuleName = 'criteria'; }, true);
+      container.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'criteria'; }, true);
+    }
+    // baseline snapshot (do not add to global history)
+    try { safeInitialize('criteria', snapshotCriteria()); } catch(e) {}
+    updateButtons();
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     // wire toolbar buttons
     const undoBtn = document.getElementById('syllabusUndoBtn');
@@ -232,6 +260,7 @@ import { snapshotMissionVision, snapshotCourseInfo } from './snapshot.js';
     // register mission/vision and course info
     registerMissionVisionWatchers();
     registerCourseInfoWatchers();
+    registerCriteriaWatchers();
   });
 
   // expose API
