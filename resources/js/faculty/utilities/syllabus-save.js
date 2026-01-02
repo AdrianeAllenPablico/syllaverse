@@ -106,6 +106,7 @@
 			try {
 				btn.disabled = true;
 				setState('saving');
+				try { if (window.SVHistory && window.SVHistory.setRestricted) window.SVHistory.setRestricted(true); } catch(e){}
 
 				// Execute saves sequentially; ignore modules not present
 				const results = [];
@@ -128,15 +129,18 @@
 				// If any module reported failure, reflect error state
 				if (results.some(r => r === false)) {
 					setState('error');
+					// allow undo/redo to continue; don't reset history on failure
 				} else {
 					setState('saved');
+					// Reset global undo/redo stacks and baselines after successful save
+					try { if (window.SVHistory && window.SVHistory.resetAfterSave) window.SVHistory.resetAfterSave(); } catch(e){}
 				}
 			} catch (e) {
 				console.error('Toolbar Save failed:', e);
 				setState('error');
 			} finally {
 				// Return to idle after a short delay for visual feedback
-				setTimeout(() => { setState('idle'); btn.disabled = prevDisabled; }, 800);
+				setTimeout(() => { setState('idle'); btn.disabled = prevDisabled; try { if (window.SVHistory && window.SVHistory.setRestricted) window.SVHistory.setRestricted(false); } catch(e){} }, 800);
 			}
 		});
 	});

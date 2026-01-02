@@ -43,7 +43,14 @@
         <span id="unsaved-count-badge" class="badge bg-warning text-dark mt-1 w-100 text-center" style="display:none;">0</span>
       </button>
       <!-- Undo / Redo buttons -->
-      {{-- Undo/Redo toolbar buttons removed per request --}}
+      <button id="syllabusUndoBtn" type="button" class="btn btn-outline-secondary d-flex flex-column align-items-center gap-1 toolbar-btn mt-3" title="Undo" disabled>
+        <i class="bi bi-arrow-counterclockwise fs-5"></i>
+        <span class="small">Undo</span>
+      </button>
+      <button id="syllabusRedoBtn" type="button" class="btn btn-outline-secondary d-flex flex-column align-items-center gap-1 toolbar-btn mt-2" title="Redo" disabled>
+        <i class="bi bi-arrow-clockwise fs-5"></i>
+        <span class="small">Redo</span>
+      </button>
       @endif
       @if((($reviewMode && !$fromApprovals) || $isApproved || (!$reviewMode && !$isDraft && !$isLockedSubmitted)))
       <button id="syllabusCommentsToggleBtn" type="button" class="btn btn-outline-secondary d-flex flex-column align-items-center gap-1 toolbar-btn mt-3" title="Toggle Reviewer Comments" data-disable-comments="0">
@@ -1438,4 +1445,8 @@
   @vite('resources/js/faculty/ai/ilo-cdio-sdg-mapping.js')
   @vite('resources/js/faculty/ai/snapshot.js')
   @vite('resources/js/faculty/ai/chat-panel.js')
+  @vite('resources/js/faculty/utilities/snapshot.js')
+  @vite('resources/js/faculty/utilities/history-core.js')
+  @vite('resources/js/faculty/utilities/syllabus-undo.js')
+  @vite('resources/js/faculty/utilities/syllabus-redo.js')
 @endpush
