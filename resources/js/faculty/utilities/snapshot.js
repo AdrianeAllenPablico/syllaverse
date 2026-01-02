@@ -137,7 +137,7 @@ export function snapshotCriteria(){
 export function snapshotIlo(){
   const list = document.getElementById('syllabus-ilo-sortable');
   const ilos = [];
-  const lines = ['PARTIAL_BEGIN:ilo', 'TITLE: Intended Learning Outcomes', 'COLUMNS: Code | Description'];
+  const lines = ['PARTIAL_BEGIN:ilo', 'TITLE: Intended Learning Outcomes', 'COLUMNS: Code | Description | HasContent'];
   
   if (list) {
     const rows = Array.from(list.querySelectorAll('tr')).filter(r => 
@@ -150,12 +150,14 @@ export function snapshotIlo(){
       const code = row.querySelector('input[name="code[]"]')?.value || `ILO${idx + 1}`;
       const ta = row.querySelector('textarea[name="ilos[]"]');
       const description = ta ? (ta.value || '').trim() : '';
+      const hasContent = description.length > 0;
       
-      ilos.push({ id, code, description, position: idx + 1 });
+      // Capture ALL rows, even empty ones, to support full undo/redo of row additions/deletions
+      ilos.push({ id, code, description, position: idx + 1, hasContent });
       
-      if (description) {
-        lines.push(`ROW: ${code} | ${description}`);
-      }
+      const contentMarker = hasContent ? 'yes' : 'no';
+      const descDisplay = description || '-';
+      lines.push(`ROW: ${code} | ${descDisplay} | ${contentMarker}`);
     });
   }
   
@@ -163,10 +165,130 @@ export function snapshotIlo(){
   const text = lines.join('\n');
   const hash = simpleHash(text);
   
+  // Also capture Assessment Tasks state at this moment
+  // This ensures AT data is preserved when ILO rows are added/removed
+  let atSnapshot = null;
+  try {
+    atSnapshot = snapshotAssessmentTasks();
+  } catch(e) {}
+  
   return {
     partial: 'ilo',
     title: 'Intended Learning Outcomes',
     ilos,
+    atSnapshot, // Include AT state for coordinated undo/redo
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
+export function snapshotAssessmentTasks(){
+  const tbody = document.getElementById('at-tbody');
+  const iloList = document.getElementById('syllabus-ilo-sortable');
+  const sections = [];
+  const lines = ['PARTIAL_BEGIN:assessment_tasks', 'TITLE: Assessment Method and Distribution Map', 'COLUMNS: Section | MainCode | SubRow | Code | I/R/D | ILO Columns (by code) | C/P/A'];
+  
+  // Get current ILO codes for smart mapping (code-based instead of index-based)
+  const iloCodeMap = {}; // Map: column_index -> ilo_code
+  if (iloList) {
+    const iloRows = Array.from(iloList.querySelectorAll('tr')).filter(r => 
+      r.querySelector('textarea[name="ilos[]"]') || r.querySelector('.ilo-badge')
+    );
+    iloRows.forEach((row, idx) => {
+      const code = row.querySelector('input[name="code[]"]')?.value || `ILO${idx + 1}`;
+      iloCodeMap[idx] = code;
+    });
+  }
+  
+  if (tbody) {
+    const allMainRows = tbody.querySelectorAll('.at-main-row');
+    
+    allMainRows.forEach((mainRow) => {
+      const sectionNum = mainRow.dataset.section;
+      const mainCells = Array.from(mainRow.children);
+      
+      // Get main row code value (1st column, index 0)
+      const mainCodeTa = mainCells[0]?.querySelector('textarea');
+      const mainCodeValue = mainCodeTa ? (mainCodeTa.value || '').trim() : '';
+      
+      const subRows = tbody.querySelectorAll(`.at-sub-row[data-section="${sectionNum}"]`);
+      
+      const sectionData = {
+        section_num: sectionNum,
+        main_code: mainCodeValue,
+        sub_rows: []
+      };
+      
+      subRows.forEach((subRow, subIndex) => {
+        const cells = Array.from(subRow.children);
+        
+        // Get code value (1st column, index 0)
+        const codeTa = cells[0]?.querySelector('textarea');
+        const codeValue = codeTa ? (codeTa.value || '').trim() : '';
+        
+        // Skip task name column (2nd column, index 1) - it's auto-synced from Criteria
+        
+        // Get I/R/D value (3rd column, index 2)
+        const irdTa = cells[2]?.querySelector('textarea');
+        const irdValue = irdTa ? (irdTa.value || '').trim() : '';
+        
+        // Skip percent column (4th column, index 3) - it's auto-synced from Criteria
+        
+        // Get ILO columns with smart mapping by ILO code (starting from column 4, before last 3 C/P/A columns)
+        const totalCols = cells.length;
+        const iloStartIdx = 4;
+        const iloEndIdx = totalCols - 3;
+        const iloColumnsByCode = {}; // Map: ilo_code -> value
+        
+        for (let i = iloStartIdx; i < iloEndIdx; i++) {
+          const ta = cells[i]?.querySelector('textarea');
+          const val = ta ? (ta.value || '').trim() : '';
+          const iloCode = iloCodeMap[i - iloStartIdx] || `ILO${i - iloStartIdx + 1}`;
+          // Only store non-empty values to reduce snapshot size and improve performance
+          if (val) {
+            iloColumnsByCode[iloCode] = val;
+          }
+        }
+        
+        // Get C/P/A columns (last 3 columns)
+        const cTa = cells[totalCols - 3]?.querySelector('textarea');
+        const pTa = cells[totalCols - 2]?.querySelector('textarea');
+        const aTa = cells[totalCols - 1]?.querySelector('textarea');
+        
+        const cValue = cTa ? (cTa.value || '').trim() : '';
+        const pValue = pTa ? (pTa.value || '').trim() : '';
+        const aValue = aTa ? (aTa.value || '').trim() : '';
+        
+        const subRowData = {
+          sub_index: subIndex,
+          code: codeValue,
+          ird: irdValue,
+          ilo_columns_by_code: iloColumnsByCode, // Smart map by ILO code instead of index
+          cpa_columns: [cValue, pValue, aValue]
+        };
+        
+        sectionData.sub_rows.push(subRowData);
+        
+        // Add to text representation
+        const iloStr = Object.entries(iloColumnsByCode).map(([code, val]) => `${code}:${val}`).join(',') || '-';
+        const cpaStr = `${cValue},${pValue},${aValue}`;
+        lines.push(`ROW: ${sectionNum} | ${mainCodeValue} | ${subIndex} | ${codeValue} | ${irdValue} | ${iloStr} | ${cpaStr}`);
+      });
+      
+      sections.push(sectionData);
+    });
+  }
+  
+  lines.push('PARTIAL_END:assessment_tasks');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+  
+  return {
+    partial: 'assessment_tasks',
+    title: 'Assessment Method and Distribution Map',
+    sections,
+    iloCodeMap, // Include current ILO codes for reference
     text,
     hash,
     ts: Date.now()
@@ -179,6 +301,7 @@ if (typeof window !== 'undefined') {
     snapshotMissionVision,
     snapshotCourseInfo,
     snapshotCriteria,
-    snapshotIlo
+    snapshotIlo,
+    snapshotAssessmentTasks
   };
 }

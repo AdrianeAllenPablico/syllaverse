@@ -73,6 +73,11 @@ document.addEventListener('DOMContentLoaded', () => {
   async function deleteRowAndPersist(row) {
     if (!row) return false;
 
+    // Fire iloChanged event BEFORE deletion so snapshot captures pre-delete state
+    try {
+      document.dispatchEvent(new CustomEvent('iloChanged'));
+    } catch (e) { /* noop */ }
+
     // Track the ID if it's a saved ILO
     const rawId = row.getAttribute('data-id');
     const hasServerId = rawId && /^\d+$/.test(rawId);
@@ -134,10 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }));
     } catch (e) { /* noop */ }
     
-    // Dispatch event for undo/redo tracking (debounced in history-core)
-    try {
-      document.dispatchEvent(new CustomEvent('iloChanged'));
-    } catch (e) { /* noop */ }
+    // Don't dispatch iloChanged here - it's now dispatched before deletion
+    
     // Trigger validation update
     try { if (typeof window.updateProgressBar === 'function') window.updateProgressBar(); } catch (e) { /* noop */ }
   }

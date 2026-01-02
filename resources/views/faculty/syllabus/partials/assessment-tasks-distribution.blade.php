@@ -134,7 +134,7 @@
         <table class="table table-bordered mb-0 cis-table" style="table-layout: fixed; margin:0;">
           <colgroup>
             <col style="width:70px;"> <!-- Code -->
-            <col style="width:40%;"> <!-- Task -->
+            <col style="width:30%;"> <!-- Task -->
             <col style="width:48px;"> <!-- I/R/D -->
             <col style="width:48px;"> <!-- Percent -->
             @for ($c = 1; $c <= $iloColsCount; $c++)

@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -130,7 +130,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           list.appendChild(placeholder);
         }
       } else {
-        // Recreate ILO rows
+        // Recreate ALL ILO rows from snapshot, including empty ones
         ilos.forEach((ilo) => {
           const tr = document.createElement('tr');
           const dataId = ilo.id ? String(ilo.id) : `new-${Date.now()}-${ilo.position}`;
@@ -162,6 +162,128 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       } catch(e) {}
       
       try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+      
+      // After ILO structure changes, sync Assessment Tasks table to match new ILO count
+      try {
+        setTimeout(() => {
+          if (window.syncATWithILO) {
+            window.syncATWithILO();
+          }
+          // If this ILO snapshot includes AT data, restore it after sync
+          // This is safe during undo/redo because it's part of the coordinated state restoration
+          if (snap && snap.atSnapshot) {
+            setTimeout(() => {
+              const atSt = ensure('assessmentTasks');
+              atSt.isApplying = true;
+              try {
+                applyAssessmentTasks(snap.atSnapshot);
+              } finally {
+                atSt.isApplying = false;
+              }
+            }, 150);
+          }
+        }, 50);
+      } catch(e) {}
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
+  function applyAssessmentTasks(snap){
+    const st = ensure('assessmentTasks');
+    st.isApplying = true;
+    try {
+      const tbody = document.getElementById('at-tbody');
+      const iloList = document.getElementById('syllabus-ilo-sortable');
+      if (!tbody) return;
+      
+      // Get current ILO codes to map stored values to current columns
+      const currentIloCodeMap = {}; // Map: column_index -> current_ilo_code
+      if (iloList) {
+        const iloRows = Array.from(iloList.querySelectorAll('tr')).filter(r => 
+          r.querySelector('textarea[name="ilos[]"]') || r.querySelector('.ilo-badge')
+        );
+        iloRows.forEach((row, idx) => {
+          const code = row.querySelector('input[name="code[]"]')?.value || `ILO${idx + 1}`;
+          currentIloCodeMap[idx] = code;
+        });
+      }
+      
+      // Reverse map: ilo_code -> column_index for quick lookup
+      const codeToColIndexMap = {};
+      Object.entries(currentIloCodeMap).forEach(([colIdx, code]) => {
+        codeToColIndexMap[code] = parseInt(colIdx);
+      });
+      
+      const sections = Array.isArray(snap?.sections) ? snap.sections : [];
+      
+      sections.forEach((section) => {
+        const sectionNum = section.section_num;
+        
+        // Restore main row code
+        const mainRow = tbody.querySelector(`.at-main-row[data-section="${sectionNum}"]`);
+        if (mainRow) {
+          const mainCells = Array.from(mainRow.children);
+          const mainCodeTa = mainCells[0]?.querySelector('textarea');
+          if (mainCodeTa) mainCodeTa.value = section.main_code || '';
+        }
+        
+        const subRows = tbody.querySelectorAll(`.at-sub-row[data-section="${sectionNum}"]`);
+        
+        section.sub_rows.forEach((subRowData, subIndex) => {
+          const subRow = subRows[subIndex];
+          if (!subRow) return;
+          
+          const cells = Array.from(subRow.children);
+          const totalCols = cells.length;
+          const iloStartIdx = 4;
+          const iloEndIdx = totalCols - 3;
+          
+          // Restore code column (1st column, index 0)
+          const codeTa = cells[0]?.querySelector('textarea');
+          if (codeTa) codeTa.value = subRowData.code || '';
+          
+          // Skip task name column (index 1) - it's auto-synced from Criteria
+          
+          // Restore I/R/D value (3rd column, index 2)
+          const irdTa = cells[2]?.querySelector('textarea');
+          if (irdTa) irdTa.value = subRowData.ird || '';
+          
+          // Skip percent column (index 3) - it's auto-synced from Criteria
+          
+          // Restore ILO columns using smart code-based mapping
+          // First clear all ILO columns
+          for (let i = iloStartIdx; i < iloEndIdx; i++) {
+            const ta = cells[i]?.querySelector('textarea');
+            if (ta) ta.value = '';
+          }
+          
+          // Then restore values by matching ILO codes to current columns
+          const iloColumnsByCode = subRowData.ilo_columns_by_code || {};
+          Object.entries(iloColumnsByCode).forEach(([iloCode, value]) => {
+            const colIndex = codeToColIndexMap[iloCode];
+            if (typeof colIndex !== 'undefined') {
+              const cellIndex = iloStartIdx + colIndex;
+              if (cellIndex < iloEndIdx) {
+                const ta = cells[cellIndex]?.querySelector('textarea');
+                if (ta) ta.value = value;
+              }
+            }
+          });
+          
+          // Restore C/P/A columns
+          const cpaColumns = subRowData.cpa_columns || [];
+          const cTa = cells[totalCols - 3]?.querySelector('textarea');
+          const pTa = cells[totalCols - 2]?.querySelector('textarea');
+          const aTa = cells[totalCols - 1]?.querySelector('textarea');
+          
+          if (cTa) cTa.value = cpaColumns[0] || '';
+          if (pTa) pTa.value = cpaColumns[1] || '';
+          if (aTa) aTa.value = cpaColumns[2] || '';
+        });
+      });
+      
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
     } finally {
       st.isApplying = false;
     }
@@ -187,14 +309,20 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'ilo':
           applyIlo(prev);
           break;
+        case 'assessmentTasks':
+          applyAssessmentTasks(prev);
+          break;
         default:
           break;
       }
       currentSnap[key] = prev;
       lastHashes[key] = String(prev && prev.hash ? prev.hash : '');
     }
-    globalApplying = false;
-    updateButtons();
+    // Defer clearing globalApplying until after setTimeout callbacks have fired
+    setTimeout(() => {
+      globalApplying = false;
+      updateButtons();
+    }, 150);
     return true;
   }
 
@@ -218,14 +346,20 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'ilo':
           applyIlo(next);
           break;
+        case 'assessmentTasks':
+          applyAssessmentTasks(next);
+          break;
         default:
           break;
       }
       currentSnap[key] = next;
       lastHashes[key] = String(next && next.hash ? next.hash : '');
     }
-    globalApplying = false;
-    updateButtons();
+    // Defer clearing globalApplying until after setTimeout callbacks have fired
+    setTimeout(() => {
+      globalApplying = false;
+      updateButtons();
+    }, 150);
     return true;
   }
 
@@ -245,6 +379,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const ci = snapshotCourseInfo(); safeInitialize('courseInfo', ci); } catch(e) {}
       try { const cr = snapshotCriteria(); safeInitialize('criteria', cr); } catch(e) {}
       try { const ilo = snapshotIlo(); safeInitialize('ilo', ilo); } catch(e) {}
+      try { const at = snapshotAssessmentTasks(); safeInitialize('assessmentTasks', at); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -312,18 +447,60 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
   function registerIloWatchers(){
     const st = ensure('ilo');
     const take = () => { if (st.isApplying || window.globalApplying) return; safePush('ilo', snapshotIlo()); };
-    const debounce = (fn, ms) => { let t; return function(){ clearTimeout(t); const ctx=this, args=arguments; t=setTimeout(()=>fn.apply(ctx,args), ms); }; };
-    const takeDebounced = debounce(take, 250);
     const list = document.getElementById('syllabus-ilo-sortable');
     if (list){
-      // Watch for DOM changes (row additions/removals) via custom events only
-      document.addEventListener('iloChanged', takeDebounced);
+      // Action-based tracking: capture snapshot on row add/delete actions
+      // Only track ILO changes; AT will sync automatically during undo/redo
+      document.addEventListener('iloChanged', take);
+      
+      // Word-by-word text input tracking: capture on space, punctuation, or backspace
+      let lastSavedText = {}; // Track last saved text per textarea
+      list.addEventListener('input', (e) => {
+        if (e.target && e.target.tagName === 'TEXTAREA' && e.target.name === 'ilos[]') {
+          const ta = e.target;
+          const row = ta.closest('tr');
+          const rowId = row ? row.getAttribute('data-id') : 'unknown';
+          const currentText = ta.value;
+          const lastText = lastSavedText[rowId] || '';
+          
+          // Check for word-completing actions: space, punctuation, Enter, or backspace
+          const lastChar = currentText[currentText.length - 1];
+          const isWordDelimiter = /[\s.!?,;:"\-]/.test(lastChar); // space, period, punctuation
+          const isBackspaceCompletion = currentText.length < lastText.length && /[\w]/.test(currentText[currentText.length - 1]); // backspace after word
+          const hasRelevantChange = isWordDelimiter || isBackspaceCompletion;
+          
+          if (hasRelevantChange && currentText !== lastText) {
+            lastSavedText[rowId] = currentText;
+            take();
+          }
+        }
+      }, { capture: true });
+      
       // Track module focus
       list.addEventListener('focusin', () => { window.SVActiveModuleName = 'ilo'; }, true);
       list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'ilo'; }, true);
     }
     // baseline snapshot (do not add to global history)
     try { safeInitialize('ilo', snapshotIlo()); } catch(e) {}
+    updateButtons();
+  }
+
+  function registerAssessmentTasksWatchers(){
+    const st = ensure('assessmentTasks');
+    const take = () => { if (st.isApplying || window.globalApplying) return; safePush('assessmentTasks', snapshotAssessmentTasks()); };
+    const debounce = (fn, ms) => { let t; return function(){ clearTimeout(t); const ctx=this, args=arguments; t=setTimeout(()=>fn.apply(ctx,args), ms); }; };
+    const takeDebounced = debounce(take, 250);
+    const tbody = document.getElementById('at-tbody');
+    if (tbody){
+      // Watch for input changes in editable fields
+      tbody.addEventListener('input', takeDebounced, { capture: true });
+      tbody.addEventListener('change', take, { capture: true });
+      // Track module focus
+      tbody.addEventListener('focusin', () => { window.SVActiveModuleName = 'assessmentTasks'; }, true);
+      tbody.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'assessmentTasks'; }, true);
+    }
+    // baseline snapshot (do not add to global history)
+    try { safeInitialize('assessmentTasks', snapshotAssessmentTasks()); } catch(e) {}
     updateButtons();
   }
 
@@ -352,6 +529,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerCourseInfoWatchers();
     registerCriteriaWatchers();
     registerIloWatchers();
+    registerAssessmentTasksWatchers();
   });
 
   // expose API
