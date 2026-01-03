@@ -111,6 +111,7 @@ document.addEventListener('DOMContentLoaded', function () {
               textareas[index].setAttribute('data-original', policies[section] || '');
               if (window.autosize) { autosize.update(textareas[index]); }
               textareas[index].dispatchEvent(new Event('input', { bubbles: true }));
+              textareas[index].dispatchEvent(new Event('change', { bubbles: true }));
             }
           });
 

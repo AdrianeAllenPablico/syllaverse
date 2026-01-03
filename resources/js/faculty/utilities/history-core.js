@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -524,6 +524,31 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
   }
 
+  function applyCoursePolicies(snap){
+    const st = ensure('coursePolicies');
+    st.isApplying = true;
+    try {
+      const sections = ['policy', 'exams', 'dishonesty', 'dropping', 'other'];
+      const textareas = document.querySelectorAll('.course-policies textarea[name="course_policies[]"]');
+      const policies = snap?.policies || {};
+
+      sections.forEach((section, idx) => {
+        const ta = textareas[idx];
+        if (ta) {
+          ta.value = policies[section] || '';
+          try {
+            ta.style.height = 'auto';
+            ta.style.height = (ta.scrollHeight || 0) + 'px';
+          } catch (e) { /* noop */ }
+        }
+      });
+
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function applySo(snap){
     const st = ensure('so');
     st.isApplying = true;
@@ -615,6 +640,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'sdg':
           applySdg(prev);
           break;
+        case 'coursePolicies':
+          applyCoursePolicies(prev);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(prev);
           break;
@@ -664,6 +692,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'sdg':
           applySdg(next);
           break;
+        case 'coursePolicies':
+          applyCoursePolicies(next);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(next);
           break;
@@ -708,6 +739,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const so = snapshotSo(); safeInitialize('so', so); } catch(e) {}
       try { const cdio = snapshotCdio(); safeInitialize('cdio', cdio); } catch(e) {}
       try { const sdg = snapshotSdg(); safeInitialize('sdg', sdg); } catch(e) {}
+      try { const cp = snapshotCoursePolicies(); safeInitialize('coursePolicies', cp); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -1076,6 +1108,48 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerCoursePoliciesWatchers(){
+    const st = ensure('coursePolicies');
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      try { safePush('coursePolicies', snapshotCoursePolicies()); } catch (e) { /* noop */ }
+    };
+    const lastSavedText = new WeakMap();
+    const textareas = document.querySelectorAll('.course-policies textarea[name="course_policies[]"]');
+    
+    textareas.forEach(ta => {
+      // Word-boundary snapshots
+      ta.addEventListener('input', (e) => {
+        const current = ta.value || '';
+        const prev = lastSavedText.get(ta) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(ta, current);
+          take();
+        }
+      }, { capture: true });
+
+      // Change fallback
+      ta.addEventListener('change', (e) => {
+        lastSavedText.set(ta, ta.value || '');
+        take();
+      }, { capture: true });
+
+      // Focus tracking
+      ta.addEventListener('focusin', () => { window.SVActiveModuleName = 'coursePolicies'; }, true);
+    });
+
+    // Load predefined action
+    const confirmLoad = document.getElementById('confirmLoadPredefinedPolicy');
+    if (confirmLoad) confirmLoad.addEventListener('click', () => setTimeout(take, 300));
+
+    try { safeInitialize('coursePolicies', snapshotCoursePolicies()); } catch(e) {}
+    updateButtons();
+  }
+
   function registerIgaWatchers(){
     const st = ensure('iga');
     const take = () => {
@@ -1160,6 +1234,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerAssessmentTasksWatchers();
     registerCdioWatchers();
     registerSdgWatchers();
+    registerCoursePoliciesWatchers();
     registerSoWatchers();
     registerIgaWatchers();
   });

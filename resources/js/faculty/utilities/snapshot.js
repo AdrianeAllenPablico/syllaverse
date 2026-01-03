@@ -404,6 +404,36 @@ export function snapshotSdg(){
   };
 }
 
+// Course Policies
+export function snapshotCoursePolicies(){
+  const sections = ['policy', 'exams', 'dishonesty', 'dropping', 'other'];
+  const labels = ['Class Policy', 'Missed Examinations', 'Academic Dishonesty', 'Dropping', 'Other Policies'];
+  const textareas = document.querySelectorAll('.course-policies textarea[name="course_policies[]"]');
+  const policies = {};
+  const lines = ['PARTIAL_BEGIN:course_policies', 'TITLE: Course Policies', 'COLUMNS: Section | Content'];
+
+  sections.forEach((section, idx) => {
+    const ta = textareas[idx];
+    const content = ta ? (ta.value || '').trim() : '';
+    policies[section] = content;
+    const display = content || '-';
+    lines.push(`ROW: ${labels[idx]} | ${display}`);
+  });
+
+  lines.push('PARTIAL_END:course_policies');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+
+  return {
+    partial: 'course_policies',
+    title: 'Course Policies',
+    policies,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Student Outcomes
 export function snapshotSo(){
   const list = document.getElementById('syllabus-so-sortable');
@@ -454,7 +484,8 @@ if (typeof window !== 'undefined') {
     snapshotIga,
     snapshotSo,
     snapshotCdio,
-    snapshotSdg
+    snapshotSdg,
+    snapshotCoursePolicies
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -466,4 +497,5 @@ if (typeof window !== 'undefined') {
   window.snapshotSo = snapshotSo;
   window.snapshotCdio = snapshotCdio;
   window.snapshotSdg = snapshotSdg;
+  window.snapshotCoursePolicies = snapshotCoursePolicies;
 }
