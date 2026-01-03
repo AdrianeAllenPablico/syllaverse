@@ -395,7 +395,7 @@ document.addEventListener('DOMContentLoaded', function() {
     mainRow.className = 'at-main-row';
     mainRow.dataset.section = sectionNum;
     
-    mainRow.innerHTML = `
+    let mainRowHTML = `
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;">
         <textarea class="cis-textarea main-input text-center" placeholder="-" rows="1"></textarea>
       </td>
@@ -406,18 +406,28 @@ document.addEventListener('DOMContentLoaded', function() {
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#f8f9fa;">
         <textarea class="cis-textarea main-input text-center percent-input" rows="1" readonly style="cursor:not-allowed;"></textarea>
       </td>
-      ${Array(currentIloCount).fill(0).map(() => '<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>').join('')}
+    `;
+    
+    // Add ILO columns (at least 1 blank td if no ILOs)
+    const iloCount = Math.max(1, currentIloCount);
+    for (let i = 0; i < iloCount; i++) {
+      mainRowHTML += '<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>';
+    }
+    
+    mainRowHTML += `
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;"></td>
     `;
+    
+    mainRow.innerHTML = mainRowHTML;
     
     // Create sub row
     const subRow = document.createElement('tr');
     subRow.className = 'at-sub-row';
     subRow.dataset.section = sectionNum;
     
-    subRow.innerHTML = `
+    let subRowHTML = `
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
         <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>
       </td>
@@ -430,7 +440,20 @@ document.addEventListener('DOMContentLoaded', function() {
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#f8f9fa;">
         <textarea class="cis-textarea sub-input text-center percent-input" rows="1" readonly style="cursor:not-allowed;"></textarea>
       </td>
-      ${Array(currentIloCount).fill(0).map(() => '<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;"><textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea></td>').join('')}
+    `;
+    
+    // Add ILO columns: blank cells if no ILOs, textareas if ILOs exist
+    if (currentIloCount === 0) {
+      // Placeholder: blank cell
+      subRowHTML += '<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;"></td>';
+    } else {
+      // With ILOs: add textareas
+      for (let i = 0; i < currentIloCount; i++) {
+        subRowHTML += '<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;"><textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea></td>';
+      }
+    }
+    
+    subRowHTML += `
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
         <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>
       </td>
@@ -441,6 +464,8 @@ document.addEventListener('DOMContentLoaded', function() {
         <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>
       </td>
     `;
+    
+    subRow.innerHTML = subRowHTML;
     
     tbody.appendChild(mainRow);
     tbody.appendChild(subRow);
@@ -514,7 +539,8 @@ document.addEventListener('DOMContentLoaded', function() {
     subRow.className = 'at-sub-row';
     subRow.dataset.section = sectionNum;
     
-    subRow.innerHTML = `
+    // Build cells: Code, Task, I/R/D, %, ILO(s), C, P, A
+    let cellsHTML = `
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
         <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>
       </td>
@@ -527,7 +553,21 @@ document.addEventListener('DOMContentLoaded', function() {
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#f8f9fa;">
         <textarea class="cis-textarea sub-input text-center percent-input" rows="1" readonly style="cursor:not-allowed;"></textarea>
       </td>
-      ${Array(currentIloCount).fill(0).map(() => '<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;"><textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea></td>').join('')}
+    `;
+    
+    // Add ILO cells: blank if no ILOs, textareas if ILOs exist
+    if (currentIloCount === 0) {
+      // Placeholder: blank cell
+      cellsHTML += '<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;"></td>';
+    } else {
+      // With ILOs: add textareas
+      for (let i = 0; i < currentIloCount; i++) {
+        cellsHTML += '<td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;"><textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea></td>';
+      }
+    }
+    
+    // Add C, P, A cells
+    cellsHTML += `
       <td class="text-center" style="padding:4px 0.15rem;border:1px solid #dee2e6;background:#fafafa;">
         <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>
       </td>
@@ -538,6 +578,8 @@ document.addEventListener('DOMContentLoaded', function() {
         <textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>
       </td>
     `;
+    
+    subRow.innerHTML = cellsHTML;
     
     // Find last row of this section and insert after
     const allRows = Array.from(tbody.querySelectorAll(`[data-section="${sectionNum}"]`));
