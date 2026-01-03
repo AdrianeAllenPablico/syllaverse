@@ -72,11 +72,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function deleteRowAndPersist(row) {
     if (!row) return false;
+    
+    // Prevent double-deletion (guard against rapid double-clicks or event bubbling)
+    if (row.dataset.deleting === 'true') {
+      console.log('[ILO DELETE] Already deleting this row, skipping');
+      return false;
+    }
+    row.dataset.deleting = 'true';
 
-    // Fire iloChanged event BEFORE deletion so snapshot captures pre-delete state
+    const iloCode = row.querySelector('input[name="code[]"]')?.value || 'unknown';
+    console.log('[ILO DELETE] Starting deletion of ILO:', iloCode);
+
+    // Capture AT snapshot BEFORE deletion to preserve data for undo
+    let atSnapshotBeforeDeletion = null;
+    console.log('[ILO DELETE] Checking for snapshotAssessmentTasks:', typeof window.snapshotAssessmentTasks);
     try {
-      document.dispatchEvent(new CustomEvent('iloChanged'));
-    } catch (e) { /* noop */ }
+      if (window.snapshotAssessmentTasks) {
+        console.log('[ILO DELETE] Calling snapshotAssessmentTasks()');
+        atSnapshotBeforeDeletion = window.snapshotAssessmentTasks();
+        if (atSnapshotBeforeDeletion) {
+          console.log('[ILO DELETE] ✅ AT SNAPSHOT CAPTURED - Full Data:');
+          console.log(JSON.stringify(atSnapshotBeforeDeletion, null, 2));
+        } else {
+          console.warn('[ILO DELETE] AT snapshot is null/undefined!');
+        }
+      } else {
+        console.warn('[ILO DELETE] snapshotAssessmentTasks not available!');
+      }
+    } catch (e) { 
+      console.error('[ILO DELETE] Error capturing AT snapshot:', e);
+      console.error('[ILO DELETE] Stack:', e.stack);
+    }
 
     // Track the ID if it's a saved ILO
     const rawId = row.getAttribute('data-id');
@@ -90,9 +116,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Just remove from UI without backend deletion
     row.remove();
+    console.log('[ILO DELETE] Row removed from DOM');
     
     // Check if any rows remain, if not show placeholder
     const rows = getIloRows();
+    console.log('[ILO DELETE] Remaining ILO rows:', rows.length);
+    
     if (rows.length === 0) {
       // Only create placeholder if one doesn't already exist
       if (!document.getElementById('ilo-placeholder')) {
@@ -105,13 +134,28 @@ document.addEventListener('DOMContentLoaded', () => {
           </td>
         `;
         list.appendChild(placeholder);
+        console.log('[ILO DELETE] Placeholder added');
       }
-      // Fire iloChanged event after last row removal so undo/redo captures the empty state
+      // Fire iloChanged event with AT snapshot for coordinated undo/redo
       try {
-        document.dispatchEvent(new CustomEvent('iloChanged'));
-      } catch (e) { /* noop */ }
+        console.log('[ILO DELETE] Dispatching iloChanged event with AT snapshot');
+        document.dispatchEvent(new CustomEvent('iloChanged', {
+          detail: { atSnapshot: atSnapshotBeforeDeletion }
+        }));
+      } catch (e) { 
+        console.error('[ILO DELETE] Error dispatching event:', e);
+      }
     } else {
       renumber();
+      // Fire iloChanged event with AT snapshot for coordinated undo/redo
+      try {
+        console.log('[ILO DELETE] Dispatching iloChanged event with AT snapshot');
+        document.dispatchEvent(new CustomEvent('iloChanged', {
+          detail: { atSnapshot: atSnapshotBeforeDeletion }
+        }));
+      } catch (e) { 
+        console.error('[ILO DELETE] Error dispatching event:', e);
+      }
     }
     
     // Mark as unsaved
@@ -185,9 +229,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const ta = row.querySelector('textarea.autosize'); if (ta) ta.focus();
     try { updateUnsavedCount(); } catch (e) { /* noop */ }
     
+    // Capture AT snapshot after row addition
+    console.log('[ILO ADD] New ILO row added, capturing AT snapshot');
+    let atSnapshotAfterAdd = null;
+    try {
+      if (window.snapshotAssessmentTasks) {
+        atSnapshotAfterAdd = window.snapshotAssessmentTasks();
+        if (atSnapshotAfterAdd) {
+          console.log('[ILO ADD] ✅ AT SNAPSHOT CAPTURED - Full Data:');
+          console.log(JSON.stringify(atSnapshotAfterAdd, null, 2));
+        }
+      }
+    } catch (e) { console.error('[ILO ADD] Error capturing AT:', e); }
+    
     // Fire iloChanged event after row addition for undo/redo tracking
     try {
-      document.dispatchEvent(new CustomEvent('iloChanged'));
+      document.dispatchEvent(new CustomEvent('iloChanged', {
+        detail: { atSnapshot: atSnapshotAfterAdd }
+      }));
+    } catch (e) { /* noop */ }
+    
+    // Also immediately sync AT columns with ILO count
+    try {
+      if (window.syncATWithILO) {
+        window.syncATWithILO();
+      }
     } catch (e) { /* noop */ }
     
     // Set active module name

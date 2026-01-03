@@ -13,6 +13,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
   const lastHashes = {};    // key -> last applied hash
   let globalApplying = false; // prevent cross-module watcher reactions during programmatic apply
   let restricted = false;     // when true, disable undo/redo regardless of stacks
+  let suppressAtWatcherUntil = 0; // temporarily pause AT watcher after ILO structural events
 
   function getActiveKey(){
     const k = (window.SVActiveModuleName || '').trim();
@@ -105,14 +106,23 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
   function applyIlo(snap){
     const st = ensure('ilo');
     st.isApplying = true;
+    console.log('[APPLY ILO] Starting, ILO count:', snap?.ilos?.length || 0, 'has atSnapshot:', !!snap?.atSnapshot);
+    if (snap?.atSnapshot) {
+      console.log('[APPLY ILO] ✅ ASSOCIATED AT SNAPSHOT EXISTS - Will restore data:');
+      console.log(JSON.stringify(snap.atSnapshot, null, 2));
+    }
     try {
       const list = document.getElementById('syllabus-ilo-sortable');
-      if (!list) return;
+      if (!list) {
+        console.log('[APPLY ILO] ILO list not found');
+        return;
+      }
       
       // Clear existing rows
       while (list.firstChild) {
         list.removeChild(list.firstChild);
       }
+      console.log('[APPLY ILO] Cleared existing rows');
       
       const ilos = Array.isArray(snap?.ilos) ? snap.ilos : [];
       
@@ -164,38 +174,62 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
       
       // After ILO structure changes, sync Assessment Tasks table to match new ILO count
+      // Only sync the column structure, don't restore AT data
+      // AT data is tracked independently and will be preserved across ILO undo/redo
+      console.log('[APPLY ILO] After structure update, has atSnapshot:', !!snap?.atSnapshot);
       try {
-        setTimeout(() => {
+        if (snap && snap.atSnapshot) {
+          // If we have AT snapshot data, restore it (coordinated undo/redo)
+          console.log('[APPLY ILO] Restoring AT data from snapshot, sections:', snap.atSnapshot?.sections?.length || 0);
+          const atSt = ensure('assessmentTasks');
+          atSt.isApplying = true;
+          try {
+            // First sync columns to match ILO count
+            console.log('[APPLY ILO] Calling syncATWithILO()');
+            if (window.syncATWithILO) {
+              window.syncATWithILO();
+            }
+            // Then restore the AT data from snapshot
+            console.log('[APPLY ILO] Calling applyAssessmentTasks()');
+            applyAssessmentTasks(snap.atSnapshot);
+            console.log('[APPLY ILO] AT data restored successfully');
+          } finally {
+            atSt.isApplying = false;
+          }
+        } else {
+          // No AT snapshot, just sync the column structure
+          console.log('[APPLY ILO] No AT snapshot, just syncing columns');
           if (window.syncATWithILO) {
             window.syncATWithILO();
           }
-          // If this ILO snapshot includes AT data, restore it after sync
-          // This is safe during undo/redo because it's part of the coordinated state restoration
-          if (snap && snap.atSnapshot) {
-            setTimeout(() => {
-              const atSt = ensure('assessmentTasks');
-              atSt.isApplying = true;
-              try {
-                applyAssessmentTasks(snap.atSnapshot);
-              } finally {
-                atSt.isApplying = false;
-              }
-            }, 150);
-          }
-        }, 50);
-      } catch(e) {}
+        }
+      } catch(e) {
+        console.error('[APPLY ILO] Error during AT sync:', e);
+      }
     } finally {
       st.isApplying = false;
+      console.log('[APPLY ILO] Completed');
     }
   }
 
   function applyAssessmentTasks(snap){
     const st = ensure('assessmentTasks');
     st.isApplying = true;
+    console.log('[APPLY AT] Starting, sections:', snap?.sections?.length || 0);
+    console.log('[APPLY AT] ✅ FULL AT SNAPSHOT BEING RESTORED:');
+    console.log(JSON.stringify(snap, null, 2));
     try {
       const tbody = document.getElementById('at-tbody');
       const iloList = document.getElementById('syllabus-ilo-sortable');
-      if (!tbody) return;
+      if (!tbody) {
+        console.log('[APPLY AT] tbody not found');
+        return;
+      }
+      
+      // First, sync AT structure to match current ILO count
+      // This recreates the ILO columns if needed
+      console.log('[APPLY AT] First sync, calling syncATWithILO()');
+      try { if (window.syncATWithILO) window.syncATWithILO(); } catch(e){}
       
       // Get current ILO codes to map stored values to current columns
       const currentIloCodeMap = {}; // Map: column_index -> current_ilo_code
@@ -284,6 +318,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       });
       
       try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+      console.log('[APPLY AT] Completed successfully');
     } finally {
       st.isApplying = false;
     }
@@ -446,12 +481,37 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
 
   function registerIloWatchers(){
     const st = ensure('ilo');
-    const take = () => { if (st.isApplying || window.globalApplying) return; safePush('ilo', snapshotIlo()); };
+    const take = (eventDetail) => { 
+      if (st.isApplying || window.globalApplying) {
+        console.log('[ILO WATCHER] take() skipped, isApplying:', st.isApplying, 'globalApplying:', window.globalApplying);
+        return; 
+      }
+      console.log('[ILO WATCHER] take() called');
+      console.log('[ILO WATCHER] eventDetail passed:', eventDetail);
+      console.log('[ILO WATCHER] eventDetail.atSnapshot:', eventDetail?.atSnapshot);
+      // Capture ILO state and include AT snapshot if provided via event detail
+      let snap = snapshotIlo();
+      console.log('[ILO WATCHER] ILO snapshot created, ilos:', snap?.ilos?.length || 0);
+      if (eventDetail && eventDetail.atSnapshot) {
+        console.log('[ILO WATCHER] Merging AT snapshot into ILO snapshot, sections:', eventDetail.atSnapshot?.sections?.length || 0);
+        console.log('[ILO WATCHER] ✅ MERGED AT SNAPSHOT - Full Data:');
+        console.log(JSON.stringify(eventDetail.atSnapshot, null, 2));
+        snap.atSnapshot = eventDetail.atSnapshot;
+      } else {
+        console.log('[ILO WATCHER] No AT snapshot to merge');
+      }
+      console.log('[ILO WATCHER] Final snap.atSnapshot:', snap?.atSnapshot ? 'exists' : 'null');
+      safePush('ilo', snap); 
+      // Suppress AT watcher for a short window so structural ILO changes don't double-push
+      suppressAtWatcherUntil = Date.now() + 200;
+    };
     const list = document.getElementById('syllabus-ilo-sortable');
     if (list){
       // Action-based tracking: capture snapshot on row add/delete actions
-      // Only track ILO changes; AT will sync automatically during undo/redo
-      document.addEventListener('iloChanged', take);
+      document.addEventListener('iloChanged', (evt) => { 
+        console.log('[ILO WATCHER] iloChanged event received, has detail:', !!evt?.detail);
+        take(evt && evt.detail ? evt.detail : null);
+      });
       
       // Word-by-word text input tracking: capture on space, punctuation, or backspace
       let lastSavedText = {}; // Track last saved text per textarea
@@ -487,7 +547,53 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
 
   function registerAssessmentTasksWatchers(){
     const st = ensure('assessmentTasks');
-    const take = () => { if (st.isApplying || window.globalApplying) return; safePush('assessmentTasks', snapshotAssessmentTasks()); };
+    const take = () => { 
+      if (st.isApplying || window.globalApplying) return;
+      if (Date.now() < suppressAtWatcherUntil) {
+        console.log('[AT WATCHER] Suppressed due to recent ILO structural change');
+        return;
+      }
+      const atSnapshot = snapshotAssessmentTasks();
+      
+      // Don't push standalone AT snapshots - only push merged ILO+AT snapshots
+      // This prevents creating duplicate undo steps for AT-only changes
+      
+      // Merge with latest ILO snapshot (if exists) to maintain AT data with ILO changes
+      const latestIloSnap = currentSnap['ilo'];
+      if (latestIloSnap && Array.isArray(latestIloSnap.ilos)) {
+        // Extract base ILO hash (remove any existing |at:... suffix to prevent chaining)
+        const baseIloHash = (latestIloSnap.hash || '').split('|at:')[0];
+        const combinedHash = `${baseIloHash}|at:${atSnapshot.hash || ''}`;
+        
+        // Skip if this exact combined hash already exists (avoid duplicate entries)
+        if (latestIloSnap.hash === combinedHash) {
+          console.log('[AT WATCHER] Skipping duplicate - hash unchanged:', combinedHash);
+          return;
+        }
+        
+        const merged = {
+          ...latestIloSnap,
+          atSnapshot,
+          hash: combinedHash,
+          ts: Date.now()
+        };
+        console.log('[AT WATCHER] AT data changed, pushing merged ILO snapshot with AT data');
+        console.log('[AT WATCHER] ✅ MERGED ILO+AT SNAPSHOT TO PUSH:');
+        console.log(JSON.stringify(merged, null, 2));
+        // Instead of creating a new undo step, fold AT edits into the latest ILO entry
+        const lastEntry = globalHistory.length ? globalHistory[globalHistory.length - 1] : null;
+        if (lastEntry && lastEntry.key === 'ilo') {
+          lastEntry.next = merged;
+          lastEntry.ts = merged.ts || Date.now();
+          currentSnap['ilo'] = merged;
+          lastHashes['ilo'] = combinedHash;
+          updateButtons();
+          return;
+        }
+        // Fallback: if no prior ILO entry, push a new one
+        safePush('ilo', merged);
+      }
+    };
     const debounce = (fn, ms) => { let t; return function(){ clearTimeout(t); const ctx=this, args=arguments; t=setTimeout(()=>fn.apply(ctx,args), ms); }; };
     const takeDebounced = debounce(take, 250);
     const tbody = document.getElementById('at-tbody');
@@ -499,6 +605,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       tbody.addEventListener('focusin', () => { window.SVActiveModuleName = 'assessmentTasks'; }, true);
       tbody.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'assessmentTasks'; }, true);
     }
+    // Listen for Assessment Tasks changes (AT columns sync with ILO changes)
+    document.addEventListener('assessmentTasksChanged', take, { capture: true });
     // baseline snapshot (do not add to global history)
     try { safeInitialize('assessmentTasks', snapshotAssessmentTasks()); } catch(e) {}
     updateButtons();

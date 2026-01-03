@@ -355,8 +355,25 @@ document.addEventListener('DOMContentLoaded', function() {
   function getCurrentIloCount() {
     const headerRow = table.querySelector('thead tr:nth-child(2)');
     if (!headerRow) return iloColsCount;
-    // Total columns - (Code, Task, I/R/D, %, C, P, A) = ILO count
-    return headerRow.children.length - 7;
+    
+    // Check if the last ILO column header shows "0" (empty state)
+    const lastIloHeader = headerRow.children[headerRow.children.length - 4];
+    if (lastIloHeader && lastIloHeader.textContent.trim() === '0') {
+      return 0; // No ILO columns in use, just the empty "0" placeholder
+    }
+    
+    // Count ILO columns by finding headers that are numbers (not "C", "P", "A", "Code", "Assessment Tasks", "I/R/D", "%")
+    // ILO headers are in positions 4 through (total - 4), and contain just numbers
+    let iloCount = 0;
+    for (let i = 4; i < headerRow.children.length - 3; i++) {
+      const cell = headerRow.children[i];
+      const text = cell.textContent.trim();
+      if (/^\d+$/.test(text)) {
+        iloCount++;
+      }
+    }
+    
+    return iloCount;
   }
 
   // Get next section number
@@ -566,52 +583,111 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Add ILO column
   window.addATIloColumn = function() {
-    const headerRow1 = table.querySelector('thead tr:nth-child(1)');
     const headerRow2 = table.querySelector('thead tr:nth-child(2)');
-    const colgroup = table.querySelector('colgroup');
     
-    // Update colspan in first header row
-    const iloHeaderCell = headerRow1.children[1];
-    const currentColspan = parseInt(iloHeaderCell.getAttribute('colspan')) || 0;
-    iloHeaderCell.setAttribute('colspan', currentColspan + 1);
+    // Check if the last ILO column currently shows "0" (empty state)
+    const lastIloHeader = headerRow2.children[headerRow2.children.length - 4];
+    const isCurrentlyEmpty = lastIloHeader && lastIloHeader.textContent === '0';
     
-    // Add numbered header in second row (insert before C column)
-    const newIloCount = getCurrentIloCount() + 1;
-    const newTh = document.createElement('th');
-    newTh.textContent = newIloCount;
-    headerRow2.insertBefore(newTh, headerRow2.children[headerRow2.children.length - 3]);
-    
-    // Add col to colgroup (insert before C column)
-    const newCol = document.createElement('col');
-    colgroup.insertBefore(newCol, colgroup.children[colgroup.children.length - 3]);
-    
-    // Add cells to all rows (insert before C column which is 3rd from end)
-    tbody.querySelectorAll('tr').forEach(row => {
-      const newCell = document.createElement('td');
-      newCell.className = 'text-center';
-      const isSubRow = row.classList.contains('at-sub-row');
-      newCell.style.cssText = `padding:4px 0.15rem;border:1px solid #dee2e6;${isSubRow ? 'background:#fafafa;' : ''}`;
+    if (isCurrentlyEmpty) {
+      // Convert the "0" column to "1" by adding textareas to sub-rows
+      lastIloHeader.textContent = '1';
       
-      if (isSubRow) {
-        newCell.innerHTML = '<textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>';
+      // Add textareas to sub-rows only
+      tbody.querySelectorAll('tr').forEach(row => {
+        const isSubRow = row.classList.contains('at-sub-row');
+        const iloCell = row.children[row.children.length - 4];
+        if (isSubRow && iloCell) {
+          iloCell.innerHTML = '<textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>';
+        }
+      });
+      
+      console.log('Converted empty ILO column to column 1');
+    } else {
+      // Normal add: create a new column with incremented number
+      const headerRow1 = table.querySelector('thead tr:nth-child(1)');
+      const colgroup = table.querySelector('colgroup');
+      
+      // Update colspan in first header row
+      const iloHeaderCell = headerRow1.children[1];
+      const currentColspan = parseInt(iloHeaderCell.getAttribute('colspan')) || 0;
+      iloHeaderCell.setAttribute('colspan', currentColspan + 1);
+      
+      // Add numbered header in second row (insert before C column)
+      const newIloCount = getCurrentIloCount() + 1;
+      const newTh = document.createElement('th');
+      newTh.textContent = newIloCount;
+      headerRow2.insertBefore(newTh, headerRow2.children[headerRow2.children.length - 3]);
+      
+      // Add col to colgroup (insert before C column)
+      const newCol = document.createElement('col');
+      colgroup.insertBefore(newCol, colgroup.children[colgroup.children.length - 3]);
+      
+      // Add cells to all rows (insert before C column which is 3rd from end)
+      tbody.querySelectorAll('tr').forEach(row => {
+        const newCell = document.createElement('td');
+        newCell.className = 'text-center';
+        const isSubRow = row.classList.contains('at-sub-row');
+        newCell.style.cssText = `padding:4px 0.15rem;border:1px solid #dee2e6;${isSubRow ? 'background:#fafafa;' : ''}`;
+        
+        if (isSubRow) {
+          newCell.innerHTML = '<textarea class="cis-textarea sub-input text-center" placeholder="-" rows="1"></textarea>';
+        }
+        
+        row.insertBefore(newCell, row.children[row.children.length - 3]);
+      });
+      
+      // Update footer colspan
+      const footerLastCell = table.querySelector('tfoot th:last-child');
+      if (footerLastCell) {
+        const currentFooterColspan = parseInt(footerLastCell.getAttribute('colspan')) || 0;
+        footerLastCell.setAttribute('colspan', currentFooterColspan + 1);
       }
       
-      row.insertBefore(newCell, row.children[row.children.length - 3]);
+      console.log(`Added ILO column ${newIloCount}`);
+    }
+    
+    // Fire assessmentTasksChanged event after ILO column added for undo/redo tracking
+    try {
+      document.dispatchEvent(new CustomEvent('assessmentTasksChanged'));
+    } catch (e) { /* noop */ }
+  };
+
+  // Convert last ILO column to empty (no textarea) - used when reducing to 0 ILOs
+  window.convertLastIloColumnToEmpty = function() {
+    const headerRow2 = table.querySelector('thead tr:nth-child(2)');
+    
+    // Update last ILO header to show "0" instead of a number
+    const lastIloHeader = headerRow2.children[headerRow2.children.length - 4];
+    if (lastIloHeader) {
+      lastIloHeader.textContent = '0';
+    }
+    
+    // Remove textareas from cells but keep empty cells
+    tbody.querySelectorAll('tr').forEach(row => {
+      const iloCell = row.children[row.children.length - 4];
+      if (iloCell) {
+        iloCell.innerHTML = ''; // Clear textarea, leave cell empty
+      }
     });
     
-    // Update footer colspan
-    const footerLastCell = table.querySelector('tfoot th:last-child');
-    if (footerLastCell) {
-      const currentFooterColspan = parseInt(footerLastCell.getAttribute('colspan')) || 0;
-      footerLastCell.setAttribute('colspan', currentFooterColspan + 1);
-    }
+    // Fire assessmentTasksChanged event
+    try {
+      document.dispatchEvent(new CustomEvent('assessmentTasksChanged'));
+    } catch (e) { /* noop */ }
   };
 
   // Remove ILO column
   window.removeATIloColumn = function() {
     const currentIloCount = getCurrentIloCount();
-    if (currentIloCount <= 1) {
-      console.log('Cannot remove the last ILO column');
+    if (currentIloCount <= 0) {
+      console.log('No ILO columns to remove');
+      return;
+    }
+    
+    // If this would be the last ILO column, convert it to empty instead of removing it
+    if (currentIloCount === 1) {
+      window.convertLastIloColumnToEmpty();
       return;
     }
     
@@ -643,6 +719,11 @@ document.addEventListener('DOMContentLoaded', function() {
       const currentFooterColspan = parseInt(footerLastCell.getAttribute('colspan')) || 0;
       footerLastCell.setAttribute('colspan', currentFooterColspan - 1);
     }
+    
+    // Fire assessmentTasksChanged event after ILO column removed for undo/redo tracking
+    try {
+      document.dispatchEvent(new CustomEvent('assessmentTasksChanged'));
+    } catch (e) { /* noop */ }
   };
 
   // Calculate on input

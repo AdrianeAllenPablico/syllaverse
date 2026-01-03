@@ -165,18 +165,10 @@ export function snapshotIlo(){
   const text = lines.join('\n');
   const hash = simpleHash(text);
   
-  // Also capture Assessment Tasks state at this moment
-  // This ensures AT data is preserved when ILO rows are added/removed
-  let atSnapshot = null;
-  try {
-    atSnapshot = snapshotAssessmentTasks();
-  } catch(e) {}
-  
   return {
     partial: 'ilo',
     title: 'Intended Learning Outcomes',
     ilos,
-    atSnapshot, // Include AT state for coordinated undo/redo
     text,
     hash,
     ts: Date.now()
@@ -304,4 +296,10 @@ if (typeof window !== 'undefined') {
     snapshotIlo,
     snapshotAssessmentTasks
   };
+  // Also expose directly on window for easy access
+  window.snapshotMissionVision = snapshotMissionVision;
+  window.snapshotCourseInfo = snapshotCourseInfo;
+  window.snapshotCriteria = snapshotCriteria;
+  window.snapshotIlo = snapshotIlo;
+  window.snapshotAssessmentTasks = snapshotAssessmentTasks;
 }
