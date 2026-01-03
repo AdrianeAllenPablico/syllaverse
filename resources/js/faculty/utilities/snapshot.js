@@ -326,6 +326,45 @@ export function snapshotIga(){
   };
 }
 
+// Student Outcomes
+export function snapshotSo(){
+  const list = document.getElementById('syllabus-so-sortable');
+  const rows = [];
+  const lines = ['PARTIAL_BEGIN:so', 'TITLE: Student Outcomes', 'COLUMNS: Code | Title | Description | HasContent'];
+
+  if (list) {
+    const soRows = Array.from(list.querySelectorAll('tr')).filter(r => r.id !== 'so-placeholder');
+    soRows.forEach((row, idx) => {
+      const dataId = row.getAttribute('data-id') || '';
+      const id = (/^\d+$/.test(dataId)) ? Number(dataId) : null;
+      const codeInput = row.querySelector('input[name="code[]"]');
+      const code = codeInput ? (codeInput.value || `SO${idx + 1}`) : `SO${idx + 1}`;
+      const titleTa = row.querySelector('textarea[name="so_titles[]"]');
+      const descTa = row.querySelector('textarea[name="sos[]"]');
+      const title = titleTa ? (titleTa.value || '').trim() : '';
+      const description = descTa ? (descTa.value || '').trim() : '';
+      const hasContent = !!(title || description);
+
+      rows.push({ id, code, title, description, position: idx + 1, hasContent });
+      const descDisplay = description || '-';
+      lines.push(`ROW: ${code} | ${title || '-'} | ${descDisplay} | ${hasContent ? 'yes' : 'no'}`);
+    });
+  }
+
+  lines.push('PARTIAL_END:so');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+
+  return {
+    partial: 'so',
+    title: 'Student Outcomes',
+    rows,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Global window exposure for debugging/inspection (optional)
 if (typeof window !== 'undefined') {
   window.SVSnapshot = {
@@ -334,7 +373,8 @@ if (typeof window !== 'undefined') {
     snapshotCriteria,
     snapshotIlo,
     snapshotAssessmentTasks,
-    snapshotIga
+    snapshotIga,
+    snapshotSo
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -343,4 +383,5 @@ if (typeof window !== 'undefined') {
   window.snapshotIlo = snapshotIlo;
   window.snapshotAssessmentTasks = snapshotAssessmentTasks;
   window.snapshotIga = snapshotIga;
+  window.snapshotSo = snapshotSo;
 }

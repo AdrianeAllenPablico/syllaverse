@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -392,6 +392,70 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
   }
 
+  function applySo(snap){
+    const st = ensure('so');
+    st.isApplying = true;
+    try {
+      const list = document.getElementById('syllabus-so-sortable');
+      if (!list) {
+        console.warn('[APPLY SO] SO list not found');
+        return;
+      }
+
+      while (list.firstChild) list.removeChild(list.firstChild);
+
+      const rows = Array.isArray(snap?.rows) ? snap.rows : [];
+      const autosize = (ta) => {
+        if (!ta) return;
+        try { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight || 0) + 'px'; } catch (e) { /* noop */ }
+      };
+
+      if (rows.length === 0) {
+        const placeholder = document.createElement('tr');
+        placeholder.id = 'so-placeholder';
+        placeholder.innerHTML = `
+          <td colspan="2" class="text-center text-muted py-4">
+            <p class="mb-2">No SOs added yet.</p>
+            <p class="mb-0"><small>Click the <strong>+</strong> button above to add an SO or <strong>Load Predefined</strong> to import SOs.</small></p>
+          </td>
+        `;
+        list.appendChild(placeholder);
+      } else {
+        rows.forEach((row, idx) => {
+          const code = row.code || `SO${idx + 1}`;
+          const tr = document.createElement('tr');
+          tr.className = 'so-row';
+          if (row.id) tr.setAttribute('data-id', row.id);
+          tr.innerHTML = `
+            <td class="text-center align-middle">
+              <div class="so-badge fw-semibold">${code}</div>
+            </td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="flex-grow-1 w-100">
+                  <textarea name="so_titles[]" class="cis-textarea cis-field autosize" placeholder="Title" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;" required></textarea>
+                  <textarea name="sos[]" class="cis-textarea cis-field autosize" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;" required></textarea>
+                  <input type="hidden" name="code[]" value="${code}">
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-so ms-2" title="Delete SO"><i class="bi bi-trash"></i></button>
+              </div>
+            </td>
+          `;
+          list.appendChild(tr);
+
+          const titleTa = tr.querySelector('textarea[name="so_titles[]"]');
+          const descTa = tr.querySelector('textarea[name="sos[]"]');
+          if (titleTa) { titleTa.value = row.title || ''; autosize(titleTa); }
+          if (descTa) { descTa.value = row.description || ''; autosize(descTa); }
+        });
+      }
+
+      try { if (window.updateProgressBar) window.updateProgressBar(); } catch (e) { /* noop */ }
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function undo(){
     if (!globalHistory.length) return false;
     globalApplying = true;
@@ -417,6 +481,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           break;
         case 'iga':
           applyIga(prev);
+          break;
+        case 'so':
+          applySo(prev);
           break;
         default:
           break;
@@ -458,6 +525,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'iga':
           applyIga(next);
           break;
+        case 'so':
+          applySo(next);
+          break;
         default:
           break;
       }
@@ -490,6 +560,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const ilo = snapshotIlo(); safeInitialize('ilo', ilo); } catch(e) {}
       try { const at = snapshotAssessmentTasks(); safeInitialize('assessmentTasks', at); } catch(e) {}
       try { const iga = snapshotIga(); safeInitialize('iga', iga); } catch(e) {}
+      try { const so = snapshotSo(); safeInitialize('so', so); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -687,6 +758,63 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerSoWatchers(){
+    const st = ensure('so');
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      try { safePush('so', snapshotSo()); } catch (e) { /* noop */ }
+    };
+    const lastSavedText = new WeakMap();
+    const list = document.getElementById('syllabus-so-sortable');
+    if (list){
+      // Action-based triggers
+      list.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-delete-so')) setTimeout(take, 0);
+      }, { capture: true });
+
+      // Word-boundary snapshots for SO text
+      list.addEventListener('input', (e) => {
+        const ta = e.target;
+        if (!(ta && ta.tagName === 'TEXTAREA' && (ta.name === 'so_titles[]' || ta.name === 'sos[]'))) return;
+        const current = ta.value || '';
+        const prev = lastSavedText.get(ta) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(ta, current);
+          take();
+        }
+      }, { capture: true });
+
+      // Change fallback to capture blur
+      list.addEventListener('change', (e) => {
+        const ta = e.target;
+        if (ta && ta.tagName === 'TEXTAREA' && (ta.name === 'so_titles[]' || ta.name === 'sos[]')) {
+          lastSavedText.set(ta, ta.value || '');
+        }
+        take();
+      }, { capture: true });
+
+      if (window.MutationObserver){
+        const mo = new MutationObserver(() => take());
+        mo.observe(list, { childList: true, subtree: true });
+      }
+
+      // Add / load predefined actions
+      const addBtn = document.getElementById('so-add-header');
+      if (addBtn) addBtn.addEventListener('click', () => setTimeout(take, 0));
+      const confirmLoad = document.getElementById('confirmLoadPredefinedSos');
+      if (confirmLoad) confirmLoad.addEventListener('click', () => setTimeout(take, 300));
+
+      list.addEventListener('focusin', () => { window.SVActiveModuleName = 'so'; }, true);
+      list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'so'; }, true);
+    }
+    try { safeInitialize('so', snapshotSo()); } catch(e) {}
+    updateButtons();
+  }
+
   function registerIgaWatchers(){
     const st = ensure('iga');
     const take = () => {
@@ -769,6 +897,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerCriteriaWatchers();
     registerIloWatchers();
     registerAssessmentTasksWatchers();
+    registerSoWatchers();
     registerIgaWatchers();
   });
 
