@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -360,7 +360,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           const code = row.code || `IGA${idx + 1}`;
           const tr = document.createElement('tr');
           tr.className = 'iga-row';
-          if (row.id) tr.setAttribute('data-id', row.id);
+          const dataId = row.id ? String(row.id) : `new-${Date.now()}-${idx}`;
+          tr.setAttribute('data-id', dataId);
           tr.innerHTML = `
             <td class="text-center align-middle">
               <div class="iga-badge fw-semibold">${code}</div>
@@ -425,7 +426,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           const code = row.code || `CDIO${idx + 1}`;
           const tr = document.createElement('tr');
           tr.className = 'cdio-row';
-          if (row.id) tr.setAttribute('data-id', row.id);
+          const dataId = row.id ? String(row.id) : `new-${Date.now()}-${idx}`;
+          tr.setAttribute('data-id', dataId);
           tr.innerHTML = `
             <td class="text-center align-middle">
               <div class="cdio-badge fw-semibold">${code}</div>
@@ -445,6 +447,72 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
 
           const titleTa = tr.querySelector('textarea[name="cdio_titles[]"]');
           const descTa = tr.querySelector('textarea[name="cdios[]"]');
+          if (titleTa) { titleTa.value = row.title || ''; autosize(titleTa); }
+          if (descTa) { descTa.value = row.description || ''; autosize(descTa); }
+        });
+      }
+
+      try { if (window.updateProgressBar) window.updateProgressBar(); } catch (e) { /* noop */ }
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
+  function applySdg(snap){
+    const st = ensure('sdg');
+    st.isApplying = true;
+    try {
+      const list = document.getElementById('syllabus-sdg-sortable');
+      if (!list) {
+        console.warn('[APPLY SDG] SDG list not found');
+        return;
+      }
+
+      while (list.firstChild) list.removeChild(list.firstChild);
+
+      const rows = Array.isArray(snap?.rows) ? snap.rows : [];
+      const autosize = (ta) => {
+        if (!ta) return;
+        try { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight || 0) + 'px'; } catch (e) { /* noop */ }
+      };
+
+      if (rows.length === 0) {
+        const placeholder = document.createElement('tr');
+        placeholder.id = 'sdg-placeholder';
+        placeholder.innerHTML = `
+          <td colspan="2" class="text-center text-muted py-4">
+            <p class="mb-2">No SDGs added yet.</p>
+            <p class="mb-0"><small>Click the <strong>+</strong> button above to add an SDG or <strong>Load Predefined</strong> to import SDGs.</small></p>
+          </td>
+        `;
+        list.appendChild(placeholder);
+      } else {
+        rows.forEach((row, idx) => {
+          const code = row.code || `SDG${idx + 1}`;
+          const tr = document.createElement('tr');
+          tr.className = 'sdg-row';
+          // Always set data-id - use original id or create temp id
+          const dataId = row.id ? String(row.id) : `new-${Date.now()}-${idx}`;
+          tr.setAttribute('data-id', dataId);
+          tr.innerHTML = `
+            <td class="text-center align-middle">
+              <div class="sdg-badge fw-semibold">${code}</div>
+            </td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="flex-grow-1 w-100">
+                  <textarea name="sdg_titles[]" class="cis-textarea cis-field autosize" placeholder="Title" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;" required></textarea>
+                  <textarea name="sdgs[]" class="cis-textarea cis-field autosize" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;" required></textarea>
+                  <input type="hidden" name="code[]" value="${code}">
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-sdg ms-2" title="Delete SDG"><i class="bi bi-trash"></i></button>
+              </div>
+            </td>
+          `;
+          list.appendChild(tr);
+
+          const titleTa = tr.querySelector('textarea[name="sdg_titles[]"]');
+          const descTa = tr.querySelector('textarea[name="sdgs[]"]');
           if (titleTa) { titleTa.value = row.title || ''; autosize(titleTa); }
           if (descTa) { descTa.value = row.description || ''; autosize(descTa); }
         });
@@ -489,7 +557,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           const code = row.code || `SO${idx + 1}`;
           const tr = document.createElement('tr');
           tr.className = 'so-row';
-          if (row.id) tr.setAttribute('data-id', row.id);
+          const dataId = row.id ? String(row.id) : `new-${Date.now()}-${idx}`;
+          tr.setAttribute('data-id', dataId);
           tr.innerHTML = `
             <td class="text-center align-middle">
               <div class="so-badge fw-semibold">${code}</div>
@@ -543,6 +612,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'cdio':
           applyCdio(prev);
           break;
+        case 'sdg':
+          applySdg(prev);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(prev);
           break;
@@ -589,6 +661,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'cdio':
           applyCdio(next);
           break;
+        case 'sdg':
+          applySdg(next);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(next);
           break;
@@ -632,6 +707,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const iga = snapshotIga(); safeInitialize('iga', iga); } catch(e) {}
       try { const so = snapshotSo(); safeInitialize('so', so); } catch(e) {}
       try { const cdio = snapshotCdio(); safeInitialize('cdio', cdio); } catch(e) {}
+      try { const sdg = snapshotSdg(); safeInitialize('sdg', sdg); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -943,6 +1019,63 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerSdgWatchers(){
+    const st = ensure('sdg');
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      try { safePush('sdg', snapshotSdg()); } catch (e) { /* noop */ }
+    };
+    const lastSavedText = new WeakMap();
+    const list = document.getElementById('syllabus-sdg-sortable');
+    if (list){
+      // Action-based triggers
+      list.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-delete-sdg')) setTimeout(take, 0);
+      }, { capture: true });
+
+      // Word-boundary snapshots for SDG text
+      list.addEventListener('input', (e) => {
+        const ta = e.target;
+        if (!(ta && ta.tagName === 'TEXTAREA' && (ta.name === 'sdg_titles[]' || ta.name === 'sdgs[]'))) return;
+        const current = ta.value || '';
+        const prev = lastSavedText.get(ta) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(ta, current);
+          take();
+        }
+      }, { capture: true });
+
+      // Change fallback to capture blur
+      list.addEventListener('change', (e) => {
+        const ta = e.target;
+        if (ta && ta.tagName === 'TEXTAREA' && (ta.name === 'sdg_titles[]' || ta.name === 'sdgs[]')) {
+          lastSavedText.set(ta, ta.value || '');
+        }
+        take();
+      }, { capture: true });
+
+      if (window.MutationObserver){
+        const mo = new MutationObserver(() => take());
+        mo.observe(list, { childList: true, subtree: true });
+      }
+
+      // Add / load predefined actions
+      const addBtn = document.getElementById('sdg-add-header');
+      if (addBtn) addBtn.addEventListener('click', () => setTimeout(take, 0));
+      const confirmLoad = document.getElementById('confirmLoadPredefinedSdgs');
+      if (confirmLoad) confirmLoad.addEventListener('click', () => setTimeout(take, 300));
+
+      list.addEventListener('focusin', () => { window.SVActiveModuleName = 'sdg'; }, true);
+      list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'sdg'; }, true);
+    }
+    try { safeInitialize('sdg', snapshotSdg()); } catch(e) {}
+    updateButtons();
+  }
+
   function registerIgaWatchers(){
     const st = ensure('iga');
     const take = () => {
@@ -1026,6 +1159,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerIloWatchers();
     registerAssessmentTasksWatchers();
     registerCdioWatchers();
+    registerSdgWatchers();
     registerSoWatchers();
     registerIgaWatchers();
   });

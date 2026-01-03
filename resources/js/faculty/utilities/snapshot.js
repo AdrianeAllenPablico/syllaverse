@@ -365,6 +365,45 @@ export function snapshotCdio(){
   };
 }
 
+// Sustainable Development Goals
+export function snapshotSdg(){
+  const list = document.getElementById('syllabus-sdg-sortable');
+  const rows = [];
+  const lines = ['PARTIAL_BEGIN:sdg', 'TITLE: Sustainable Development Goals', 'COLUMNS: Code | Title | Description | HasContent'];
+
+  if (list) {
+    const sdgRows = Array.from(list.querySelectorAll('tr')).filter(r => r.id !== 'sdg-placeholder');
+    sdgRows.forEach((row, idx) => {
+      const dataId = row.getAttribute('data-id') || '';
+      const id = (/^\d+$/.test(dataId)) ? Number(dataId) : null;
+      const codeInput = row.querySelector('input[name="code[]"]');
+      const code = codeInput ? (codeInput.value || `SDG${idx + 1}`) : `SDG${idx + 1}`;
+      const titleTa = row.querySelector('textarea[name="sdg_titles[]"]');
+      const descTa = row.querySelector('textarea[name="sdgs[]"]');
+      const title = titleTa ? (titleTa.value || '').trim() : '';
+      const description = descTa ? (descTa.value || '').trim() : '';
+      const hasContent = !!(title || description);
+
+      rows.push({ id, code, title, description, position: idx + 1, hasContent });
+      const descDisplay = description || '-';
+      lines.push(`ROW: ${code} | ${title || '-'} | ${descDisplay} | ${hasContent ? 'yes' : 'no'}`);
+    });
+  }
+
+  lines.push('PARTIAL_END:sdg');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+
+  return {
+    partial: 'sdg',
+    title: 'Sustainable Development Goals',
+    rows,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Student Outcomes
 export function snapshotSo(){
   const list = document.getElementById('syllabus-so-sortable');
@@ -414,7 +453,8 @@ if (typeof window !== 'undefined') {
     snapshotAssessmentTasks,
     snapshotIga,
     snapshotSo,
-    snapshotCdio
+    snapshotCdio,
+    snapshotSdg
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -425,4 +465,5 @@ if (typeof window !== 'undefined') {
   window.snapshotIga = snapshotIga;
   window.snapshotSo = snapshotSo;
   window.snapshotCdio = snapshotCdio;
+  window.snapshotSdg = snapshotSdg;
 }
