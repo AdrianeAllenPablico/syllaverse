@@ -106,6 +106,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         list.appendChild(placeholder);
       }
+      // Fire iloChanged event after last row removal so undo/redo captures the empty state
+      try {
+        document.dispatchEvent(new CustomEvent('iloChanged'));
+      } catch (e) { /* noop */ }
     } else {
       renumber();
     }
@@ -180,6 +184,11 @@ document.addEventListener('DOMContentLoaded', () => {
     renumber();
     const ta = row.querySelector('textarea.autosize'); if (ta) ta.focus();
     try { updateUnsavedCount(); } catch (e) { /* noop */ }
+    
+    // Fire iloChanged event after row addition for undo/redo tracking
+    try {
+      document.dispatchEvent(new CustomEvent('iloChanged'));
+    } catch (e) { /* noop */ }
     
     // Set active module name
     try { window.SVActiveModuleName = 'ilo'; } catch (e) { /* noop */ }
