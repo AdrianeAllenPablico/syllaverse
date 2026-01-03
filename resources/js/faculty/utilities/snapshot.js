@@ -326,6 +326,45 @@ export function snapshotIga(){
   };
 }
 
+// CDIO Framework Skills
+export function snapshotCdio(){
+  const list = document.getElementById('syllabus-cdio-sortable');
+  const rows = [];
+  const lines = ['PARTIAL_BEGIN:cdio', 'TITLE: CDIO Framework Skills', 'COLUMNS: Code | Title | Description | HasContent'];
+
+  if (list) {
+    const cdioRows = Array.from(list.querySelectorAll('tr')).filter(r => r.id !== 'cdio-placeholder');
+    cdioRows.forEach((row, idx) => {
+      const dataId = row.getAttribute('data-id') || '';
+      const id = (/^\d+$/.test(dataId)) ? Number(dataId) : null;
+      const codeInput = row.querySelector('input[name="code[]"]');
+      const code = codeInput ? (codeInput.value || `CDIO${idx + 1}`) : `CDIO${idx + 1}`;
+      const titleTa = row.querySelector('textarea[name="cdio_titles[]"]');
+      const descTa = row.querySelector('textarea[name="cdios[]"]');
+      const title = titleTa ? (titleTa.value || '').trim() : '';
+      const description = descTa ? (descTa.value || '').trim() : '';
+      const hasContent = !!(title || description);
+
+      rows.push({ id, code, title, description, position: idx + 1, hasContent });
+      const descDisplay = description || '-';
+      lines.push(`ROW: ${code} | ${title || '-'} | ${descDisplay} | ${hasContent ? 'yes' : 'no'}`);
+    });
+  }
+
+  lines.push('PARTIAL_END:cdio');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+
+  return {
+    partial: 'cdio',
+    title: 'CDIO Framework Skills',
+    rows,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Student Outcomes
 export function snapshotSo(){
   const list = document.getElementById('syllabus-so-sortable');
@@ -374,7 +413,8 @@ if (typeof window !== 'undefined') {
     snapshotIlo,
     snapshotAssessmentTasks,
     snapshotIga,
-    snapshotSo
+    snapshotSo,
+    snapshotCdio
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -384,4 +424,5 @@ if (typeof window !== 'undefined') {
   window.snapshotAssessmentTasks = snapshotAssessmentTasks;
   window.snapshotIga = snapshotIga;
   window.snapshotSo = snapshotSo;
+  window.snapshotCdio = snapshotCdio;
 }

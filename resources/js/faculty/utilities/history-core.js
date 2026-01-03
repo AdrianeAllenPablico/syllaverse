@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -392,6 +392,70 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
   }
 
+  function applyCdio(snap){
+    const st = ensure('cdio');
+    st.isApplying = true;
+    try {
+      const list = document.getElementById('syllabus-cdio-sortable');
+      if (!list) {
+        console.warn('[APPLY CDIO] CDIO list not found');
+        return;
+      }
+
+      while (list.firstChild) list.removeChild(list.firstChild);
+
+      const rows = Array.isArray(snap?.rows) ? snap.rows : [];
+      const autosize = (ta) => {
+        if (!ta) return;
+        try { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight || 0) + 'px'; } catch (e) { /* noop */ }
+      };
+
+      if (rows.length === 0) {
+        const placeholder = document.createElement('tr');
+        placeholder.id = 'cdio-placeholder';
+        placeholder.innerHTML = `
+          <td colspan="2" class="text-center text-muted py-4">
+            <p class="mb-2">No CDIOs added yet.</p>
+            <p class="mb-0"><small>Click the <strong>+</strong> button above to add a CDIO or <strong>Load Predefined</strong> to import CDIOs.</small></p>
+          </td>
+        `;
+        list.appendChild(placeholder);
+      } else {
+        rows.forEach((row, idx) => {
+          const code = row.code || `CDIO${idx + 1}`;
+          const tr = document.createElement('tr');
+          tr.className = 'cdio-row';
+          if (row.id) tr.setAttribute('data-id', row.id);
+          tr.innerHTML = `
+            <td class="text-center align-middle">
+              <div class="cdio-badge fw-semibold">${code}</div>
+            </td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="flex-grow-1 w-100">
+                  <textarea name="cdio_titles[]" class="cis-textarea cis-field autosize" placeholder="Title" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;" required></textarea>
+                  <textarea name="cdios[]" class="cis-textarea cis-field autosize" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;" required></textarea>
+                  <input type="hidden" name="code[]" value="${code}">
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-cdio ms-2" title="Delete CDIO"><i class="bi bi-trash"></i></button>
+              </div>
+            </td>
+          `;
+          list.appendChild(tr);
+
+          const titleTa = tr.querySelector('textarea[name="cdio_titles[]"]');
+          const descTa = tr.querySelector('textarea[name="cdios[]"]');
+          if (titleTa) { titleTa.value = row.title || ''; autosize(titleTa); }
+          if (descTa) { descTa.value = row.description || ''; autosize(descTa); }
+        });
+      }
+
+      try { if (window.updateProgressBar) window.updateProgressBar(); } catch (e) { /* noop */ }
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function applySo(snap){
     const st = ensure('so');
     st.isApplying = true;
@@ -476,6 +540,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'ilo':
           applyIlo(prev);
           break;
+        case 'cdio':
+          applyCdio(prev);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(prev);
           break;
@@ -519,6 +586,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'ilo':
           applyIlo(next);
           break;
+        case 'cdio':
+          applyCdio(next);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(next);
           break;
@@ -561,6 +631,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const at = snapshotAssessmentTasks(); safeInitialize('assessmentTasks', at); } catch(e) {}
       try { const iga = snapshotIga(); safeInitialize('iga', iga); } catch(e) {}
       try { const so = snapshotSo(); safeInitialize('so', so); } catch(e) {}
+      try { const cdio = snapshotCdio(); safeInitialize('cdio', cdio); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -758,6 +829,63 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerCdioWatchers(){
+    const st = ensure('cdio');
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      try { safePush('cdio', snapshotCdio()); } catch (e) { /* noop */ }
+    };
+    const lastSavedText = new WeakMap();
+    const list = document.getElementById('syllabus-cdio-sortable');
+    if (list){
+      // Action-based triggers
+      list.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-delete-cdio')) setTimeout(take, 0);
+      }, { capture: true });
+
+      // Word-boundary snapshots for CDIO text
+      list.addEventListener('input', (e) => {
+        const ta = e.target;
+        if (!(ta && ta.tagName === 'TEXTAREA' && (ta.name === 'cdio_titles[]' || ta.name === 'cdios[]'))) return;
+        const current = ta.value || '';
+        const prev = lastSavedText.get(ta) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(ta, current);
+          take();
+        }
+      }, { capture: true });
+
+      // Change fallback to capture blur
+      list.addEventListener('change', (e) => {
+        const ta = e.target;
+        if (ta && ta.tagName === 'TEXTAREA' && (ta.name === 'cdio_titles[]' || ta.name === 'cdios[]')) {
+          lastSavedText.set(ta, ta.value || '');
+        }
+        take();
+      }, { capture: true });
+
+      if (window.MutationObserver){
+        const mo = new MutationObserver(() => take());
+        mo.observe(list, { childList: true, subtree: true });
+      }
+
+      // Add / load predefined actions
+      const addBtn = document.getElementById('cdio-add-header');
+      if (addBtn) addBtn.addEventListener('click', () => setTimeout(take, 0));
+      const confirmLoad = document.getElementById('confirmLoadPredefinedCdios');
+      if (confirmLoad) confirmLoad.addEventListener('click', () => setTimeout(take, 300));
+
+      list.addEventListener('focusin', () => { window.SVActiveModuleName = 'cdio'; }, true);
+      list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'cdio'; }, true);
+    }
+    try { safeInitialize('cdio', snapshotCdio()); } catch(e) {}
+    updateButtons();
+  }
+
   function registerSoWatchers(){
     const st = ensure('so');
     const take = () => {
@@ -897,6 +1025,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerCriteriaWatchers();
     registerIloWatchers();
     registerAssessmentTasksWatchers();
+    registerCdioWatchers();
     registerSoWatchers();
     registerIgaWatchers();
   });
