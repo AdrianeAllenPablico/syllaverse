@@ -434,6 +434,44 @@ export function snapshotCoursePolicies(){
   };
 }
 
+// Teaching, Learning, and Assessment
+export function snapshotTla(){
+  const tbody = document.querySelector('#tlaTable tbody');
+  const rows = [];
+  const lines = ['PARTIAL_BEGIN:tla', 'TITLE: Teaching, Learning, and Assessment (TLA)', 'COLUMNS: Ch | Topic | Wks | Outcomes | ILO | SO | Delivery'];
+
+  if (tbody) {
+    const tlaRows = Array.from(tbody.querySelectorAll('tr')).filter(r => r.id !== 'tla-placeholder');
+    tlaRows.forEach((row, idx) => {
+      const dataId = row.getAttribute('data-tla-id') || '';
+      const id = (/^\d+$/.test(dataId)) ? Number(dataId) : null;
+      const ch = row.querySelector('input[name*="[ch]"]')?.value || '';
+      const topic = row.querySelector('textarea[name*="[topic]"]')?.value || '';
+      const wks = row.querySelector('input[name*="[wks]"]')?.value || '';
+      const outcomes = row.querySelector('textarea[name*="[outcomes]"]')?.value || '';
+      const ilo = row.querySelector('input[name*="[ilo]"]')?.value || '';
+      const so = row.querySelector('input[name*="[so]"]')?.value || '';
+      const delivery = row.querySelector('textarea[name*="[delivery]"]')?.value || '';
+
+      rows.push({ id, ch, topic, wks, outcomes, ilo, so, delivery, position: idx + 1 });
+      lines.push(`ROW: ${ch} | ${topic || '-'} | ${wks} | ${outcomes || '-'} | ${ilo} | ${so} | ${delivery || '-'}`);
+    });
+  }
+
+  lines.push('PARTIAL_END:tla');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+
+  return {
+    partial: 'tla',
+    title: 'Teaching, Learning, and Assessment',
+    rows,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Student Outcomes
 export function snapshotSo(){
   const list = document.getElementById('syllabus-so-sortable');
@@ -485,7 +523,8 @@ if (typeof window !== 'undefined') {
     snapshotSo,
     snapshotCdio,
     snapshotSdg,
-    snapshotCoursePolicies
+    snapshotCoursePolicies,
+    snapshotTla
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -498,4 +537,5 @@ if (typeof window !== 'undefined') {
   window.snapshotCdio = snapshotCdio;
   window.snapshotSdg = snapshotSdg;
   window.snapshotCoursePolicies = snapshotCoursePolicies;
+  window.snapshotTla = snapshotTla;
 }

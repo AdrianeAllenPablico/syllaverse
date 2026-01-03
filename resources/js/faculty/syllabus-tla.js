@@ -136,6 +136,14 @@
 			// Focus sensible field
 			setTimeout(() => focusRowDefaultField(newRow), 40);
 
+			// Trigger change events for undo/redo capture
+			setTimeout(() => {
+				newRow.querySelectorAll('input, textarea').forEach(el => {
+					el.dispatchEvent(new Event('input', { bubbles: true }));
+					el.dispatchEvent(new Event('change', { bubbles: true }));
+				});
+			}, 50);
+
 			// Unsaved changes indicator if available
 			try { if (typeof window.updateUnsavedCount === 'function') window.updateUnsavedCount(); } catch (e) {}
 		}

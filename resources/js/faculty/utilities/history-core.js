@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -549,6 +549,81 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
   }
 
+  function applyTla(snap){
+    const st = ensure('tla');
+    st.isApplying = true;
+    try {
+      const tbody = document.querySelector('#tlaTable tbody');
+      if (!tbody) {
+        console.warn('[APPLY TLA] TLA tbody not found');
+        return;
+      }
+
+      while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
+      const rows = Array.isArray(snap?.rows) ? snap.rows : [];
+      const autosize = (ta) => {
+        if (!ta) return;
+        try { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight || 0) + 'px'; } catch (e) { /* noop */ }
+      };
+
+      if (rows.length === 0) {
+        const placeholder = document.createElement('tr');
+        placeholder.id = 'tla-placeholder';
+        placeholder.innerHTML = `
+          <td colspan="8" class="text-center text-muted py-4">
+            <p class="mb-2">No TLA activities added yet.</p>
+            <p class="mb-0"><small>Click the <strong>+</strong> button above to add a TLA row.</small></p>
+          </td>
+        `;
+        tbody.appendChild(placeholder);
+      } else {
+        rows.forEach((row, idx) => {
+          const tr = document.createElement('tr');
+          tr.className = 'text-center align-middle';
+          const dataId = row.id ? String(row.id) : `new-${Date.now()}-${idx}`;
+          tr.setAttribute('data-tla-id', dataId);
+          tr.innerHTML = `
+            <td class="tla-ch">
+              <input name="tla[${idx}][ch]" form="syllabusForm" class="form-control cis-input text-center" value="${(row.ch || '').replace(/"/g, '&quot;')}" placeholder="-">
+            </td>
+            <td class="tla-topic text-start">
+              <textarea name="tla[${idx}][topic]" form="syllabusForm" class="form-control cis-textarea autosize cis-field" rows="2" placeholder="-">${(row.topic || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+            </td>
+            <td class="tla-wks">
+              <input name="tla[${idx}][wks]" form="syllabusForm" class="form-control cis-input text-center" value="${(row.wks || '').replace(/"/g, '&quot;')}" placeholder="-">
+            </td>
+            <td class="tla-outcomes text-start">
+              <textarea name="tla[${idx}][outcomes]" form="syllabusForm" class="form-control cis-textarea autosize cis-field" rows="2" placeholder="-">${(row.outcomes || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+            </td>
+            <td class="tla-ilo">
+              <input name="tla[${idx}][ilo]" form="syllabusForm" class="form-control cis-input text-center" value="${(row.ilo || '').replace(/"/g, '&quot;')}" placeholder="-">
+            </td>
+            <td class="tla-so">
+              <input name="tla[${idx}][so]" form="syllabusForm" class="form-control cis-input text-center" value="${(row.so || '').replace(/"/g, '&quot;')}" placeholder="-">
+            </td>
+            <td class="tla-delivery">
+              <textarea name="tla[${idx}][delivery]" form="syllabusForm" class="form-control cis-textarea autosize cis-field" rows="1" placeholder="-">${(row.delivery || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+            </td>
+            <td class="tla-actions text-center">
+              <button type="button" class="btn btn-sm btn-outline-danger remove-tla-row" data-id="${dataId}" title="Delete Row"><i class="bi bi-trash"></i></button>
+            </td>
+            <input type="hidden" class="tla-id-field" name="tla[${idx}][id]" value="${row.id || ''}">
+            <input type="hidden" class="tla-position-field" name="tla[${idx}][position]" value="${row.position || idx + 1}">
+          `;
+          tbody.appendChild(tr);
+
+          const textareas = tr.querySelectorAll('textarea');
+          textareas.forEach(ta => autosize(ta));
+        });
+      }
+
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function applySo(snap){
     const st = ensure('so');
     st.isApplying = true;
@@ -643,6 +718,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'coursePolicies':
           applyCoursePolicies(prev);
           break;
+        case 'tla':
+          applyTla(prev);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(prev);
           break;
@@ -695,6 +773,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'coursePolicies':
           applyCoursePolicies(next);
           break;
+        case 'tla':
+          applyTla(next);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(next);
           break;
@@ -740,6 +821,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const cdio = snapshotCdio(); safeInitialize('cdio', cdio); } catch(e) {}
       try { const sdg = snapshotSdg(); safeInitialize('sdg', sdg); } catch(e) {}
       try { const cp = snapshotCoursePolicies(); safeInitialize('coursePolicies', cp); } catch(e) {}
+      try { const tla = snapshotTla(); safeInitialize('tla', tla); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -1150,6 +1232,69 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerTlaWatchers(){
+    const st = ensure('tla');
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      try { safePush('tla', snapshotTla()); } catch (e) { /* noop */ }
+    };
+    const lastSavedText = new WeakMap();
+    const tbody = document.querySelector('#tlaTable tbody');
+    if (tbody){
+      // Action-based triggers
+      tbody.addEventListener('click', (e) => {
+        if (e.target.closest('.remove-tla-row')) setTimeout(take, 0);
+      }, { capture: true });
+
+      // Word-boundary snapshots for TLA text
+      tbody.addEventListener('input', (e) => {
+        const ta = e.target;
+        if (!(ta && ta.tagName === 'TEXTAREA')) return;
+        const current = ta.value || '';
+        const prev = lastSavedText.get(ta) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(ta, current);
+          take();
+        }
+      }, { capture: true });
+
+      // Change fallback
+      tbody.addEventListener('change', (e) => {
+        const ta = e.target;
+        if (ta && ta.tagName === 'TEXTAREA') {
+          lastSavedText.set(ta, ta.value || '');
+        }
+        take();
+      }, { capture: true });
+
+      // Text input fields (ch, wks, ilo, so) - capture on input
+      tbody.addEventListener('input', (e) => {
+        const input = e.target;
+        if (input && input.tagName === 'INPUT' && (input.name.includes('[ch]') || input.name.includes('[wks]') || input.name.includes('[ilo]') || input.name.includes('[so]'))) {
+          take();
+        }
+      }, { capture: true });
+
+      if (window.MutationObserver){
+        const mo = new MutationObserver(() => take());
+        mo.observe(tbody, { childList: true, subtree: true });
+      }
+
+      // Add row action
+      const addBtn = document.getElementById('add-tla-row');
+      if (addBtn) addBtn.addEventListener('click', () => setTimeout(take, 100));
+
+      tbody.addEventListener('focusin', () => { window.SVActiveModuleName = 'tla'; }, true);
+      tbody.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'tla'; }, true);
+    }
+    try { safeInitialize('tla', snapshotTla()); } catch(e) {}
+    updateButtons();
+  }
+
   function registerIgaWatchers(){
     const st = ensure('iga');
     const take = () => {
@@ -1235,6 +1380,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerCdioWatchers();
     registerSdgWatchers();
     registerCoursePoliciesWatchers();
+    registerTlaWatchers();
     registerSoWatchers();
     registerIgaWatchers();
   });
