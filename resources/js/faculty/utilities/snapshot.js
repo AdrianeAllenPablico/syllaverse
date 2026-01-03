@@ -287,6 +287,45 @@ export function snapshotAssessmentTasks(){
   };
 }
 
+// Institutional Graduate Attributes
+export function snapshotIga(){
+  const list = document.getElementById('syllabus-iga-sortable');
+  const rows = [];
+  const lines = ['PARTIAL_BEGIN:iga', 'TITLE: Institutional Graduate Attributes', 'COLUMNS: Code | Title | Description | HasContent'];
+
+  if (list) {
+    const igaRows = Array.from(list.querySelectorAll('tr.iga-row'));
+    igaRows.forEach((row, idx) => {
+      const dataId = row.getAttribute('data-id') || '';
+      const id = (/^\d+$/.test(dataId)) ? Number(dataId) : null;
+      const codeInput = row.querySelector('input[name="code[]"]');
+      const code = codeInput ? (codeInput.value || `IGA${idx + 1}`) : `IGA${idx + 1}`;
+      const titleTa = row.querySelector('textarea[name="iga_titles[]"]');
+      const descTa = row.querySelector('textarea[name="igas[]"]');
+      const title = titleTa ? (titleTa.value || '').trim() : '';
+      const description = descTa ? (descTa.value || '').trim() : '';
+      const hasContent = !!(title || description);
+
+      rows.push({ id, code, title, description, position: idx + 1, hasContent });
+      const descDisplay = description || '-';
+      lines.push(`ROW: ${code} | ${title || '-'} | ${descDisplay} | ${hasContent ? 'yes' : 'no'}`);
+    });
+  }
+
+  lines.push('PARTIAL_END:iga');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+
+  return {
+    partial: 'iga',
+    title: 'Institutional Graduate Attributes',
+    rows,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Global window exposure for debugging/inspection (optional)
 if (typeof window !== 'undefined') {
   window.SVSnapshot = {
@@ -294,7 +333,8 @@ if (typeof window !== 'undefined') {
     snapshotCourseInfo,
     snapshotCriteria,
     snapshotIlo,
-    snapshotAssessmentTasks
+    snapshotAssessmentTasks,
+    snapshotIga
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -302,4 +342,5 @@ if (typeof window !== 'undefined') {
   window.snapshotCriteria = snapshotCriteria;
   window.snapshotIlo = snapshotIlo;
   window.snapshotAssessmentTasks = snapshotAssessmentTasks;
+  window.snapshotIga = snapshotIga;
 }

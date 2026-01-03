@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -324,6 +324,74 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
   }
 
+  function applyIga(snap){
+    const st = ensure('iga');
+    st.isApplying = true;
+    try {
+      const list = document.getElementById('syllabus-iga-sortable');
+      if (!list) {
+        console.warn('[APPLY IGA] IGA list not found');
+        return;
+      }
+
+      while (list.firstChild) {
+        list.removeChild(list.firstChild);
+      }
+
+      const rows = Array.isArray(snap?.rows) ? snap.rows : [];
+
+      const autosize = (ta) => {
+        if (!ta) return;
+        try { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight || 0) + 'px'; } catch (e) { /* noop */ }
+      };
+
+      if (rows.length === 0) {
+        const placeholder = document.createElement('tr');
+        placeholder.id = 'iga-placeholder';
+        placeholder.innerHTML = `
+          <td colspan="2" class="text-center text-muted py-4">
+            <p class="mb-2">No IGAs added yet.</p>
+            <p class="mb-0"><small>Click the <strong>+</strong> button above to add an IGA or <strong>Load Predefined</strong> to import IGAs.</small></p>
+          </td>
+        `;
+        list.appendChild(placeholder);
+      } else {
+        rows.forEach((row, idx) => {
+          const code = row.code || `IGA${idx + 1}`;
+          const tr = document.createElement('tr');
+          tr.className = 'iga-row';
+          if (row.id) tr.setAttribute('data-id', row.id);
+          tr.innerHTML = `
+            <td class="text-center align-middle">
+              <div class="iga-badge fw-semibold">${code}</div>
+            </td>
+            <td>
+              <div class="d-flex align-items-center gap-2">
+                <div class="flex-grow-1 w-100">
+                  <textarea name="iga_titles[]" class="cis-textarea cis-field autosize" placeholder="Title" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-weight:700;" required></textarea>
+                  <textarea name="igas[]" class="cis-textarea cis-field autosize" placeholder="Description" rows="1" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;" required></textarea>
+                </div>
+                <input type="hidden" name="code[]" value="${code}">
+                <button type="button" class="btn btn-sm btn-outline-danger btn-delete-iga ms-2" title="Delete IGA"><i class="bi bi-trash"></i></button>
+              </div>
+            </td>
+          `;
+
+          list.appendChild(tr);
+
+          const titleTa = tr.querySelector('textarea[name="iga_titles[]"]');
+          const descTa = tr.querySelector('textarea[name="igas[]"]');
+          if (titleTa) { titleTa.value = row.title || ''; autosize(titleTa); }
+          if (descTa) { descTa.value = row.description || ''; autosize(descTa); }
+        });
+      }
+
+      try { if (window.updateIgaVisibleCodes) window.updateIgaVisibleCodes(); } catch (e) { /* noop */ }
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function undo(){
     if (!globalHistory.length) return false;
     globalApplying = true;
@@ -346,6 +414,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           break;
         case 'assessmentTasks':
           applyAssessmentTasks(prev);
+          break;
+        case 'iga':
+          applyIga(prev);
           break;
         default:
           break;
@@ -384,6 +455,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'assessmentTasks':
           applyAssessmentTasks(next);
           break;
+        case 'iga':
+          applyIga(next);
+          break;
         default:
           break;
       }
@@ -415,6 +489,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const cr = snapshotCriteria(); safeInitialize('criteria', cr); } catch(e) {}
       try { const ilo = snapshotIlo(); safeInitialize('ilo', ilo); } catch(e) {}
       try { const at = snapshotAssessmentTasks(); safeInitialize('assessmentTasks', at); } catch(e) {}
+      try { const iga = snapshotIga(); safeInitialize('iga', iga); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -612,6 +687,62 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerIgaWatchers(){
+    const st = ensure('iga');
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      try { safePush('iga', snapshotIga()); } catch (e) { /* noop */ }
+    };
+    const lastSavedText = new WeakMap(); // track last-snapshotted value per textarea
+    const list = document.getElementById('syllabus-iga-sortable');
+    if (list){
+      // Action-based triggers
+      list.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-delete-iga')) setTimeout(take, 0);
+      }, { capture: true });
+
+      // Inputs: snapshot on word boundaries (space/punctuation) or deletions, not pause-based
+      list.addEventListener('input', (e) => {
+        const ta = e.target;
+        if (!(ta && ta.tagName === 'TEXTAREA' && (ta.name === 'iga_titles[]' || ta.name === 'igas[]'))) return;
+        const current = ta.value || '';
+        const prev = lastSavedText.get(ta) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar); // word boundary characters
+        const isDeletion = current.length < prev.length; // backspace/delete
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(ta, current);
+          take();
+        }
+      }, { capture: true });
+
+      // Change event as a fallback when leaving the field
+      list.addEventListener('change', (e) => {
+        const ta = e.target;
+        if (ta && ta.tagName === 'TEXTAREA' && (ta.name === 'iga_titles[]' || ta.name === 'igas[]')) {
+          lastSavedText.set(ta, ta.value || '');
+        }
+        take();
+      }, { capture: true });
+      if (window.MutationObserver){
+        const mo = new MutationObserver(() => take());
+        mo.observe(list, { childList: true, subtree: true });
+      }
+
+      // Add-button and load-predefined actions
+      const addBtn = document.getElementById('iga-add-header');
+      if (addBtn) addBtn.addEventListener('click', () => setTimeout(take, 0));
+      const confirmLoad = document.getElementById('confirmLoadPredefinedIgas');
+      if (confirmLoad) confirmLoad.addEventListener('click', () => setTimeout(take, 300));
+
+      list.addEventListener('focusin', () => { window.SVActiveModuleName = 'iga'; }, true);
+      list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'iga'; }, true);
+    }
+    try { safeInitialize('iga', snapshotIga()); } catch(e) {}
+    updateButtons();
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     // wire toolbar buttons
     const undoBtn = document.getElementById('syllabusUndoBtn');
@@ -638,6 +769,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerCriteriaWatchers();
     registerIloWatchers();
     registerAssessmentTasksWatchers();
+    registerIgaWatchers();
   });
 
   // expose API
