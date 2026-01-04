@@ -16,6 +16,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
   let suppressAtWatcherUntil = 0; // temporarily pause AT watcher after ILO structural events
   let suppressAssessmentMappingUntil = 0; // temporarily pause AM watcher when changes originate from TLA
   let lastValidAssessmentMarks = []; // Cache marks from before "No weeks" placeholder
+  let initialLoadUntil = Date.now() + 1200; // initial window to avoid undo entries from server-rendered data
 
   // Expose globalApplying on window so watchers can check it
   function setGlobalApplying(value) {
@@ -1094,7 +1095,18 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         console.log('[ILO WATCHER] Merging AT snapshot into ILO snapshot, sections:', eventDetail.atSnapshot?.sections?.length || 0);
         console.log('[ILO WATCHER] ✅ MERGED AT SNAPSHOT - Full Data:');
         console.log(JSON.stringify(eventDetail.atSnapshot, null, 2));
+        // Attach AT snapshot to NEXT (the snapshot we are pushing)
         snap.atSnapshot = eventDetail.atSnapshot;
+        // Also enrich PREV (currentSnap['ilo']) so UNDO can restore AT data too
+        const prevSnap = currentSnap['ilo'];
+        if (prevSnap && Array.isArray(prevSnap.ilos)) {
+          const basePrevHash = (prevSnap.hash || '').split('|at:')[0];
+          const combinedPrevHash = `${basePrevHash}|at:${eventDetail.atSnapshot.hash || ''}`;
+          currentSnap['ilo'] = { ...prevSnap, atSnapshot: eventDetail.atSnapshot, hash: combinedPrevHash, ts: Date.now() };
+          console.log('[ILO WATCHER] Enriched PREV snapshot with AT data for coordinated undo');
+        } else {
+          console.log('[ILO WATCHER] No existing PREV ILO snapshot to enrich');
+        }
       } else {
         console.log('[ILO WATCHER] No AT snapshot to merge');
       }
@@ -1148,6 +1160,17 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     let lastAtHash = null;
     const take = () => { 
       if (st.isApplying || window.globalApplying) return;
+      // Avoid creating undo entries during initial server-rendered load
+      if (Date.now() < initialLoadUntil) {
+        try {
+          const baseline = snapshotAssessmentTasks();
+          currentSnap['assessmentTasks'] = baseline;
+          lastAtHash = baseline.hash;
+          lastHashes['assessmentTasks'] = baseline.hash;
+          console.log('[AT WATCHER] Initial load baseline set, hash:', baseline.hash.substring(0, 8));
+        } catch(e) {}
+        return;
+      }
       if (Date.now() < suppressAtWatcherUntil) {
         console.log('[AT WATCHER] Suppressed due to recent ILO structural change');
         return;
@@ -1195,7 +1218,15 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           updateButtons();
           return;
         }
-        // Fallback: if no prior ILO entry, push a new one
+        // Fallback: if no prior history entry, update baseline only to avoid creating
+        // an undo step on initial load/render (no user action yet)
+        if (!lastEntry) {
+          currentSnap['ilo'] = merged;
+          lastHashes['ilo'] = combinedHash;
+          updateButtons();
+          return;
+        }
+        // Otherwise, push a new ILO entry
         safePush('ilo', merged);
       }
     };
