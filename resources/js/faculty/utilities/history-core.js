@@ -1596,21 +1596,20 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try {
         clearTimeout(captureTimeout);
         const amSnap = snapshotAssessmentMapping();
-        // Cache latest valid marks here as well so TLA undo/redo can fall back.
-        // IMPORTANT: do not shrink the cached pattern when weeks/marks are removed by TLA;
-        // we want the "maximum" mark pattern for TLA undo, while AM has its own undo stack.
+        // Cache latest valid marks here so both TLA undo and
+        // Criteria/AT-driven row sync can restore the *current*
+        // mark pattern, even if it has fewer Xs than before.
         if (amSnap && Array.isArray(amSnap.marks) && amSnap.marks.length > 0) {
           const hasValidLabels = amSnap.marks.some(m => m.weekLabel && m.weekLabel !== 'No weeks');
           if (hasValidLabels) {
-            const newMarkedCount = amSnap.marks.filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
-            const oldMarkedCount = (lastValidAssessmentMarks || []).filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
-            if (newMarkedCount >= oldMarkedCount) {
-              lastValidAssessmentMarks = amSnap.marks;
-              console.log('[AM SNAPSHOT] Cached valid marks from AM watcher:', lastValidAssessmentMarks.length, '(marked:', newMarkedCount, ')');
-            } else {
-              console.log('[AM SNAPSHOT] Skip caching marks (new marked', newMarkedCount, '< old marked', oldMarkedCount, ')');
-            }
+            lastValidAssessmentMarks = amSnap.marks;
+            const markedCount = amSnap.marks.filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
+            console.log('[AM SNAPSHOT] Cached marks from AM watcher:', lastValidAssessmentMarks.length, '(marked:', markedCount, ')');
           }
+        } else {
+          // If user cleared all marks, reflect that in the cache too
+          lastValidAssessmentMarks = [];
+          console.log('[AM SNAPSHOT] Cached empty marks (all cleared by user)');
         }
         safePush('assessment_mapping', amSnap);
       } catch (e) { /* noop */ }
@@ -1795,6 +1794,14 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       getActiveKey,
       applyMissionVision,
       applyCourseInfo,
+      // Expose helpers so other modules (e.g., Assessment Mapping / Criteria sync)
+      // can safely re-apply cached assessment marks after structural changes.
+      getLastValidAssessmentMarks: function(){
+        return (lastValidAssessmentMarks || []).slice();
+      },
+      applyAssessmentMarksInline: function(marks){
+        applyInlineAssessmentMarks(Array.isArray(marks) ? marks : []);
+      }
     };
   } catch(e){}
 

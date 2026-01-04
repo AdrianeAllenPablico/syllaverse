@@ -56,10 +56,12 @@ document.addEventListener('DOMContentLoaded', function() {
 			headerRow.appendChild(placeholderTh);
 			
 			// Add placeholder cells to all data rows
-			allDataRows.forEach(function(row) {
+			allDataRows.forEach(function(row, index) {
 				const placeholderTd = document.createElement('td');
 				placeholderTd.className = 'week-mapping';
-				placeholderTd.style.cssText = 'border:none; height:30px; padding:0.2rem 0.5rem; background-color:#fff; text-align:center;';
+				// Match initial blade markup but add top border for rows after the first
+				const borderTop = index > 0 ? 'border-top:1px solid #343a40;' : '';
+				placeholderTd.style.cssText = `border:none; ${borderTop} height:30px; padding:0.2rem 0.5rem; background-color:#fff; height:30px;`;
 				row.appendChild(placeholderTd);
 			});
 			
@@ -104,10 +106,12 @@ document.addEventListener('DOMContentLoaded', function() {
 			headerRow.appendChild(placeholderTh);
 			
 			// Add placeholder cells to all data rows
-			allDataRows.forEach(function(row) {
+			allDataRows.forEach(function(row, index) {
 				const placeholderTd = document.createElement('td');
 				placeholderTd.className = 'week-mapping';
-				placeholderTd.style.cssText = 'border:none; height:30px; padding:0.2rem 0.5rem; background-color:#fff; text-align:center;';
+				// Match initial blade markup but add top border for rows after the first
+				const borderTop = index > 0 ? 'border-top:1px solid #343a40;' : '';
+				placeholderTd.style.cssText = `border:none; ${borderTop} height:30px; padding:0.2rem 0.5rem; background-color:#fff; height:30px;`;
 				row.appendChild(placeholderTd);
 			});
 			
@@ -299,8 +303,9 @@ document.addEventListener('DOMContentLoaded', function() {
 					const placeholderTd = document.createElement('td');
 					placeholderTd.className = 'week-mapping';
 					const borderTop = index > 0 ? 'border-top:1px solid #343a40;' : '';
-					placeholderTd.style.cssText = `border:none; ${borderTop} height:30px; padding:0.2rem 0.5rem; background-color:#fff;`;
-					placeholderTd.textContent = ''; // Empty, no marks
+					// Match initial blade markup for "No weeks" placeholder cell
+					placeholderTd.style.cssText = `border:none; ${borderTop} height:30px; padding:0.2rem 0.5rem; background-color:#fff; height:30px;`;
+					placeholderTd.textContent = '';
 					row.appendChild(placeholderTd);
 				});
 			}
@@ -776,6 +781,32 @@ if (saveBtn) {
 				console.log(`Synced row ${index}: "${atValue}"`);
 			}
 		});
+
+		// After rows are added back from Assessment Tasks (e.g., via Criteria undo),
+		// try to restore any cached assessment marks using the shared undo/redo cache.
+		// Only attempt this when we increased the number of rows; normal text edits
+		// (same row count) should not reset marks.
+		if (targetRowCount > currentRowCount && window.SVHistory &&
+			typeof window.SVHistory.getLastValidAssessmentMarks === 'function' &&
+			typeof window.SVHistory.applyAssessmentMarksInline === 'function') {
+			try {
+				const cachedMarks = window.SVHistory.getLastValidAssessmentMarks() || [];
+				const hasValidMarks = cachedMarks.some(m => m && m.marked && m.weekLabel && m.weekLabel !== 'No weeks');
+				if (hasValidMarks) {
+					console.log('[SYNC FROM AT] Re-applying cached assessment marks after row add:', cachedMarks.length);
+					// Suppress undo snapshotting while we programmatically restore marks
+					const prevApplying = window.globalApplying;
+					window.globalApplying = true;
+					try {
+						window.SVHistory.applyAssessmentMarksInline(cachedMarks);
+					} finally {
+						window.globalApplying = prevApplying;
+					}
+				}
+			} catch (e) {
+				console.warn('[SYNC FROM AT] Failed to re-apply cached assessment marks:', e);
+			}
+		}
 	}
 	
 	// Watch for changes in Assessment Tasks table (which gets updated from Criteria)

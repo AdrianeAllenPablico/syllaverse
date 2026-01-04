@@ -476,12 +476,13 @@ export function snapshotTla(){
 export function snapshotAssessmentMapping(){
   const weekTable = document.querySelector('.assessment-mapping table.week');
   const marks = [];
-  const lines = ['PARTIAL_BEGIN:assessment_mapping', 'TITLE: Assessment Mapping (Week Marks)', 'COLUMNS: Row | Week | Marked'];
+  const lines = ['PARTIAL_BEGIN:assessment_mapping', 'TITLE: Assessment Mapping (Week Marks)', 'COLUMNS: Row | Week'];
 
   if (weekTable) {
-    // Get week labels from headers
+    // Get week labels from headers (structure is handled elsewhere; we only
+    // care about where the marks are placed).
     const weekHeaders = Array.from(weekTable.querySelectorAll('tr:first-child th.week-number'));
-    const weekLabels = weekHeaders.map(th => th.textContent.trim()).filter(t => t !== 'No weeks');
+    const weekLabels = weekHeaders.map(th => th.textContent.trim());
 
     // Get all week rows (skip header)
     const weekRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
@@ -492,14 +493,17 @@ export function snapshotAssessmentMapping(){
       const weekCells = Array.from(row.querySelectorAll('td.week-mapping'));
       console.log('[CAPTURE AM] Row', rowIdx, 'has', weekCells.length, 'cells');
       weekCells.forEach((cell, cellIdx) => {
-        if (cellIdx < weekLabels.length) {
-          const weekLabel = weekLabels[cellIdx];
-          const marked = cell.textContent.trim() === 'x' || cell.classList.contains('marked');
-          marks.push({ rowIdx, cellIdx, weekLabel, marked });
-          if (marked) {
-            console.log('[CAPTURE AM] ✅ Mark found: rowIdx=', rowIdx, 'cellIdx=', cellIdx, 'week=', weekLabel);
-          }
-          lines.push(`MARK: Row${rowIdx} | ${weekLabel} | ${marked ? 'x' : '-'}`);
+        if (cellIdx >= weekLabels.length) return;
+        const weekLabel = weekLabels[cellIdx];
+        // Ignore placeholder column entirely; user cannot map on "No weeks".
+        if (!weekLabel || weekLabel === 'No weeks') return;
+        const marked = cell.textContent.trim() === 'x' || cell.classList.contains('marked');
+        // We only snapshot the actual X placements; row/column structure is
+        // recreated by sync logic from Criteria/TLA.
+        if (marked) {
+          marks.push({ rowIdx, cellIdx, weekLabel, marked: true });
+          console.log('[CAPTURE AM] ✅ Mark found: rowIdx=', rowIdx, 'cellIdx=', cellIdx, 'week=', weekLabel);
+          lines.push(`MARK: Row${rowIdx} | ${weekLabel} | x`);
         }
       });
     });
