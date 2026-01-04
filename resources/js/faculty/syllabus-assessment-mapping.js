@@ -68,18 +68,71 @@ document.addEventListener('DOMContentLoaded', function() {
 			return;
 		}
 
-		// Collect all week labels from TLA rows (preserve ranges like "1-2" as single labels)
-		const weekLabels = [];
-		const seen = new Set();
-		tlaRows.forEach(function(row) {
+		// Collect week labels from TLA rows, keeping ranges as-is and
+		// removing single numbers that are covered by an existing range.
+		// Examples:
+		//  - ["1", "1-2"] → ["1-2"]
+		//  - ["2", "3-4"] → ["2", "3-4"] (no merging to 2-4)
+		function parseInterval(label){
+			const t = String(label || '').trim();
+			if (!t) return null;
+			const mRange = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(t);
+			if (mRange){
+				const a = parseInt(mRange[1], 10);
+				const b = parseInt(mRange[2], 10);
+				if (Number.isFinite(a) && Number.isFinite(b)) {
+					const start = Math.min(a,b), end = Math.max(a,b);
+					return { start, end, isRange: true };
+				}
+			}
+			const mNum = /^\s*(\d+)\s*$/.exec(t);
+			if (mNum){
+				const n = parseInt(mNum[1], 10);
+				if (Number.isFinite(n)) return { start: n, end: n, isRange: false };
+			}
+			return null; // non-numeric token
+		}
+
+		// Gather tokens in encounter order
+		const ranges = [];
+		const singles = [];
+		const nonNumericOrdered = [];
+		const seenRangeLabels = new Set();
+		const seenSingleLabels = new Set();
+		const seenNonNumeric = new Set();
+		tlaRows.forEach(function(row){
 			const wksInput = row.querySelector('.tla-wks input');
 			const raw = (wksInput && wksInput.value) ? wksInput.value.trim() : '';
 			if (!raw) return;
-			// Split by commas only; do NOT expand hyphen ranges
 			raw.split(',').map(t => t.trim()).filter(Boolean).forEach(token => {
-				if (!seen.has(token)) { seen.add(token); weekLabels.push(token); }
+				const iv = parseInterval(token);
+				if (iv && iv.isRange) {
+					const lbl = iv.start === iv.end ? String(iv.start) : (iv.start + '-' + iv.end);
+					if (!seenRangeLabels.has(lbl)) { ranges.push(iv); seenRangeLabels.add(lbl); }
+				} else if (iv && !iv.isRange) {
+					const lbl = String(iv.start);
+					if (!seenSingleLabels.has(lbl)) { singles.push(iv); seenSingleLabels.add(lbl); }
+				} else {
+					if (!seenNonNumeric.has(token)) { nonNumericOrdered.push(token); seenNonNumeric.add(token); }
+				}
 			});
 		});
+
+		// Build final labels: include ranges, then any singles not covered by a range, then non-numeric
+		const weekLabels = [];
+		const pushLabel = (lbl) => { if (!weekLabels.includes(lbl)) weekLabels.push(lbl); };
+		// Ranges first, preserving encounter order
+		for (const r of ranges) {
+			pushLabel(r.start === r.end ? String(r.start) : (r.start + '-' + r.end));
+		}
+		// Singles next, only if not contained in any existing range
+		for (const s of singles) {
+			const n = s.start;
+			const contained = ranges.some(r => n >= r.start && n <= r.end);
+			if (!contained) pushLabel(String(n));
+		}
+		// Finally non-numeric tokens
+		for (const nn of nonNumericOrdered) pushLabel(nn);
 		
 		const headerRow = weekTable.querySelector('tr:first-child');
 		const allDataRows = weekTable.querySelectorAll('tr:not(:first-child)');
@@ -163,14 +216,43 @@ document.addEventListener('DOMContentLoaded', function() {
 			});
 		});
 
-		// Re-apply marks that matched by week label and row index (skip if in undo/redo mode)
+		// Re-apply marks, mapping prior labels to merged intervals (skip if undo/redo mode)
 		if (!skipMarkHandling) {
+			const parseNew = (lbl) => parseInterval(lbl);
+			const newIntervals = weekLabels.map(parseNew);
 			const updatedRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
+			// Build set of previous labels for iteration
+			const prevLabelSet = new Set();
+			existingMarks.forEach((val, key) => {
+				const parts = String(key).split('|');
+				if (parts.length === 2) prevLabelSet.add(parts[1]);
+			});
+			const prevIntervals = {};
+			prevLabelSet.forEach(lbl => { prevIntervals[lbl] = parseInterval(lbl); });
 			updatedRows.forEach((row, rIdx) => {
 				const cells = row.querySelectorAll('td.week-mapping');
-				weekLabels.forEach((label, cIdx) => {
-					const key = `${rIdx}|${label}`;
-					if (existingMarks.has(key)) {
+				// For each new column, determine if any previous mark maps into it
+				weekLabels.forEach((newLbl, cIdx) => {
+					let shouldMark = false;
+					const newIv = newIntervals[cIdx];
+					// Exact label match first
+					if (existingMarks.has(`${rIdx}|${newLbl}`)) {
+						shouldMark = true;
+					} else {
+						// Check containment/intersection for numeric labels
+						if (newIv) {
+							for (const prevLbl of prevLabelSet) {
+								const key = `${rIdx}|${prevLbl}`;
+								if (!existingMarks.has(key)) continue;
+								const piv = prevIntervals[prevLbl];
+								if (!piv) continue;
+								// Intersects if ranges overlap
+								const intersects = !(piv.end < newIv.start || piv.start > newIv.end);
+								if (intersects) { shouldMark = true; break; }
+							}
+						}
+					}
+					if (shouldMark) {
 						const cell = cells[cIdx];
 						if (cell) {
 							cell.textContent = 'x';

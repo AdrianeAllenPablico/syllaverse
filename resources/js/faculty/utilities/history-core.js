@@ -645,72 +645,35 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         }
       }
 
-      // Re-apply bundled assessment marks AFTER week columns are synced
-      // Increased delay to 200ms to ensure DOM is fully updated
+      // Re-apply assessment marks AFTER week columns are synced
+      // Use the cached AM marks to coordinate with structure restoration
       setTimeout(() => {
-        if (snap && Array.isArray(snap.assessmentMarks)) {
-          // Use bundled marks ONLY if they contain at least one actual "x" mark
-          // Otherwise (e.g. snapshot taken after rows deleted / "No weeks"), fall back to last cached valid marks
-          const hasValidMarks = snap.assessmentMarks.some(m => m.weekLabel && m.weekLabel !== 'No weeks' && m.marked);
-          const marksToApply = hasValidMarks ? snap.assessmentMarks : lastValidAssessmentMarks;
-          if (marksToApply.length > 0) {
-            console.log('[APPLY TLA] Re-applying marks:', marksToApply.length, '(bundled:', snap.assessmentMarks.length, ', cached:', lastValidAssessmentMarks.length, ')');
-            applyInlineAssessmentMarks(marksToApply);
-          } else {
-            console.log('[APPLY TLA] No marks to apply (bundled:', snap.assessmentMarks.length, ', cached:', lastValidAssessmentMarks.length, ')');
-          }
+        const marksToApply = Array.isArray(lastValidAssessmentMarks) ? lastValidAssessmentMarks : [];
+        if (marksToApply.length > 0) {
+          console.log('[APPLY TLA] Re-applying cached AM marks:', marksToApply.length);
+          applyInlineAssessmentMarks(marksToApply);
         } else {
-          console.log('[APPLY TLA] No bundled marks in snapshot');
+          console.log('[APPLY TLA] No cached AM marks to apply');
         }
-      }, 200); // Increased from 100ms to 200ms
+      }, 200);
     } finally {
       st.isApplying = false;
     }
   }
 
+  // Apply Assessment Mapping: only restore X marks, structure handled elsewhere
   function applyAssessmentMapping(snap){
     const st = ensure('assessment_mapping');
     st.isApplying = true;
     try {
-      const weekTable = document.querySelector('.assessment-mapping table.week');
-      if (!weekTable) {
-        console.warn('[APPLY ASSESSMENT MAPPING] Week table not found');
-        return;
+      const snapshotMarks = Array.isArray(snap?.marks) ? snap.marks : [];
+      const hasRealWeeks = snapshotMarks.some(m => m.weekLabel && m.weekLabel !== 'No weeks');
+      const marksToApply = hasRealWeeks ? snapshotMarks : (Array.isArray(lastValidAssessmentMarks) ? lastValidAssessmentMarks : []);
+      if (marksToApply.length > 0) {
+        applyInlineAssessmentMarks(marksToApply);
+      } else {
+        console.log('[APPLY AM] No marks to apply; leaving current state as-is');
       }
-
-      // Only restore the x marks, don't touch structure (columns/rows are auto-synced from TLA/AT)
-      const marks = snap?.marks || [];
-      const headerLabels = Array.from(weekTable.querySelectorAll('tr:first-child th.week-number')).map(th => th.textContent.trim());
-      const weekRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
-
-      // Clear all existing marks first
-      weekRows.forEach(row => {
-        const cells = row.querySelectorAll('td.week-mapping');
-        cells.forEach(cell => {
-          cell.textContent = '';
-          cell.classList.remove('marked');
-          cell.style.color = '';
-        });
-      });
-
-      // Restore marks from snapshot
-      marks.forEach(mark => {
-        const row = weekRows[mark.rowIdx];
-        if (row) {
-          const cells = row.querySelectorAll('td.week-mapping');
-          const label = mark.weekLabel;
-          let targetIdx = -1;
-          if (label) targetIdx = headerLabels.indexOf(label);
-          if (targetIdx === -1) targetIdx = mark.cellIdx; // fallback if labels changed
-          const cell = cells[targetIdx];
-          if (cell && mark.marked) {
-            cell.textContent = 'x';
-            cell.classList.add('marked');
-            cell.style.color = '#000';
-          }
-        }
-      });
-
       try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
     } finally {
       st.isApplying = false;
@@ -1013,7 +976,15 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const sdg = snapshotSdg(); safeInitialize('sdg', sdg); } catch(e) {}
       try { const cp = snapshotCoursePolicies(); safeInitialize('coursePolicies', cp); } catch(e) {}
       try { const tla = snapshotTla(); safeInitialize('tla', tla); } catch(e) {}
-      try { const am = snapshotAssessmentMapping(); safeInitialize('assessment_mapping', am); } catch(e) {}
+      try {
+        const am = snapshotAssessmentMapping();
+        safeInitialize('assessment_mapping', am);
+        // Refresh cached marks post-save to ensure undo restores marks even if a subsequent snapshot had "No weeks"
+        if (am && Array.isArray(am.marks)) {
+          lastValidAssessmentMarks = am.marks;
+          console.log('[RESET AFTER SAVE] Cached AM marks baseline:', lastValidAssessmentMarks.length);
+        }
+      } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -1478,26 +1449,19 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           return;
         }
         lastTlaHash = snap.hash;
+        // Bundle Assessment Mapping marks (only X marks) so marks restore alongside row/column sync
         try {
           const amSnap = snapshotAssessmentMapping();
-          // Only cache marks that have valid week labels (not from "No weeks" state)
-          if (amSnap && Array.isArray(amSnap.marks) && amSnap.marks.length > 0) {
-            const hasValidLabels = amSnap.marks.some(m => m.weekLabel && m.weekLabel !== 'No weeks');
-            if (hasValidLabels) {
-              const newMarkedCount = amSnap.marks.filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
-              const oldMarkedCount = (lastValidAssessmentMarks || []).filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
-              // IMPORTANT: never shrink the cached pattern; only update if this snapshot has
-              // at least as many concrete X marks as what we already have.
-              if (newMarkedCount >= oldMarkedCount) {
-                lastValidAssessmentMarks = amSnap.marks;
-                console.log('[TLA SNAPSHOT] Cached valid marks:', lastValidAssessmentMarks.length, '(marked:', newMarkedCount, ')');
-              } else {
-                console.log('[TLA SNAPSHOT] Skip caching marks (new marked', newMarkedCount, '< old marked', oldMarkedCount, ')');
-              }
+          if (amSnap && Array.isArray(amSnap.marks)) {
+            // Cache valid marks to use as fallback when headers temporarily contain 'No weeks'
+            const validMarks = amSnap.marks.filter(m => m.weekLabel && m.weekLabel !== 'No weeks' && m.marked);
+            const oldValidCount = (lastValidAssessmentMarks || []).filter(m => m.weekLabel && m.weekLabel !== 'No weeks' && m.marked).length;
+            if (validMarks.length >= oldValidCount) {
+              lastValidAssessmentMarks = amSnap.marks;
             }
+            snap.assessmentMarks = amSnap.marks;
           }
-          snap.assessmentMarks = amSnap ? amSnap.marks : [];
-        } catch (e) { /* noop */ }
+        } catch(e) { /* noop */ }
         console.log('[TLA SNAPSHOT]', snap.hash.substring(0, 8), 'rows:', snap.rows.length, snap.rows.map(r => r.ch + ':' + r.wks).join(', '), 'marks:', snap.assessmentMarks?.length || 0);
         safePush('tla', snap); 
       } catch (e) { console.warn('[TLA SNAPSHOT ERROR]', e); }
@@ -1618,107 +1582,50 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
 
   function registerAssessmentMappingWatchers(){
     const st = ensure('assessment_mapping');
-    const lastMarksState = new Map(); // Track each cell's mark state to detect individual changes
     let captureTimeout = null;
-    
+
     const take = () => {
       if (st.isApplying || window.globalApplying) return;
-      if (Date.now() < suppressAssessmentMappingUntil) return; // skip AM snapshots caused by TLA-driven sync
+      if (Date.now() < suppressAssessmentMappingUntil) return; // ignore TLA-driven syncs
       try {
         clearTimeout(captureTimeout);
         const amSnap = snapshotAssessmentMapping();
-        // Cache latest valid marks here so both TLA undo and
-        // Criteria/AT-driven row sync can restore the *current*
-        // mark pattern, even if it has fewer Xs than before.
-        if (amSnap && Array.isArray(amSnap.marks) && amSnap.marks.length > 0) {
-          const hasValidLabels = amSnap.marks.some(m => m.weekLabel && m.weekLabel !== 'No weeks');
-          if (hasValidLabels) {
-            lastValidAssessmentMarks = amSnap.marks;
-            const markedCount = amSnap.marks.filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
-            console.log('[AM SNAPSHOT] Cached marks from AM watcher:', lastValidAssessmentMarks.length, '(marked:', markedCount, ')');
-          }
-        } else {
-          // If user cleared all marks, reflect that in the cache too
-          lastValidAssessmentMarks = [];
-          console.log('[AM SNAPSHOT] Cached empty marks (all cleared by user)');
+        // Only push when there's a real state to record
+        if (amSnap && Array.isArray(amSnap.marks)) {
+          // Update cached marks so TLA/AT structure restores can re-apply latest X pattern
+          lastValidAssessmentMarks = amSnap.marks;
+          safePush('assessment_mapping', amSnap);
         }
-        safePush('assessment_mapping', amSnap);
       } catch (e) { /* noop */ }
     };
-    
-    const trackMarkChange = (cell) => {
-      const weekTable = cell.closest('table.week');
-      if (!weekTable) return;
-      
-      // Determine current cell's position
-      const allCells = Array.from(weekTable.querySelectorAll('td.week-mapping'));
-      const cellIdx = allCells.indexOf(cell);
-      if (cellIdx === -1) return;
-      
-      const cellKey = `cell_${cellIdx}`;
-      const isMarked = cell.textContent.trim() === 'x';
-      const wasMarked = lastMarksState.get(cellKey);
-      
-      // If state changed, capture snapshot immediately
-      if (isMarked !== wasMarked) {
-        lastMarksState.set(cellKey, isMarked);
-        console.log('[AM MARK CHANGE]', cellKey, ':', wasMarked ? 'x→' : '→x');
-        clearTimeout(captureTimeout);
-        captureTimeout = setTimeout(take, 5); // Minimal delay to batch same-frame changes
-      }
-    };
-    
-    const lastSavedText = new WeakMap();
-    const distTable = document.querySelector('.assessment-mapping table.distribution');
+
     const weekTable = document.querySelector('.assessment-mapping table.week');
-    
-    if (distTable && weekTable){
-      // Distribution input changes
-      distTable.addEventListener('input', (e) => {
-        const input = e.target;
-        if (input && input.classList.contains('distribution-input')) {
-          const current = input.value || '';
-          const prev = lastSavedText.get(input) || '';
-          if (current === prev) return;
-          const lastChar = current.slice(-1);
-          const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
-          const isDeletion = current.length < prev.length;
-          if (isDelimiter || isDeletion) {
-            lastSavedText.set(input, current);
-            take();
-          }
-        }
-      }, { capture: true });
-
-      // Change fallback for distribution inputs
-      distTable.addEventListener('change', (e) => {
-        const input = e.target;
-        if (input && input.classList.contains('distribution-input')) {
-          lastSavedText.set(input, input.value || '');
-          take();
-        }
-      }, { capture: true });
-
-      // Week cell click handler - track individual mark changes
+    if (weekTable){
+      // Mark toggles via clicks
       weekTable.addEventListener('click', (e) => {
         const cell = e.target.closest('td.week-mapping');
         if (cell) {
-          setTimeout(() => trackMarkChange(cell), 0);
+          // Defer to allow DOM to reflect the X toggle before snapshotting
+          clearTimeout(captureTimeout);
+          captureTimeout = setTimeout(take, 5);
         }
       }, { capture: true });
 
-      // Watch for week columns being added/removed (via TLA sync)
+      // If week headers mutate (structure sync), do not snapshot distribution/headers
+      // Just update active module label for correct button state
       if (window.MutationObserver){
-        const headerObserver = new MutationObserver(() => take());
         const headerRow = weekTable.querySelector('tr:first-child');
         if (headerRow) {
-          headerObserver.observe(headerRow, { childList: true });
+          const mo = new MutationObserver(() => { /* no snapshot on header structure change */ });
+          mo.observe(headerRow, { childList: true });
         }
       }
 
       weekTable.addEventListener('focusin', () => { window.SVActiveModuleName = 'assessment_mapping'; }, true);
       weekTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'assessment_mapping'; }, true);
     }
+
+    // Set initial baseline without creating history
     try { safeInitialize('assessment_mapping', snapshotAssessmentMapping()); } catch(e) {}
     updateButtons();
   }
@@ -1809,9 +1716,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerSdgWatchers();
     registerCoursePoliciesWatchers();
     registerTlaWatchers();
-    registerAssessmentMappingWatchers();
     registerSoWatchers();
     registerIgaWatchers();
+    registerAssessmentMappingWatchers();
   });
 
   // expose API

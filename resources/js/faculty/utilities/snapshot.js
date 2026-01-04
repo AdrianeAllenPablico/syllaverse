@@ -473,37 +473,25 @@ export function snapshotTla(){
 }
 
 // Assessment Mapping
+// Assessment Mapping: snapshot ONLY X marks (positions + labels), not structure
 export function snapshotAssessmentMapping(){
   const weekTable = document.querySelector('.assessment-mapping table.week');
   const marks = [];
-  const lines = ['PARTIAL_BEGIN:assessment_mapping', 'TITLE: Assessment Mapping (Week Marks)', 'COLUMNS: Row | Week'];
+  const lines = ['PARTIAL_BEGIN:assessment_mapping', 'TITLE: Assessment Mapping (Week Marks)', 'COLUMNS: Row | Week | Marked'];
 
   if (weekTable) {
-    // Get week labels from headers (structure is handled elsewhere; we only
-    // care about where the marks are placed).
     const weekHeaders = Array.from(weekTable.querySelectorAll('tr:first-child th.week-number'));
-    const weekLabels = weekHeaders.map(th => th.textContent.trim());
-
-    // Get all week rows (skip header)
+    const weekLabels = weekHeaders.map(th => th.textContent.trim()).filter(t => t !== 'No weeks');
     const weekRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
-    
-    console.log('[CAPTURE AM] Week table: headers=', weekLabels.length, 'rows=', weekRows.length);
 
     weekRows.forEach((row, rowIdx) => {
       const weekCells = Array.from(row.querySelectorAll('td.week-mapping'));
-      console.log('[CAPTURE AM] Row', rowIdx, 'has', weekCells.length, 'cells');
       weekCells.forEach((cell, cellIdx) => {
-        if (cellIdx >= weekLabels.length) return;
-        const weekLabel = weekLabels[cellIdx];
-        // Ignore placeholder column entirely; user cannot map on "No weeks".
-        if (!weekLabel || weekLabel === 'No weeks') return;
-        const marked = cell.textContent.trim() === 'x' || cell.classList.contains('marked');
-        // We only snapshot the actual X placements; row/column structure is
-        // recreated by sync logic from Criteria/TLA.
-        if (marked) {
-          marks.push({ rowIdx, cellIdx, weekLabel, marked: true });
-          console.log('[CAPTURE AM] ✅ Mark found: rowIdx=', rowIdx, 'cellIdx=', cellIdx, 'week=', weekLabel);
-          lines.push(`MARK: Row${rowIdx} | ${weekLabel} | x`);
+        if (cellIdx < weekLabels.length) {
+          const weekLabel = weekLabels[cellIdx];
+          const marked = cell.textContent.trim().toLowerCase() === 'x' || cell.classList.contains('marked');
+          marks.push({ rowIdx, cellIdx, weekLabel, marked });
+          if (marked) lines.push(`MARK: Row${rowIdx} | ${weekLabel} | x`);
         }
       });
     });
@@ -512,8 +500,6 @@ export function snapshotAssessmentMapping(){
   lines.push('PARTIAL_END:assessment_mapping');
   const text = lines.join('\n');
   const hash = simpleHash(text);
-  
-  console.log('[CAPTURE AM] Total marks captured:', marks.length);
 
   return {
     partial: 'assessment_mapping',
