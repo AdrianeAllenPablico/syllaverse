@@ -2,12 +2,34 @@ document.addEventListener('DOMContentLoaded', function() {
 	const addColumnBtn = document.getElementById('add-week-column');
 	const removeColumnBtn = document.getElementById('remove-week-column');
 
+	// Capture current marks keyed by row + week label so we can re-apply after structure changes
+	function captureWeekMarks(weekTable) {
+		if (!weekTable) return new Map();
+		const headerRow = weekTable.querySelector('tr:first-child');
+		const headers = Array.from(headerRow.querySelectorAll('th.week-number')).map(th => th.textContent.trim());
+		const rows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
+		const markMap = new Map();
+		rows.forEach((row, rIdx) => {
+			const cells = row.querySelectorAll('td.week-mapping');
+			headers.forEach((label, cIdx) => {
+				const cell = cells[cIdx];
+				if (!cell || !label || label === 'No weeks') return;
+				const marked = cell.textContent.trim() === 'x' || cell.classList.contains('marked');
+				if (marked) markMap.set(`${rIdx}|${label}`, true);
+			});
+		});
+		return markMap;
+	}
+
 	// Function to sync week columns with TLA week numbers
-	function syncWeekColumnsWithTLA() {
+	// skipMarkHandling: when true, don't capture/reapply marks (used during undo/redo)
+	function syncWeekColumnsWithTLA(skipMarkHandling = false) {
 		const tlaRows = document.querySelectorAll('#tlaTable tbody tr:not(#tla-placeholder)');
 		const weekTable = document.querySelector('.assessment-mapping table.week');
 		
 		if (!weekTable) return;
+		// Only capture existing marks if not in undo/redo mode
+		const existingMarks = skipMarkHandling ? new Map() : captureWeekMarks(weekTable);
 		
 		// If no TLA rows, set to "No weeks" state
 		if (tlaRows.length === 0) {
@@ -136,7 +158,29 @@ document.addEventListener('DOMContentLoaded', function() {
 				attachWeekCellClickHandler(newTd);
 			});
 		});
+
+		// Re-apply marks that matched by week label and row index (skip if in undo/redo mode)
+		if (!skipMarkHandling) {
+			const updatedRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
+			updatedRows.forEach((row, rIdx) => {
+				const cells = row.querySelectorAll('td.week-mapping');
+				weekLabels.forEach((label, cIdx) => {
+					const key = `${rIdx}|${label}`;
+					if (existingMarks.has(key)) {
+						const cell = cells[cIdx];
+						if (cell) {
+							cell.textContent = 'x';
+							cell.classList.add('marked');
+							cell.style.color = '#000';
+						}
+					}
+				});
+			});
+		}
 	}
+
+	// Expose syncWeekColumnsWithTLA to window for undo/redo system
+	window.syncWeekColumnsWithTLA = syncWeekColumnsWithTLA;
 
 	// Initial sync on load
 	setTimeout(syncWeekColumnsWithTLA, 500);
@@ -288,6 +332,9 @@ document.addEventListener('DOMContentLoaded', function() {
 				this.classList.add('marked');
 				this.style.color = '#000';
 			}
+			
+			// Trigger change event for undo/redo capture
+			this.dispatchEvent(new Event('change', { bubbles: true }));
 		});
 	}
 

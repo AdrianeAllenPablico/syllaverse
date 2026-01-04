@@ -472,6 +472,55 @@ export function snapshotTla(){
   };
 }
 
+// Assessment Mapping
+export function snapshotAssessmentMapping(){
+  const weekTable = document.querySelector('.assessment-mapping table.week');
+  const marks = [];
+  const lines = ['PARTIAL_BEGIN:assessment_mapping', 'TITLE: Assessment Mapping (Week Marks)', 'COLUMNS: Row | Week | Marked'];
+
+  if (weekTable) {
+    // Get week labels from headers
+    const weekHeaders = Array.from(weekTable.querySelectorAll('tr:first-child th.week-number'));
+    const weekLabels = weekHeaders.map(th => th.textContent.trim()).filter(t => t !== 'No weeks');
+
+    // Get all week rows (skip header)
+    const weekRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
+    
+    console.log('[CAPTURE AM] Week table: headers=', weekLabels.length, 'rows=', weekRows.length);
+
+    weekRows.forEach((row, rowIdx) => {
+      const weekCells = Array.from(row.querySelectorAll('td.week-mapping'));
+      console.log('[CAPTURE AM] Row', rowIdx, 'has', weekCells.length, 'cells');
+      weekCells.forEach((cell, cellIdx) => {
+        if (cellIdx < weekLabels.length) {
+          const weekLabel = weekLabels[cellIdx];
+          const marked = cell.textContent.trim() === 'x' || cell.classList.contains('marked');
+          marks.push({ rowIdx, cellIdx, weekLabel, marked });
+          if (marked) {
+            console.log('[CAPTURE AM] ✅ Mark found: rowIdx=', rowIdx, 'cellIdx=', cellIdx, 'week=', weekLabel);
+          }
+          lines.push(`MARK: Row${rowIdx} | ${weekLabel} | ${marked ? 'x' : '-'}`);
+        }
+      });
+    });
+  }
+
+  lines.push('PARTIAL_END:assessment_mapping');
+  const text = lines.join('\n');
+  const hash = simpleHash(text);
+  
+  console.log('[CAPTURE AM] Total marks captured:', marks.length);
+
+  return {
+    partial: 'assessment_mapping',
+    title: 'Assessment Mapping (Week Marks Only)',
+    marks,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Student Outcomes
 export function snapshotSo(){
   const list = document.getElementById('syllabus-so-sortable');
@@ -524,7 +573,8 @@ if (typeof window !== 'undefined') {
     snapshotCdio,
     snapshotSdg,
     snapshotCoursePolicies,
-    snapshotTla
+    snapshotTla,
+    snapshotAssessmentMapping
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -538,4 +588,5 @@ if (typeof window !== 'undefined') {
   window.snapshotSdg = snapshotSdg;
   window.snapshotCoursePolicies = snapshotCoursePolicies;
   window.snapshotTla = snapshotTla;
+  window.snapshotAssessmentMapping = snapshotAssessmentMapping;
 }

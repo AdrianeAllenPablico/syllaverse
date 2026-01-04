@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla, snapshotAssessmentMapping } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -14,6 +14,14 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
   let globalApplying = false; // prevent cross-module watcher reactions during programmatic apply
   let restricted = false;     // when true, disable undo/redo regardless of stacks
   let suppressAtWatcherUntil = 0; // temporarily pause AT watcher after ILO structural events
+  let suppressAssessmentMappingUntil = 0; // temporarily pause AM watcher when changes originate from TLA
+  let lastValidAssessmentMarks = []; // Cache marks from before "No weeks" placeholder
+
+  // Expose globalApplying on window so watchers can check it
+  function setGlobalApplying(value) {
+    globalApplying = value;
+    window.globalApplying = value;
+  }
 
   function getActiveKey(){
     const k = (window.SVActiveModuleName || '').trim();
@@ -215,9 +223,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
   function applyAssessmentTasks(snap){
     const st = ensure('assessmentTasks');
     st.isApplying = true;
-    console.log('[APPLY AT] Starting, sections:', snap?.sections?.length || 0);
-    console.log('[APPLY AT] ✅ FULL AT SNAPSHOT BEING RESTORED:');
-    console.log(JSON.stringify(snap, null, 2));
+    console.log('[APPLY AT] Restoring sections:', snap?.sections?.length || 0, 'hash:', snap?.hash?.substring(0, 8));
     try {
       const tbody = document.getElementById('at-tbody');
       const iloList = document.getElementById('syllabus-ilo-sortable');
@@ -318,7 +324,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       });
       
       try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
-      console.log('[APPLY AT] Completed successfully');
+      console.log('[APPLY AT] ✅ Completed, sections:', sections.length);
     } finally {
       st.isApplying = false;
     }
@@ -553,15 +559,19 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     const st = ensure('tla');
     st.isApplying = true;
     try {
+      // Programmatic apply can trigger Assessment Mapping mutations; suppress AM watcher briefly
+      suppressAssessmentMappingUntil = Date.now() + 1200;
       const tbody = document.querySelector('#tlaTable tbody');
       if (!tbody) {
         console.warn('[APPLY TLA] TLA tbody not found');
         return;
       }
 
+      const rows = Array.isArray(snap?.rows) ? snap.rows : [];
+      console.log('[APPLY TLA] Restoring', rows.length, 'rows, hash:', snap?.hash?.substring(0, 8));
+
       while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
-      const rows = Array.isArray(snap?.rows) ? snap.rows : [];
       const autosize = (ta) => {
         if (!ta) return;
         try { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight || 0) + 'px'; } catch (e) { /* noop */ }
@@ -616,12 +626,184 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           const textareas = tr.querySelectorAll('textarea');
           textareas.forEach(ta => autosize(ta));
         });
+        console.log('[APPLY TLA] ✅ Restored', rows.length, 'rows');
       }
+
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+
+      // CRITICAL: Sync Assessment Mapping week columns with restored TLA rows BEFORE applying marks
+      // This ensures week columns are rebuilt when TLA rows are restored via undo
+      // Pass skipMarkHandling=true to prevent sync from interfering with our bundled marks
+      if (typeof window.syncWeekColumnsWithTLA === 'function') {
+        console.log('[APPLY TLA] Syncing Assessment Mapping week columns...');
+        try {
+          window.syncWeekColumnsWithTLA(true); // Skip mark handling during undo
+          console.log('[APPLY TLA] ✅ Week columns synced (marks will be applied separately)');
+        } catch(e) {
+          console.warn('[APPLY TLA] Week sync failed:', e);
+        }
+      }
+
+      // Re-apply bundled assessment marks AFTER week columns are synced
+      // Increased delay to 200ms to ensure DOM is fully updated
+      setTimeout(() => {
+        if (snap && Array.isArray(snap.assessmentMarks)) {
+          // Use bundled marks ONLY if they contain at least one actual "x" mark
+          // Otherwise (e.g. snapshot taken after rows deleted / "No weeks"), fall back to last cached valid marks
+          const hasValidMarks = snap.assessmentMarks.some(m => m.weekLabel && m.weekLabel !== 'No weeks' && m.marked);
+          const marksToApply = hasValidMarks ? snap.assessmentMarks : lastValidAssessmentMarks;
+          if (marksToApply.length > 0) {
+            console.log('[APPLY TLA] Re-applying marks:', marksToApply.length, '(bundled:', snap.assessmentMarks.length, ', cached:', lastValidAssessmentMarks.length, ')');
+            applyInlineAssessmentMarks(marksToApply);
+          } else {
+            console.log('[APPLY TLA] No marks to apply (bundled:', snap.assessmentMarks.length, ', cached:', lastValidAssessmentMarks.length, ')');
+          }
+        } else {
+          console.log('[APPLY TLA] No bundled marks in snapshot');
+        }
+      }, 200); // Increased from 100ms to 200ms
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
+  function applyAssessmentMapping(snap){
+    const st = ensure('assessment_mapping');
+    st.isApplying = true;
+    try {
+      const weekTable = document.querySelector('.assessment-mapping table.week');
+      if (!weekTable) {
+        console.warn('[APPLY ASSESSMENT MAPPING] Week table not found');
+        return;
+      }
+
+      // Only restore the x marks, don't touch structure (columns/rows are auto-synced from TLA/AT)
+      const marks = snap?.marks || [];
+      const headerLabels = Array.from(weekTable.querySelectorAll('tr:first-child th.week-number')).map(th => th.textContent.trim());
+      const weekRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
+
+      // Clear all existing marks first
+      weekRows.forEach(row => {
+        const cells = row.querySelectorAll('td.week-mapping');
+        cells.forEach(cell => {
+          cell.textContent = '';
+          cell.classList.remove('marked');
+          cell.style.color = '';
+        });
+      });
+
+      // Restore marks from snapshot
+      marks.forEach(mark => {
+        const row = weekRows[mark.rowIdx];
+        if (row) {
+          const cells = row.querySelectorAll('td.week-mapping');
+          const label = mark.weekLabel;
+          let targetIdx = -1;
+          if (label) targetIdx = headerLabels.indexOf(label);
+          if (targetIdx === -1) targetIdx = mark.cellIdx; // fallback if labels changed
+          const cell = cells[targetIdx];
+          if (cell && mark.marked) {
+            cell.textContent = 'x';
+            cell.classList.add('marked');
+            cell.style.color = '#000';
+          }
+        }
+      });
 
       try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
     } finally {
       st.isApplying = false;
     }
+  }
+
+  // Apply assessment marks inline (used when applying TLA snapshots that carry marks)
+  function applyInlineAssessmentMarks(marks){
+    const weekTable = document.querySelector('.assessment-mapping table.week');
+    if (!weekTable) {
+      console.warn('[APPLY AM MARKS] Week table not found');
+      return;
+    }
+    const allHeaders = Array.from(weekTable.querySelectorAll('tr:first-child th.week-number')).map(th => th.textContent.trim());
+    const headerLabels = allHeaders.filter(label => label !== 'No weeks'); // Exclude placeholder
+    const weekRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
+    console.log('[APPLY AM MARKS] Restoring', marks?.length || 0, 'marks to', weekRows.length, 'rows with', headerLabels.length, 'weeks: [' + headerLabels.join(', ') + ']');
+
+    // Debug: Log actual marks structure
+    if (marks && marks.length > 0) {
+      console.log('[APPLY AM MARKS] First mark sample:', JSON.stringify(marks[0]));
+      console.log('[APPLY AM MARKS] All marks:', marks.map(m => `row${m.rowIdx}:week"${m.weekLabel}":cell${m.cellIdx}=${m.marked}`).join(', '));
+    }
+
+    // Clear existing marks
+    weekRows.forEach((row, idx) => {
+      const cells = row.querySelectorAll('td.week-mapping');
+      cells.forEach((cell, cIdx) => {
+        cell.textContent = '';
+        cell.classList.remove('marked');
+        cell.style.color = '';
+      });
+      console.log('[APPLY AM MARKS] Cleared row', idx, '(' + cells.length + ' cells)');
+    });
+
+    let marksApplied = 0;
+    // Build week->column index map for this state
+    const weekToColIdx = {};
+    headerLabels.forEach((label, idx) => {
+      weekToColIdx[label] = idx;
+    });
+
+    console.log('[APPLY AM MARKS] Week→Column index map:', JSON.stringify(weekToColIdx));
+
+    // Group marks by week for resilient application
+    const marksByWeek = {};
+    (marks || []).forEach(mark => {
+      if (!mark || mark.weekLabel === 'No weeks') return;
+      if (!marksByWeek[mark.weekLabel]) marksByWeek[mark.weekLabel] = [];
+      marksByWeek[mark.weekLabel].push(mark);
+    });
+
+    console.log('[APPLY AM MARKS] Grouped marks by week: ' + Object.keys(marksByWeek).length + ' weeks with marks');
+
+    // For each week that has marks, apply to all rows that exist for that week
+    Object.entries(marksByWeek).forEach(([weekLabel, weekMarks]) => {
+      const colIdx = weekToColIdx[weekLabel];
+      console.log('[APPLY AM MARKS] ✓ Processing week "' + weekLabel + '" → column ' + colIdx + ' (' + weekMarks.length + ' marks)');
+      if (typeof colIdx === 'undefined') {
+        console.log('[APPLY AM MARKS] ✗ Week "' + weekLabel + '" NOT FOUND in headers [' + headerLabels.join(', ') + ']');
+        return;
+      }
+      
+      // Apply marks to rows (if rowIdx is out of bounds, apply to last available row)
+      weekMarks.forEach((mark, markIdx) => {
+        let row = weekRows[mark.rowIdx];
+        const rowExists = !!row;
+        console.log('[APPLY AM MARKS]   Mark ' + markIdx + ': rowIdx=' + mark.rowIdx + ' cellIdx=' + mark.cellIdx + ' marked=' + mark.marked + ' (row exists: ' + rowExists + ')');
+        
+        // If row doesn't exist (out of bounds during partial undo), use last available row
+        if (!row && weekRows.length > 0) {
+          row = weekRows[weekRows.length - 1];
+          console.log('[APPLY AM MARKS]   Row ' + mark.rowIdx + ' out of bounds, using last row instead');
+        }
+        
+        if (row && mark.marked) {
+          const cells = row.querySelectorAll('td.week-mapping');
+          console.log('[APPLY AM MARKS]     Accessing cell: row[' + mark.rowIdx + '] has ' + cells.length + ' cells, need colIdx=' + colIdx);
+          const cell = cells[colIdx];
+          if (cell) {
+            cell.textContent = 'x';
+            cell.classList.add('marked');
+            cell.style.color = '#000';
+            marksApplied++;
+            console.log('[APPLY AM MARKS]     ✅ Applied mark to cell');
+          } else {
+            console.log('[APPLY AM MARKS]     ❌ Cell not found: cells[' + colIdx + '] is undefined (only ' + cells.length + ' cells exist)');
+          }
+        } else if (!mark.marked) {
+          console.log('[APPLY AM MARKS]     Skip: mark.marked = false');
+        }
+      });
+    });
+    console.log('[APPLY AM MARKS] ✅ FINAL RESULT: Applied ' + marksApplied + ' out of ' + (marks?.length || 0) + ' marks');
   }
 
   function applySo(snap){
@@ -691,10 +873,11 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
 
   function undo(){
     if (!globalHistory.length) return false;
-    globalApplying = true;
+    setGlobalApplying(true);
     const entry = globalHistory.pop();
     globalRedo.push(entry);
     const { key, prev } = entry;
+    console.log('[UNDO #' + (200 - globalHistory.length) + '] key:', key, 'hash:', prev?.hash?.substring(0, 8), 'history remaining:', globalHistory.length, 'redo stack:', globalRedo.length);
     if (prev){
       switch(key){
         case 'missionVision':
@@ -721,6 +904,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'tla':
           applyTla(prev);
           break;
+        case 'assessment_mapping':
+          applyAssessmentMapping(prev);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(prev);
           break;
@@ -738,7 +924,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
     // Defer clearing globalApplying until after setTimeout callbacks have fired
     setTimeout(() => {
-      globalApplying = false;
+      setGlobalApplying(false);
       updateButtons();
     }, 150);
     return true;
@@ -746,10 +932,11 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
 
   function redo(){
     if (!globalRedo.length) return false;
-    globalApplying = true;
+    setGlobalApplying(true);
     const entry = globalRedo.pop();
     const { key, next } = entry;
     globalHistory.push(entry);
+    console.log('[REDO #' + (200 - globalRedo.length) + '] key:', key, 'hash:', next?.hash?.substring(0, 8), 'history:', globalHistory.length, 'redo remaining:', globalRedo.length);
     if (next){
       switch(key){
         case 'missionVision':
@@ -776,6 +963,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'tla':
           applyTla(next);
           break;
+        case 'assessment_mapping':
+          applyAssessmentMapping(next);
+          break;
         case 'assessmentTasks':
           applyAssessmentTasks(next);
           break;
@@ -793,7 +983,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
     // Defer clearing globalApplying until after setTimeout callbacks have fired
     setTimeout(() => {
-      globalApplying = false;
+      setGlobalApplying(false);
       updateButtons();
     }, 150);
     return true;
@@ -822,6 +1012,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       try { const sdg = snapshotSdg(); safeInitialize('sdg', sdg); } catch(e) {}
       try { const cp = snapshotCoursePolicies(); safeInitialize('coursePolicies', cp); } catch(e) {}
       try { const tla = snapshotTla(); safeInitialize('tla', tla); } catch(e) {}
+      try { const am = snapshotAssessmentMapping(); safeInitialize('assessment_mapping', am); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -954,6 +1145,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
 
   function registerAssessmentTasksWatchers(){
     const st = ensure('assessmentTasks');
+    let lastAtHash = null;
     const take = () => { 
       if (st.isApplying || window.globalApplying) return;
       if (Date.now() < suppressAtWatcherUntil) {
@@ -961,6 +1153,13 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         return;
       }
       const atSnapshot = snapshotAssessmentTasks();
+      // Deduplicate: skip if same hash as last snapshot
+      if (atSnapshot.hash === lastAtHash) {
+        console.log('[AT SNAPSHOT SKIP] Duplicate hash:', atSnapshot.hash.substring(0, 8));
+        return;
+      }
+      lastAtHash = atSnapshot.hash;
+      console.log('[AT SNAPSHOT]', atSnapshot.hash.substring(0, 8), 'sections:', atSnapshot.sections.length);
       
       // Don't push standalone AT snapshots - only push merged ILO+AT snapshots
       // This prevents creating duplicate undo steps for AT-only changes
@@ -984,9 +1183,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           hash: combinedHash,
           ts: Date.now()
         };
-        console.log('[AT WATCHER] AT data changed, pushing merged ILO snapshot with AT data');
-        console.log('[AT WATCHER] ✅ MERGED ILO+AT SNAPSHOT TO PUSH:');
-        console.log(JSON.stringify(merged, null, 2));
+        console.log('[AT WATCHER] AT data changed, pushing merged ILO+AT');
+        console.log('[AT WATCHER] ✅ MERGED:', 'ilos:', merged.ilos?.length, 'sections:', merged.atSnapshot?.sections?.length, 'hash:', combinedHash.substring(0, 8));
         // Instead of creating a new undo step, fold AT edits into the latest ILO entry
         const lastEntry = globalHistory.length ? globalHistory[globalHistory.length - 1] : null;
         if (lastEntry && lastEntry.key === 'ilo') {
@@ -1234,23 +1432,97 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
 
   function registerTlaWatchers(){
     const st = ensure('tla');
+    let lastTlaHash = null;
+    const lastRowStates = new Map(); // Track each row's state to detect row add/delete
+    
     const take = () => {
       if (st.isApplying || window.globalApplying) return;
-      try { safePush('tla', snapshotTla()); } catch (e) { /* noop */ }
+      try { 
+        // When TLA changes, ignore the AM watcher for a short window so one user action = one undo step
+        suppressAssessmentMappingUntil = Date.now() + 600;
+        const snap = snapshotTla();
+        // Deduplicate: skip if same hash as last snapshot
+        if (snap.hash === lastTlaHash) {
+          console.log('[TLA SNAPSHOT SKIP] Duplicate hash:', snap.hash.substring(0, 8));
+          return;
+        }
+        lastTlaHash = snap.hash;
+        try {
+          const amSnap = snapshotAssessmentMapping();
+          // Only cache marks that have valid week labels (not from "No weeks" state)
+          if (amSnap && Array.isArray(amSnap.marks) && amSnap.marks.length > 0) {
+            const hasValidLabels = amSnap.marks.some(m => m.weekLabel && m.weekLabel !== 'No weeks');
+            if (hasValidLabels) {
+              const newMarkedCount = amSnap.marks.filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
+              const oldMarkedCount = (lastValidAssessmentMarks || []).filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
+              // IMPORTANT: never shrink the cached pattern; only update if this snapshot has
+              // at least as many concrete X marks as what we already have.
+              if (newMarkedCount >= oldMarkedCount) {
+                lastValidAssessmentMarks = amSnap.marks;
+                console.log('[TLA SNAPSHOT] Cached valid marks:', lastValidAssessmentMarks.length, '(marked:', newMarkedCount, ')');
+              } else {
+                console.log('[TLA SNAPSHOT] Skip caching marks (new marked', newMarkedCount, '< old marked', oldMarkedCount, ')');
+              }
+            }
+          }
+          snap.assessmentMarks = amSnap ? amSnap.marks : [];
+        } catch (e) { /* noop */ }
+        console.log('[TLA SNAPSHOT]', snap.hash.substring(0, 8), 'rows:', snap.rows.length, snap.rows.map(r => r.ch + ':' + r.wks).join(', '), 'marks:', snap.assessmentMarks?.length || 0);
+        safePush('tla', snap); 
+      } catch (e) { console.warn('[TLA SNAPSHOT ERROR]', e); }
     };
+    
     const lastSavedText = new WeakMap();
     const tbody = document.querySelector('#tlaTable tbody');
+    
+    // Define trackRowChange function for TLA row add/delete operations
+    const trackRowChange = (tbody, action = 'MUTATION') => {
+      if (st.isApplying || window.globalApplying) return;
+      const rows = Array.from(tbody.querySelectorAll('tr:not(#tla-placeholder)'));
+      const currentRowCount = rows.length;
+      const lastRowCount = lastRowStates.get('count') || 0;
+      if (currentRowCount !== lastRowCount) {
+        lastRowStates.set('count', currentRowCount);
+        if (currentRowCount > lastRowCount) {
+          console.log(`[TLA ROW ADD] ${lastRowCount} → ${currentRowCount} (${action})`);
+          take();
+        } else {
+          console.log(`[TLA ROW DELETE] ${lastRowCount} → ${currentRowCount} (${action})`);
+          take();
+        }
+        return true;
+      }
+      return false;
+    };
+    
     if (tbody){
-      // Action-based triggers
+      // Initialize row count tracking
+      const initialRows = Array.from(tbody.querySelectorAll('tr:not(#tla-placeholder)'));
+      lastRowStates.set('count', initialRows.length);
+      console.log('[TLA INIT] Tracking', initialRows.length, 'rows');
+      
+      // Action-based triggers for row operations
       tbody.addEventListener('click', (e) => {
-        if (e.target.closest('.remove-tla-row')) setTimeout(take, 0);
+        if (e.target.closest('.remove-tla-row')) {
+          console.log('[TLA DELETE CLICKED]', e.target.closest('.remove-tla-row').dataset.id);
+          setTimeout(() => trackRowChange(tbody, 'DELETE_CLICK'), 10);
+        }
       }, { capture: true });
+
+      // Watch for row mutations (add/delete detected via row count change)
+      if (window.MutationObserver){
+        const mo = new MutationObserver(() => {
+          setTimeout(() => trackRowChange(tbody, 'MUTATION'), 10);
+        });
+        mo.observe(tbody, { childList: true, subtree: false });
+      }
 
       // Word-boundary snapshots for TLA text
       tbody.addEventListener('input', (e) => {
         const ta = e.target;
         if (!(ta && ta.tagName === 'TEXTAREA')) return;
         const current = ta.value || '';
+
         const prev = lastSavedText.get(ta) || '';
         if (current === prev) return;
         const lastChar = current.slice(-1);
@@ -1271,10 +1543,28 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         take();
       }, { capture: true });
 
-      // Text input fields (ch, wks, ilo, so) - capture on input
+      // Text input fields (ch, ilo, so) - word-boundary snapshots (excluding wks)
       tbody.addEventListener('input', (e) => {
         const input = e.target;
+        if (!(input && input.tagName === 'INPUT' && (input.name.includes('[ch]') || input.name.includes('[ilo]') || input.name.includes('[so]')))) return;
+        const current = input.value || '';
+        const prev = lastSavedText.get(input) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(input, current);
+          take();
+        }
+      }, { capture: true });
+
+      // Change fallback for all input fields (including wks which only snapshots here)
+      tbody.addEventListener('change', (e) => {
+        const input = e.target;
         if (input && input.tagName === 'INPUT' && (input.name.includes('[ch]') || input.name.includes('[wks]') || input.name.includes('[ilo]') || input.name.includes('[so]'))) {
+          console.log('[TLA INPUT CHANGE]', input.name, 'value:', input.value);
+          lastSavedText.set(input, input.value || '');
           take();
         }
       }, { capture: true });
@@ -1292,6 +1582,114 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       tbody.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'tla'; }, true);
     }
     try { safeInitialize('tla', snapshotTla()); } catch(e) {}
+    updateButtons();
+  }
+
+  function registerAssessmentMappingWatchers(){
+    const st = ensure('assessment_mapping');
+    const lastMarksState = new Map(); // Track each cell's mark state to detect individual changes
+    let captureTimeout = null;
+    
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      if (Date.now() < suppressAssessmentMappingUntil) return; // skip AM snapshots caused by TLA-driven sync
+      try {
+        clearTimeout(captureTimeout);
+        const amSnap = snapshotAssessmentMapping();
+        // Cache latest valid marks here as well so TLA undo/redo can fall back.
+        // IMPORTANT: do not shrink the cached pattern when weeks/marks are removed by TLA;
+        // we want the "maximum" mark pattern for TLA undo, while AM has its own undo stack.
+        if (amSnap && Array.isArray(amSnap.marks) && amSnap.marks.length > 0) {
+          const hasValidLabels = amSnap.marks.some(m => m.weekLabel && m.weekLabel !== 'No weeks');
+          if (hasValidLabels) {
+            const newMarkedCount = amSnap.marks.filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
+            const oldMarkedCount = (lastValidAssessmentMarks || []).filter(m => m.marked && m.weekLabel && m.weekLabel !== 'No weeks').length;
+            if (newMarkedCount >= oldMarkedCount) {
+              lastValidAssessmentMarks = amSnap.marks;
+              console.log('[AM SNAPSHOT] Cached valid marks from AM watcher:', lastValidAssessmentMarks.length, '(marked:', newMarkedCount, ')');
+            } else {
+              console.log('[AM SNAPSHOT] Skip caching marks (new marked', newMarkedCount, '< old marked', oldMarkedCount, ')');
+            }
+          }
+        }
+        safePush('assessment_mapping', amSnap);
+      } catch (e) { /* noop */ }
+    };
+    
+    const trackMarkChange = (cell) => {
+      const weekTable = cell.closest('table.week');
+      if (!weekTable) return;
+      
+      // Determine current cell's position
+      const allCells = Array.from(weekTable.querySelectorAll('td.week-mapping'));
+      const cellIdx = allCells.indexOf(cell);
+      if (cellIdx === -1) return;
+      
+      const cellKey = `cell_${cellIdx}`;
+      const isMarked = cell.textContent.trim() === 'x';
+      const wasMarked = lastMarksState.get(cellKey);
+      
+      // If state changed, capture snapshot immediately
+      if (isMarked !== wasMarked) {
+        lastMarksState.set(cellKey, isMarked);
+        console.log('[AM MARK CHANGE]', cellKey, ':', wasMarked ? 'x→' : '→x');
+        clearTimeout(captureTimeout);
+        captureTimeout = setTimeout(take, 5); // Minimal delay to batch same-frame changes
+      }
+    };
+    
+    const lastSavedText = new WeakMap();
+    const distTable = document.querySelector('.assessment-mapping table.distribution');
+    const weekTable = document.querySelector('.assessment-mapping table.week');
+    
+    if (distTable && weekTable){
+      // Distribution input changes
+      distTable.addEventListener('input', (e) => {
+        const input = e.target;
+        if (input && input.classList.contains('distribution-input')) {
+          const current = input.value || '';
+          const prev = lastSavedText.get(input) || '';
+          if (current === prev) return;
+          const lastChar = current.slice(-1);
+          const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+          const isDeletion = current.length < prev.length;
+          if (isDelimiter || isDeletion) {
+            lastSavedText.set(input, current);
+            take();
+          }
+        }
+      }, { capture: true });
+
+      // Change fallback for distribution inputs
+      distTable.addEventListener('change', (e) => {
+        const input = e.target;
+        if (input && input.classList.contains('distribution-input')) {
+          lastSavedText.set(input, input.value || '');
+          take();
+        }
+      }, { capture: true });
+
+      // Week cell click handler - track individual mark changes
+      weekTable.addEventListener('click', (e) => {
+        const cell = e.target.closest('td.week-mapping');
+        if (cell) {
+          setTimeout(() => trackMarkChange(cell), 0);
+        }
+      }, { capture: true });
+
+      // Watch for week columns being added/removed (via TLA sync)
+      if (window.MutationObserver){
+        const headerObserver = new MutationObserver(() => take());
+        const headerRow = weekTable.querySelector('tr:first-child');
+        if (headerRow) {
+          headerObserver.observe(headerRow, { childList: true });
+        }
+      }
+
+      weekTable.addEventListener('focusin', () => { window.SVActiveModuleName = 'assessment_mapping'; }, true);
+      weekTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'assessment_mapping'; }, true);
+    }
+    try { safeInitialize('assessment_mapping', snapshotAssessmentMapping()); } catch(e) {}
     updateButtons();
   }
 
@@ -1381,6 +1779,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerSdgWatchers();
     registerCoursePoliciesWatchers();
     registerTlaWatchers();
+    registerAssessmentMappingWatchers();
     registerSoWatchers();
     registerIgaWatchers();
   });
