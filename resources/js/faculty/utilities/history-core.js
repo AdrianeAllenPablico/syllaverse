@@ -945,18 +945,46 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         }
       }
 
-      // Restore ILO input values
+      // Restore ILO input values and correct placeholder vs real-row styling
       if (Array.isArray(snap?.iloInputs) && snap.iloInputs.length > 0) {
         finalDataTrs.forEach((tr, idx) => {
           const firstTd = tr.querySelector('td:first-child');
-          if (firstTd && idx < snap.iloInputs.length) {
-            const input = firstTd.querySelector('input');
-            if (input) {
-              input.value = snap.iloInputs[idx] || '';
-            } else if (snap.iloInputs[idx] !== 'No ILO') {
-              // If no input exists but we have a value, just set text (shouldn't happen normally)
-              firstTd.textContent = snap.iloInputs[idx];
+          if (!firstTd || idx >= snap.iloInputs.length) return;
+
+          const iloValue = snap.iloInputs[idx] || '';
+
+          if (iloValue === 'No ILO') {
+            // Placeholder row: "No ILO" text, muted italic, no input
+            firstTd.innerHTML = 'No ILO';
+            firstTd.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; font-family:Georgia, serif; font-size:13px; text-align:center; vertical-align:middle; color:#999; font-style:italic;';
+          } else {
+            // Real ILO row: ensure input exists and normal styling
+            let input = firstTd.querySelector('input');
+            if (!input) {
+              firstTd.innerHTML = '';
+              input = document.createElement('input');
+              input.type = 'text';
+              input.placeholder = '-';
+              input.className = 'form-control form-control-sm';
+              input.style.cssText = 'width:100%; border:none; padding:0.1rem 0.25rem; font-family:Georgia,serif; font-size:13px; text-align:center; box-sizing:border-box; background:transparent;';
+              // Auto-format ILO number (match addIloRow behavior)
+              input.addEventListener('input', function(e) {
+                const value = e.target.value;
+                if (/^\d+$/.test(value)) {
+                  e.target.value = 'ILO' + value;
+                }
+              });
+              firstTd.appendChild(input);
             }
+            input.value = iloValue;
+            firstTd.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.1rem 0.25rem; font-family:Georgia, serif; font-size:13px; color:#000; text-align:center; vertical-align:middle;';
+
+            // Let the main module's helper rebuild non-ILO cells based on ILO/SO state
+            try {
+              if (window.SVIloSoCpa_updateAllCellsInRow && typeof window.SVIloSoCpa_updateAllCellsInRow === 'function') {
+                window.SVIloSoCpa_updateAllCellsInRow(tr);
+              }
+            } catch(_) {}
           }
         });
       }

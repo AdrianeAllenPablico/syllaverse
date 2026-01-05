@@ -205,6 +205,9 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 	}
 
+	// Expose row update helper for history/undo logic
+	window.SVIloSoCpa_updateAllCellsInRow = updateAllCellsInRow;
+
 	// Auto-resize textareas
 	function autoResize(textarea) {
 		textarea.style.height = 'auto';
@@ -815,22 +818,76 @@ document.addEventListener('DOMContentLoaded', function() {
 						}
 					}
 				});
+			} else {
+				// All SO columns were removed - ensure "No SO" placeholder state
+				const mappingTable = mapping.querySelector('.mapping');
+				if (mappingTable) {
+					const headerRow2 = mappingTable.querySelectorAll('tr')[1];
+					const allHeaders = Array.from(headerRow2.querySelectorAll('th'));
+					const iloHeaderIndex = allHeaders.findIndex(th => th.textContent.includes('ILOs'));
+					const cHeaderIndex = allHeaders.findIndex(th => th.textContent.trim() === 'C');
+					const soHeaders = allHeaders.slice(iloHeaderIndex + 1, cHeaderIndex);
+					
+					// Remove all SO columns except the first (which will be "No SO" placeholder)
+					for (let i = soHeaders.length - 1; i > 0; i--) {
+						soHeaders[i].remove();
+					}
+					
+					// Ensure first SO header is "No SO" placeholder
+					if (soHeaders.length > 0) {
+						const firstSoHeader = soHeaders[0];
+						firstSoHeader.innerHTML = '<div class="so-header-controls"><button type="button" class="btn btn-sm so-remove-btn" onclick="removeSoColumn()" title="Remove SO column" aria-label="Remove SO column"><i data-feather="minus"></i></button></div>No SO';
+					}
+					
+					// Update SO span to cover 1 placeholder + 3 (C/P/A)
+					const soSpanTh = headerRow2.parentElement.querySelectorAll('tr')[0].querySelectorAll('th')[1];
+					if (soSpanTh) soSpanTh.setAttribute('colspan', '4');
+					
+					// Blank all data cells in all rows
+					const tbody = mappingTable.querySelector('tbody') || mappingTable;
+					const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.querySelector('td'));
+					dataRows.forEach(row => {
+						const cells = Array.from(row.querySelectorAll('td'));
+						// Blank SO cell (index 1)
+						if (cells[1]) {
+							const textarea = cells[1].querySelector('textarea');
+							if (textarea) {
+								textarea.value = '';
+								textarea.disabled = true;
+								textarea.style.backgroundColor = '#f8f9fa';
+								textarea.style.cursor = 'not-allowed';
+								autoResize(textarea);
+							}
+						}
+					});
+				}
 			}
 			
 			// Then, populate ILO rows
 			mappings.forEach((mappingRow, rowIndex) => {
+				// For rows with null ILO, we keep them as placeholder but still need to populate SO/CPA data
+				const hasNullIlo = mappingRow.ilo_text === null;
+				
 				if (rowIndex === 0) {
-					// First row - convert placeholder
-					addIloRow();
+					// First row - convert placeholder if needed
+					if (!hasNullIlo) {
+						// Real ILO row - convert placeholder to real row
+						addIloRow();
+					}
+					// Otherwise keep as placeholder (No ILO)
+					
 					const mappingTable = mapping.querySelector('.mapping');
 					const tbody = mappingTable.querySelector('tbody') || mappingTable;
 					const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.querySelector('td'));
 					const firstRow = dataRows[0];
 					if (firstRow) {
 						const cells = Array.from(firstRow.querySelectorAll('td'));
-						// Set ILO label
-						const iloInput = cells[0].querySelector('input');
-						if (iloInput) iloInput.value = mappingRow.ilo_text;
+						
+						// Only set ILO label if not null
+						if (!hasNullIlo) {
+							const iloInput = cells[0].querySelector('input');
+							if (iloInput) iloInput.value = mappingRow.ilo_text;
+						}
 						
 						// Set SO values using position as key (supports duplicate labels)
 						if (mappingRow.sos && typeof mappingRow.sos === 'object') {
@@ -875,16 +932,24 @@ document.addEventListener('DOMContentLoaded', function() {
 					}
 				} else {
 					// Additional rows
-					addIloRow();
+					if (!hasNullIlo) {
+						// Real ILO row - add new row
+						addIloRow();
+					}
+					// Otherwise keep as placeholder (No ILO)
+					
 					const mappingTable = mapping.querySelector('.mapping');
 					const tbody = mappingTable.querySelector('tbody') || mappingTable;
 					const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.querySelector('td'));
 					const currentRow = dataRows[rowIndex];
 					if (currentRow) {
 						const cells = Array.from(currentRow.querySelectorAll('td'));
-						// Set ILO label
-						const iloInput = cells[0].querySelector('input');
-						if (iloInput) iloInput.value = mappingRow.ilo_text;
+						
+						// Only set ILO label if not null
+						if (!hasNullIlo) {
+							const iloInput = cells[0].querySelector('input');
+							if (iloInput) iloInput.value = mappingRow.ilo_text;
+						}
 						
 						// Set SO values using position as key (supports duplicate labels)
 						if (mappingRow.sos && typeof mappingRow.sos === 'object') {
@@ -1038,16 +1103,36 @@ document.addEventListener('DOMContentLoaded', function() {
 					const row = dataRows[idx];
 					const cells = Array.from(row.querySelectorAll('td'));
 					const iloCell = cells[0];
-					const iloInput = iloCell.querySelector('input');
-					
-					// If ilo_text is null, set as "No ILO" placeholder; otherwise set the value
-					if (m.ilo_text === null) {
-						iloCell.textContent = 'No ILO';
+					const isNullIlo = m.ilo_text === null;
+					// Normalize ILO cell based on whether this is a real ILO or a placeholder
+					if (isNullIlo) {
+						// Placeholder row: show "No ILO" with muted/italic style and no input
+						iloCell.innerHTML = 'No ILO';
 						iloCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; font-family:Georgia, serif; font-size:13px; text-align:center; vertical-align:middle; color:#999; font-style:italic;';
 					} else {
-						if (iloInput) iloInput.value = m.ilo_text || '';
+						// Real ILO row: ensure we have a proper input and normal styling
+						let iloInput = iloCell.querySelector('input');
+						if (!iloInput) {
+							// Convert from placeholder cell to input cell
+							iloCell.innerHTML = '';
+							iloInput = document.createElement('input');
+							iloInput.type = 'text';
+							iloInput.placeholder = '-';
+							iloInput.className = 'form-control form-control-sm';
+							iloInput.style.cssText = 'width:100%; border:none; padding:0.1rem 0.25rem; font-family:Georgia,serif; font-size:13px; text-align:center; box-sizing:border-box; background:transparent;';
+							// Auto-format ILO number
+							iloInput.addEventListener('input', function(e) {
+								const value = e.target.value;
+								if (/^\d+$/.test(value)) {
+									e.target.value = 'ILO' + value;
+								}
+							});
+							iloCell.appendChild(iloInput);
+						}
+						// Set value and reset styling to non-placeholder
+						iloInput.value = m.ilo_text || '';
+						iloCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.1rem 0.25rem; font-family:Georgia, serif; font-size:13px; color:#000; text-align:center; vertical-align:middle;';
 					}
-					
 					soKeys.forEach((key, sIdx) => {
 						const cell = cells[sIdx + 1];
 						const ta = cell?.querySelector('textarea');
