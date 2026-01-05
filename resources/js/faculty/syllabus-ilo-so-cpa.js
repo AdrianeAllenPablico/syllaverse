@@ -146,6 +146,65 @@ document.addEventListener('DOMContentLoaded', function() {
 		});
 	}
 
+	// Check if real SO columns exist
+	function hasRealSoColumnsInTable() {
+		const headerRow2 = mapping.querySelectorAll('.mapping tr')[1];
+		if (!headerRow2) return false;
+		const allHeaders = Array.from(headerRow2.querySelectorAll('th'));
+		const iloHeaderIndex = allHeaders.findIndex(th => th.textContent.includes('ILOs'));
+		const cHeaderIndex = allHeaders.findIndex(th => th.textContent.trim() === 'C');
+		const soHeaders = allHeaders.slice(iloHeaderIndex + 1, cHeaderIndex);
+		// Real SO = any SO header that is NOT the "No SO" placeholder
+		return soHeaders.some(th => {
+			const input = th.querySelector('input');
+			const text = input ? input.value.trim() : th.textContent.trim();
+			return text !== 'No SO'; // Only check for placeholder, allow empty values
+		});
+	}
+
+	// Update all cells in a row based on ILO/SO state
+	function updateAllCellsInRow(row) {
+		const cells = Array.from(row.querySelectorAll('td'));
+		if (cells.length === 0) return;
+
+		const firstCell = cells[0];
+		const isRealIlo = firstCell && firstCell.textContent.trim() !== 'No ILO';
+		const hasRealSo = hasRealSoColumnsInTable();
+
+		// Update each cell
+		for (let i = 1; i < cells.length; i++) {
+			const cell = cells[i];
+			
+			// If BOTH real ILO and real SO exist, add textarea
+			if (isRealIlo && hasRealSo) {
+				if (cell.querySelector('textarea') === null) {
+					cell.innerHTML = '';
+					const textarea = document.createElement('textarea');
+					textarea.className = 'form-control form-control-sm';
+					textarea.placeholder = '-';
+					textarea.rows = '1';
+					textarea.value = '';
+					textarea.style.cssText = 'width:100%; min-height:22px; border:none; padding:0.2rem 0.5rem; font-family:Georgia,serif; font-size:13px; text-align:center; box-sizing:border-box; resize:none; overflow:hidden; background-color:transparent;';
+					textarea.addEventListener('input', function() {
+						autoResize(this);
+					});
+					cell.appendChild(textarea);
+					autoResize(textarea);
+				}
+			} else {
+				// Otherwise blank cell
+				cell.innerHTML = '';
+			}
+
+			// Update cell styling
+			if (i === cells.length - 1) {
+				cell.style.cssText = 'border:none; border-top:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
+			} else {
+				cell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
+			}
+		}
+	}
+
 	// Auto-resize textareas
 	function autoResize(textarea) {
 		textarea.style.height = 'auto';
@@ -197,21 +256,8 @@ document.addEventListener('DOMContentLoaded', function() {
 			firstCell.appendChild(iloInput);
 			firstCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.1rem 0.25rem; font-family:Georgia, serif; font-size:13px; color:#000; text-align:center; vertical-align:middle;';
 			
-			// Re-enable all textareas (SO and CPA)
-			const cells = lastRow.querySelectorAll('td');
-			for (let i = 1; i < cells.length; i++) {
-				const textarea = cells[i].querySelector('textarea');
-				if (textarea) {
-					textarea.disabled = false;
-					textarea.style.backgroundColor = '';
-					textarea.style.cursor = '';
-				}
-				if (i === cells.length - 1) {
-					cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
-				} else {
-					cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
-				}
-			}
+			// Update all cells in this row based on ILO/SO state
+			updateAllCellsInRow(lastRow);
 			return;
 		}
 		
@@ -250,25 +296,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		}
 		iloCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.1rem 0.25rem; font-family:Georgia, serif; font-size:13px; color:#000; text-align:center; vertical-align:middle;';
 		
-		// Update all cell borders in new row
-		const newCells = newRow.querySelectorAll('td');
-		for (let i = 1; i < newCells.length; i++) {
-			if (i === newCells.length - 1) {
-				newCells[i].style.cssText = 'border:none; border-top:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
-			} else {
-				newCells[i].style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
-			}
-		}
-		
-		// Clear all textareas
-		const newTextareas = newRow.querySelectorAll('textarea');
-		newTextareas.forEach(textarea => {
-			textarea.value = '';
-			textarea.addEventListener('input', function() {
-				autoResize(this);
-			});
-			autoResize(textarea);
-		});
+		// Update all cells in new row
+		updateAllCellsInRow(newRow);
 		
 		tbody.appendChild(newRow);
 		checkPartialLabelOverflow();
@@ -303,19 +332,13 @@ document.addEventListener('DOMContentLoaded', function() {
 			cells[0].textContent = 'No ILO';
 			cells[0].style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; font-family:Georgia, serif; font-size:13px; text-align:center; vertical-align:middle; color:#999; font-style:italic;';
 			
-			// Keep all textareas enabled even when ILO is placeholder
+			// Clear all cells (make them blank, not inputs)
 			for (let i = 1; i < cells.length; i++) {
-				const textarea = cells[i].querySelector('textarea');
-				if (textarea) {
-					textarea.disabled = false;
-					textarea.value = '';
-					textarea.style.backgroundColor = '';
-					textarea.style.cursor = '';
-				}
+				cells[i].innerHTML = '';
 				if (i === cells.length - 1) {
-					cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
+					cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle; background-color:transparent;';
 				} else {
-					cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
+					cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle; background-color:transparent;';
 				}
 			}
 			return;
@@ -381,27 +404,9 @@ document.addEventListener('DOMContentLoaded', function() {
 			
 			placeholderHeader.style.cssText = 'border:none; border-bottom:1px solid #343a40; border-right:1px solid #343a40; height:30px; padding:0.2rem 0.5rem; font-weight:700; font-family:Georgia, serif; font-size:13px; line-height:1.4; color:#111; text-align:center; position:relative;';
 			
-			// Replace placeholder cells with textarea and re-enable CPA inputs in each data row
+			// Update ALL cells in each data row since SO just became real
 			dataRows.forEach(row => {
-				const cells = Array.from(row.querySelectorAll('td'));
-				// Last SO cell is at index length - 4 (before C, P, A)
-				const lastSoIndex = cells.length - 4;
-				const soCell = cells[lastSoIndex];
-				if (soCell && (soCell.textContent.trim() === '-' || soCell.querySelector('span'))) {
-					soCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
-					const newTextarea = document.createElement('textarea');
-					newTextarea.className = 'form-control form-control-sm';
-					newTextarea.placeholder = '-';
-					newTextarea.rows = 1;
-					newTextarea.style.cssText = 'width:100%; min-height:22px; border:none; padding:0.2rem 0.5rem; font-family:Georgia,serif; font-size:13px; text-align:center; box-sizing:border-box; resize:none; overflow:hidden;';
-					newTextarea.addEventListener('input', function() {
-						autoResize(this);
-					});
-					soCell.innerHTML = '';
-					soCell.appendChild(newTextarea);
-				}
-				
-				// CPA inputs remain enabled (no need to change their state)
+				updateAllCellsInRow(row);
 			});
 				// After converting placeholder, keep columns even
 				equalizeNonIloColumns();
@@ -471,23 +476,19 @@ document.addEventListener('DOMContentLoaded', function() {
 		// Add new SO cell to each data row (before C cell)
 		dataRows.forEach(row => {
 			const cells = row.querySelectorAll('td');
-			const cCell = Array.from(cells).find(cell => {
-				const textarea = cell.querySelector('textarea');
-				return textarea && cells[cells.length - 3] === cell;
-			}) || cells[cells.length - 3];
+			const cCellIndex = cells.length - 3;
+			const cCell = cells[cCellIndex];
 			
+			// Create new SO cell
 			const newCell = document.createElement('td');
 			newCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
-			const newTextarea = document.createElement('textarea');
-			newTextarea.className = 'form-control form-control-sm';
-			newTextarea.placeholder = '-';
-			newTextarea.rows = 1;
-			newTextarea.style.cssText = 'width:100%; min-height:22px; border:none; padding:0.2rem 0.5rem; font-family:Georgia,serif; font-size:13px; text-align:center; box-sizing:border-box; resize:none; overflow:hidden;';
-			newTextarea.addEventListener('input', function() {
-				autoResize(this);
-			});
-			newCell.appendChild(newTextarea);
+			newCell.innerHTML = '';
 			row.insertBefore(newCell, cCell);
+		});
+		
+		// Now update ALL cells in all rows since SO columns changed
+		dataRows.forEach(row => {
+			updateAllCellsInRow(row);
 		});
 			// After adding a column, ensure even widths
 			equalizeNonIloColumns();
@@ -547,16 +548,10 @@ document.addEventListener('DOMContentLoaded', function() {
 			
 			lastSoHeader.style.cssText = 'border:none; border-bottom:1px solid #343a40; border-right:1px solid #343a40; height:30px; padding:0.2rem 0.5rem; font-weight:400; font-style:italic; font-family:Georgia, serif; font-size:13px; line-height:1.4; color:#999; text-align:center; position:relative;';
 			
-			// Replace SO cells with placeholder in each data row
+			// Replace SO cells with blank cells in each data row (not inputs)
 			dataRows.forEach(row => {
-				const cells = Array.from(row.querySelectorAll('td'));
-				// Last SO cell is at index length - 4 (before C, P, A)
-				const lastSoIndex = cells.length - 4;
-				const soCell = cells[lastSoIndex];
-				if (soCell) {
-					soCell.innerHTML = '<span style="color:#999; font-style:italic;">-</span>';
-					soCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle; background:#f9f9f9;';
-				}
+				// Update ALL cells in this row since SO is now a placeholder
+				updateAllCellsInRow(row);
 			});
 
 			// Ensure the SO group header colspan covers 1 SO + C/P/A
@@ -662,9 +657,6 @@ document.addEventListener('DOMContentLoaded', function() {
 			const iloInput = cells[0].querySelector('input');
 			const iloText = iloInput ? iloInput.value.trim() : cells[0].textContent.trim();
 			
-			// Skip only placeholder rows - allow empty rows to be saved
-			if (iloText === 'No ILO') return;
-			
 			// Collect SO values using column position as key (allows duplicate labels)
 			const sos = {};
 			soHeaders.forEach((header, soIndex) => {
@@ -692,8 +684,12 @@ document.addEventListener('DOMContentLoaded', function() {
 			const pValue = pCell ? (pCell.querySelector('textarea')?.value.trim() || '') : '';
 			const aValue = aCell ? (aCell.querySelector('textarea')?.value.trim() || '') : '';
 			
+			// Allow saving if we have any real data (ILO, SO, or C/P/A)
+			const hasAnyData = iloText !== 'No ILO' || Object.keys(sos).length > 0 || cValue || pValue || aValue;
+			if (!hasAnyData) return;
+			
 			mappingData.push({
-				ilo_text: iloText || '', // Allow empty ILO text
+				ilo_text: iloText === 'No ILO' ? null : (iloText || ''), // null if placeholder, empty string allowed
 				sos: sos,
 				c: cValue,
 				p: pValue,
