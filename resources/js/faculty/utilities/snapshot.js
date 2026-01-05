@@ -676,6 +676,112 @@ export function snapshotIloIgaMapping(){
   };
 }
 
+// ILO–CDIO/SDG Mapping: snapshot cell values and structure (row/column counts and labels)
+export function snapshotIloCdioSdgMapping(){
+  const container = document.querySelector('.ilo-cdio-sdg-mapping');
+  const mappingTable = container ? container.querySelector('.mapping') : null;
+  const rows = [];
+  const lines = ['PARTIAL_BEGIN:ilo_cdio_sdg', 'TITLE: ILO–CDIO/SDG Mapping', 'COLUMNS: Row | CDIO Values | SDG Values'];
+
+  let cdioColCount = 0;
+  let sdgColCount = 0;
+  let rowCount = 0;
+  const cdioHeaders = [];
+  const sdgHeaders = [];
+  const iloInputs = [];
+
+  if (mappingTable) {
+    const allRows = Array.from(mappingTable.querySelectorAll('tr'));
+    const headerRow2 = allRows[1]; // row with CDIO/SDG headers
+
+    if (headerRow2) {
+      const hdrs = Array.from(headerRow2.querySelectorAll('th'));
+      const cdioHdrs = hdrs.filter(th => th.classList.contains('cdio-label-cell'));
+      const sdgHdrs = hdrs.filter(th => th.classList.contains('sdg-label-cell'));
+
+      cdioHdrs.forEach(th => {
+        const input = th.querySelector('input');
+        const text = input ? input.value.trim() : th.textContent.trim();
+        if (text !== 'No CDIO') {
+          cdioHeaders.push(text);
+          cdioColCount++;
+        }
+      });
+
+      sdgHdrs.forEach(th => {
+        const input = th.querySelector('input');
+        const text = input ? input.value.trim() : th.textContent.trim();
+        if (text !== 'No SDG') {
+          sdgHeaders.push(text);
+          sdgColCount++;
+        }
+      });
+    }
+
+    const dataRows = allRows.slice(3).filter(tr => tr.querySelector('td'));
+    rowCount = dataRows.length;
+
+    dataRows.forEach((row) => {
+      const cells = Array.from(row.querySelectorAll('td'));
+      const firstTd = cells[0];
+      if (firstTd) {
+        const input = firstTd.querySelector('input');
+        if (input) {
+          iloInputs.push(input.value.trim());
+        } else {
+          iloInputs.push(firstTd.textContent.trim());
+        }
+      }
+
+      const cdioValues = [];
+      const sdgValues = [];
+
+      const cdioStartIdx = 1; // after ILO cell
+      const sdgStartIdx = 1 + cdioColCount; // after all CDIO cells
+
+      for (let i = 0; i < cdioColCount; i++) {
+        const cell = cells[cdioStartIdx + i];
+        const ta = cell ? cell.querySelector('textarea') : null;
+        cdioValues.push((ta && !ta.disabled) ? (ta.value || '').trim() : '');
+      }
+
+      for (let i = 0; i < sdgColCount; i++) {
+        const cell = cells[sdgStartIdx + i];
+        const ta = cell ? cell.querySelector('textarea') : null;
+        sdgValues.push((ta && !ta.disabled) ? (ta.value || '').trim() : '');
+      }
+
+      rows.push({ cdioValues, sdgValues });
+      const cdioLine = cdioValues.length ? cdioValues.join(' | ') : '-';
+      const sdgLine = sdgValues.length ? sdgValues.join(' | ') : '-';
+      lines.push('ROW: ' + cdioLine + ' || ' + sdgLine);
+    });
+  }
+
+  lines.push('STRUCT: cdioCols=' + cdioColCount + ' sdgCols=' + sdgColCount + ' rows=' + rowCount);
+  lines.push('CDIO_HEADERS: ' + cdioHeaders.join('|'));
+  lines.push('SDG_HEADERS: ' + sdgHeaders.join('|'));
+  lines.push('ILO_INPUTS: ' + iloInputs.join('|'));
+  lines.push('PARTIAL_END:ilo_cdio_sdg');
+  const text = lines.join('\n');
+  const hash = simpleHash(`${text}|cdio:${cdioColCount}|sdg:${sdgColCount}`);
+
+  return {
+    partial: 'iloCdioSdg',
+    title: 'ILO–CDIO/SDG Mapping',
+    rows,
+    cdioColCount,
+    sdgColCount,
+    rowCount,
+    cdioHeaders,
+    sdgHeaders,
+    iloInputs,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Student Outcomes
 export function snapshotSo(){
   const list = document.getElementById('syllabus-so-sortable');
@@ -731,7 +837,8 @@ if (typeof window !== 'undefined') {
     snapshotTla,
     snapshotAssessmentMapping,
     snapshotIloSoCpaMapping,
-    snapshotIloIgaMapping
+    snapshotIloIgaMapping,
+    snapshotIloCdioSdgMapping
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -748,4 +855,5 @@ if (typeof window !== 'undefined') {
   window.snapshotAssessmentMapping = snapshotAssessmentMapping;
   window.snapshotIloSoCpaMapping = snapshotIloSoCpaMapping;
   window.snapshotIloIgaMapping = snapshotIloIgaMapping;
+  window.snapshotIloCdioSdgMapping = snapshotIloCdioSdgMapping;
 }

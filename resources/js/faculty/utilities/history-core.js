@@ -1145,6 +1145,178 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
   }
 
+  function applyIloCdioSdg(snap){
+    const st = ensure('iloCdioSdg');
+    st.isApplying = true;
+    try {
+      const container = document.querySelector('.ilo-cdio-sdg-mapping');
+      const mappingTable = container ? container.querySelector('.mapping') : null;
+      if (!mappingTable) {
+        console.warn('[APPLY ILO–CDIO/SDG] Mapping table not found');
+        return;
+      }
+
+      const dataRows = Array.isArray(snap?.rows) ? snap.rows : [];
+      const targetRowCount = Number.isInteger(snap?.rowCount) ? snap.rowCount : dataRows.length;
+      const targetCdioCount = Number(snap?.cdioColCount || 0);
+      const targetSdgCount = Number(snap?.sdgColCount || 0);
+
+      const allRows = Array.from(mappingTable.querySelectorAll('tr'));
+      const headerRow2 = allRows[1];
+
+      // Determine current structure
+      const currentDataTrs = allRows.slice(3).filter(tr => tr.querySelector('td'));
+      const currentRowCount = currentDataTrs.length;
+      let currentCdioCount = 0;
+      let currentSdgCount = 0;
+
+      if (headerRow2) {
+        const hdrs = Array.from(headerRow2.querySelectorAll('th'));
+        const cdioHdrs = hdrs.filter(th => th.classList.contains('cdio-label-cell'));
+        const sdgHdrs = hdrs.filter(th => th.classList.contains('sdg-label-cell'));
+
+        const realCdio = cdioHdrs.filter(th => {
+          const input = th.querySelector('input');
+          const text = input ? input.value.trim() : th.textContent.trim();
+          return text !== 'No CDIO';
+        });
+        const realSdg = sdgHdrs.filter(th => {
+          const input = th.querySelector('input');
+          const text = input ? input.value.trim() : th.textContent.trim();
+          return text !== 'No SDG';
+        });
+
+        currentCdioCount = realCdio.length;
+        currentSdgCount = realSdg.length;
+      }
+
+      // Adjust rows
+      try {
+        if (typeof window.addIloRowCdioSdg === 'function' && typeof window.removeIloRowCdioSdg === 'function') {
+          if (currentRowCount < targetRowCount) {
+            for (let i = currentRowCount; i < targetRowCount; i++) window.addIloRowCdioSdg();
+          } else if (currentRowCount > targetRowCount) {
+            for (let i = targetRowCount; i < currentRowCount; i++) window.removeIloRowCdioSdg();
+          }
+        }
+      } catch (e) { console.warn('[APPLY ILO–CDIO/SDG] Row adjust error:', e); }
+
+      // Adjust CDIO columns
+      try {
+        if (typeof window.addCdioColumn === 'function' && typeof window.removeCdioColumn === 'function') {
+          if (currentCdioCount < targetCdioCount) {
+            for (let i = currentCdioCount; i < targetCdioCount; i++) window.addCdioColumn();
+          } else if (currentCdioCount > targetCdioCount) {
+            for (let i = targetCdioCount; i < currentCdioCount; i++) window.removeCdioColumn();
+          }
+        }
+      } catch (e) { console.warn('[APPLY ILO–CDIO/SDG] CDIO column adjust error:', e); }
+
+      // Adjust SDG columns
+      try {
+        if (typeof window.addSdgColumn === 'function' && typeof window.removeSdgColumn === 'function') {
+          if (currentSdgCount < targetSdgCount) {
+            for (let i = currentSdgCount; i < targetSdgCount; i++) window.addSdgColumn();
+          } else if (currentSdgCount > targetSdgCount) {
+            for (let i = targetSdgCount; i < currentSdgCount; i++) window.removeSdgColumn();
+          }
+        }
+      } catch (e) { console.warn('[APPLY ILO–CDIO/SDG] SDG column adjust error:', e); }
+
+      // Requery rows after structure adjustments
+      const finalRows = Array.from(mappingTable.querySelectorAll('tr')).slice(3).filter(tr => tr.querySelector('td'));
+
+      // Restore ILO inputs
+      if (Array.isArray(snap?.iloInputs) && snap.iloInputs.length > 0) {
+        finalRows.forEach((tr, idx) => {
+          const firstTd = tr.querySelector('td:first-child');
+          if (!firstTd || idx >= snap.iloInputs.length) return;
+          const iloValue = snap.iloInputs[idx] || '';
+
+          let input = firstTd.querySelector('input');
+          if (!input) {
+            firstTd.innerHTML = '';
+            input = document.createElement('input');
+            input.type = 'text';
+            input.placeholder = '-';
+            input.className = 'form-control form-control-sm';
+            input.style.cssText = 'width:100%; border:none; padding:0.1rem 0.25rem; font-family:Georgia,serif; font-size:13px; text-align:center; box-sizing:border-box; background:transparent;';
+            input.addEventListener('input', function(e) {
+              const value = e.target.value;
+              if (/^\d+$/.test(value)) {
+                e.target.value = 'ILO' + value;
+              }
+            });
+            firstTd.appendChild(input);
+          }
+          input.value = iloValue;
+        });
+      }
+
+      // Restore header labels
+      if (Array.isArray(snap?.cdioHeaders) && snap.cdioHeaders.length > 0 || Array.isArray(snap?.sdgHeaders) && snap.sdgHeaders.length > 0) {
+        const all = Array.from(mappingTable.querySelectorAll('tr'));
+        const hdr2 = all[1];
+        if (hdr2) {
+          const hdrs = Array.from(hdr2.querySelectorAll('th'));
+          const cdioHdrs = hdrs.filter(th => th.classList.contains('cdio-label-cell'));
+          const sdgHdrs = hdrs.filter(th => th.classList.contains('sdg-label-cell'));
+
+          let ci = 0;
+          cdioHdrs.forEach(th => {
+            const input = th.querySelector('input');
+            const text = input ? input.value.trim() : th.textContent.trim();
+            if (text !== 'No CDIO' && ci < (snap.cdioHeaders?.length || 0)) {
+              if (input) input.value = snap.cdioHeaders[ci] || '';
+              ci++;
+            }
+          });
+
+          let si = 0;
+          sdgHdrs.forEach(th => {
+            const input = th.querySelector('input');
+            const text = input ? input.value.trim() : th.textContent.trim();
+            if (text !== 'No SDG' && si < (snap.sdgHeaders?.length || 0)) {
+              if (input) input.value = snap.sdgHeaders[si] || '';
+              si++;
+            }
+          });
+        }
+      }
+
+      // Restore cell values
+      finalRows.forEach((tr, idx) => {
+        const rowSnap = dataRows[idx] || {};
+        const cdioValues = Array.isArray(rowSnap.cdioValues) ? rowSnap.cdioValues : [];
+        const sdgValues = Array.isArray(rowSnap.sdgValues) ? rowSnap.sdgValues : [];
+
+        const cells = Array.from(tr.querySelectorAll('td'));
+        const cdioStartIdx = 1;
+        const sdgStartIdx = 1 + targetCdioCount;
+
+        for (let i = 0; i < targetCdioCount; i++) {
+          const cell = cells[cdioStartIdx + i];
+          const ta = cell ? cell.querySelector('textarea') : null;
+          if (ta && !ta.disabled) {
+            ta.value = cdioValues[i] || '';
+          }
+        }
+
+        for (let i = 0; i < targetSdgCount; i++) {
+          const cell = cells[sdgStartIdx + i];
+          const ta = cell ? cell.querySelector('textarea') : null;
+          if (ta && !ta.disabled) {
+            ta.value = sdgValues[i] || '';
+          }
+        }
+      });
+
+      try { if (window.updateProgressBar) window.updateProgressBar(); } catch(e){}
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function undo(){
     if (!globalHistory.length) return false;
     setGlobalApplying(true);
@@ -1189,6 +1361,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           break;
         case 'iloIgaMapping':
           applyIloIga(prev);
+          break;
+        case 'iloCdioSdg':
+          applyIloCdioSdg(prev);
           break;
         case 'iga':
           applyIga(prev);
@@ -1254,6 +1429,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           break;
         case 'iloIgaMapping':
           applyIloIga(next);
+          break;
+        case 'iloCdioSdg':
+          applyIloCdioSdg(next);
           break;
         case 'iga':
           applyIga(next);
@@ -2231,6 +2409,61 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerIloCdioSdgWatchers(){
+    const st = ensure('iloCdioSdg');
+    const lastSavedText = new WeakMap();
+
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      try {
+        const snap = snapshotIloCdioSdgMapping();
+        if (snap && Array.isArray(snap.rows)) {
+          safePush('iloCdioSdg', snap);
+        }
+      } catch(e) { /* noop */ }
+    };
+
+    const container = document.querySelector('.ilo-cdio-sdg-mapping');
+    const mappingTable = container ? container.querySelector('.mapping') : null;
+    if (mappingTable){
+      // Action-based snapshots: trigger on word boundaries or deletions,
+      // not on idle pause.
+      mappingTable.addEventListener('input', (e) => {
+        const el = e.target;
+        if (!el || (el.tagName !== 'TEXTAREA' && el.tagName !== 'INPUT')) return;
+        const current = el.value || '';
+        const prev = lastSavedText.get(el) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(el, current);
+          take();
+        }
+      }, { capture: true });
+
+      mappingTable.addEventListener('change', (e) => {
+        const el = e.target;
+        if (!el || (el.tagName !== 'TEXTAREA' && el.tagName !== 'INPUT')) return;
+        lastSavedText.set(el, el.value || '');
+        take();
+      }, { capture: true });
+
+      // Structural changes (row/column adds/removes)
+      if (window.MutationObserver){
+        const mo = new MutationObserver(() => take());
+        mo.observe(mappingTable, { childList: true, subtree: true });
+      }
+
+      mappingTable.addEventListener('focusin', () => { window.SVActiveModuleName = 'iloCdioSdg'; }, true);
+      mappingTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'iloCdioSdg'; }, true);
+    }
+
+    try { safeInitialize('iloCdioSdg', snapshotIloCdioSdgMapping()); } catch(e) {}
+    updateButtons();
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     // wire toolbar buttons
     const undoBtn = document.getElementById('syllabusUndoBtn');
@@ -2266,6 +2499,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerIloIgaWatchers();
     registerAssessmentMappingWatchers();
     registerIloSoCpaWatchers();
+    registerIloCdioSdgWatchers();
   });
 
   // expose API
