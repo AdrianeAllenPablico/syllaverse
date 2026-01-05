@@ -1037,8 +1037,17 @@ document.addEventListener('DOMContentLoaded', function() {
 				mappings.forEach((m, idx) => {
 					const row = dataRows[idx];
 					const cells = Array.from(row.querySelectorAll('td'));
-					const iloInput = cells[0].querySelector('input');
-					if (iloInput) iloInput.value = m.ilo_text || '';
+					const iloCell = cells[0];
+					const iloInput = iloCell.querySelector('input');
+					
+					// If ilo_text is null, set as "No ILO" placeholder; otherwise set the value
+					if (m.ilo_text === null) {
+						iloCell.textContent = 'No ILO';
+						iloCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; font-family:Georgia, serif; font-size:13px; text-align:center; vertical-align:middle; color:#999; font-style:italic;';
+					} else {
+						if (iloInput) iloInput.value = m.ilo_text || '';
+					}
+					
 					soKeys.forEach((key, sIdx) => {
 						const cell = cells[sIdx + 1];
 						const ta = cell?.querySelector('textarea');
