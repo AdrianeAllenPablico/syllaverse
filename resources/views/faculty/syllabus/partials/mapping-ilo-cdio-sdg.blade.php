@@ -185,19 +185,82 @@
 </style>
 
 @php
-	// Prepare data for JavaScript load function
-	$iloCdioSdgMappings = $syllabus->iloCdioSdg ?? collect();
+	// Prepare data for JavaScript load function using normalized tables
+	$iloCdioSdgRows = $syllabus->iloCdioSdg ?? collect();
+	// Ensure value+column relations are loaded to avoid lazy-loading surprises
+	$iloCdioSdgRows->loadMissing(['cdioValues.cdioColumn', 'sdgValues.sdgColumn']);
+
+	// Column definitions (labels + positions) from normalized tables
+	$cdioColumns = \App\Models\SyllabusIloCdioColumn::where('syllabus_id', $syllabus->id ?? null)
+		->orderBy('position')
+		->get();
+	$sdgColumns = \App\Models\SyllabusIloSdgColumn::where('syllabus_id', $syllabus->id ?? null)
+		->orderBy('position')
+		->get();
+
+	$cdioColumnsData = $cdioColumns->map(function($col) {
+		return [
+			'id' => $col->id,
+			'label' => $col->label,
+			'position' => $col->position,
+		];
+	})->values();
+
+	$sdgColumnsData = $sdgColumns->map(function($col) {
+		return [
+			'id' => $col->id,
+			'label' => $col->label,
+			'position' => $col->position,
+		];
+	})->values();
+
+	// Row mappings: dense position keys ("1".."N") for every column,
+	// using null for blank cells so the client can distinguish slots.
+	$iloCdioSdgMappings = $iloCdioSdgRows->map(function($row) use ($cdioColumns, $sdgColumns) {
+		$cdios = [];
+		$sdgs = [];
+
+		// Index existing values by their zero-based column position
+		$cdioValuesByPos = [];
+		foreach ($row->cdioValues as $val) {
+			$pos = optional($val->cdioColumn)->position;
+			if ($pos !== null) {
+				$cdioValuesByPos[$pos] = $val->value;
+			}
+		}
+
+		$sdgValuesByPos = [];
+		foreach ($row->sdgValues as $val) {
+			$pos = optional($val->sdgColumn)->position;
+			if ($pos !== null) {
+				$sdgValuesByPos[$pos] = $val->value;
+			}
+		}
+
+		// Emit keys for all known columns, filling blanks with null
+		for ($i = 0; $i < $cdioColumns->count(); $i++) {
+			$key = (string) ($i + 1);
+			$cdios[$key] = array_key_exists($i, $cdioValuesByPos) ? $cdioValuesByPos[$i] : null;
+		}
+
+		for ($i = 0; $i < $sdgColumns->count(); $i++) {
+			$key = (string) ($i + 1);
+			$sdgs[$key] = array_key_exists($i, $sdgValuesByPos) ? $sdgValuesByPos[$i] : null;
+		}
+
+		return [
+			'ilo_text' => $row->ilo_text ?? '',
+			'cdios' => $cdios,
+			'sdgs' => $sdgs,
+			'position' => $row->position ?? 0,
+		];
+	})->values();
 @endphp
 
 <div class="ilo-cdio-sdg-mapping mb-4" 
-	data-mappings="{{ $iloCdioSdgMappings->isNotEmpty() ? json_encode($iloCdioSdgMappings->map(function($m) {
-		return [
-			'ilo_text' => $m->ilo_text ?? '',
-			'cdios' => $m->cdios ?? [],
-			'sdgs' => $m->sdgs ?? [],
-			'position' => $m->position ?? 0
-		];
-	})->values()) : '[]' }}">
+	data-cdio-columns="{{ json_encode($cdioColumnsData ?? []) }}"
+	data-sdg-columns="{{ json_encode($sdgColumnsData ?? []) }}"
+	data-mappings="{{ json_encode($iloCdioSdgMappings ?? []) }}">
 	<table class="table table-bordered" style="width:100%; border:1px solid #343a40; border-collapse:collapse; overflow:visible;">
 		<thead>
 			<tr>

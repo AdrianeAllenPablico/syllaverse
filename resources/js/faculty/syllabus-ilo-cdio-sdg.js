@@ -64,29 +64,59 @@ document.addEventListener('DOMContentLoaded', function() {
     // Load saved data on page load
     function loadSavedData() {
         const mappingsData = mapping.getAttribute('data-mappings');
-        
+        const cdioColumnsData = mapping.getAttribute('data-cdio-columns');
+        const sdgColumnsData = mapping.getAttribute('data-sdg-columns');
+
         if (!mappingsData) return;
         
         try {
             const mappings = JSON.parse(mappingsData);
-            
+
             if (!mappings || mappings.length === 0) return;
-            
-            // Collect all unique CDIO and SDG labels from the data
-            const cdioLabelsSet = new Set();
-            const sdgLabelsSet = new Set();
-            
-            mappings.forEach(row => {
-                if (row.cdios && typeof row.cdios === 'object') {
-                    Object.keys(row.cdios).forEach(label => cdioLabelsSet.add(label));
+
+            // Prefer explicit column label arrays from normalized tables, if provided
+            let cdioLabels = [];
+            let sdgLabels = [];
+
+            if (cdioColumnsData) {
+                try {
+                    const cols = JSON.parse(cdioColumnsData);
+                    if (Array.isArray(cols)) {
+                        cdioLabels = cols.map(col => (col && typeof col.label === 'string') ? col.label : '').filter(() => true);
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse data-cdio-columns, falling back to mapping-derived labels', e);
                 }
-                if (row.sdgs && typeof row.sdgs === 'object') {
-                    Object.keys(row.sdgs).forEach(label => sdgLabelsSet.add(label));
+            }
+
+            if (sdgColumnsData) {
+                try {
+                    const cols = JSON.parse(sdgColumnsData);
+                    if (Array.isArray(cols)) {
+                        sdgLabels = cols.map(col => (col && typeof col.label === 'string') ? col.label : '').filter(() => true);
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse data-sdg-columns, falling back to mapping-derived labels', e);
                 }
-            });
-            
-            const cdioLabels = Array.from(cdioLabelsSet);
-            const sdgLabels = Array.from(sdgLabelsSet);
+            }
+
+            // Fallback for legacy data: derive labels from mapping keys if no column arrays exist
+            if (cdioLabels.length === 0 || sdgLabels.length === 0) {
+                const cdioLabelsSet = new Set();
+                const sdgLabelsSet = new Set();
+
+                mappings.forEach(row => {
+                    if (row.cdios && typeof row.cdios === 'object') {
+                        Object.keys(row.cdios).forEach(label => cdioLabelsSet.add(label));
+                    }
+                    if (row.sdgs && typeof row.sdgs === 'object') {
+                        Object.keys(row.sdgs).forEach(label => sdgLabelsSet.add(label));
+                    }
+                });
+
+                if (cdioLabels.length === 0) cdioLabels = Array.from(cdioLabelsSet);
+                if (sdgLabels.length === 0) sdgLabels = Array.from(sdgLabelsSet);
+            }
             
             // Add CDIO columns
             if (cdioLabels.length > 0) {
@@ -139,32 +169,51 @@ document.addEventListener('DOMContentLoaded', function() {
                     const countSdgCols = () => Array.from(headerRow2.querySelectorAll('th.sdg-label-cell')).filter(th => !th.textContent.includes('No SDG')).length;
 
                     const desiredMappings = Array.isArray(mappings) ? mappings : [];
-                    const desiredCdioLabels = (() => {
+
+                    // Determine desired column counts from normalized column arrays on the root.
+                    // This keeps column positions stable even when some columns are entirely empty.
+                    let desiredCdioCount = 0;
+                    let desiredSdgCount = 0;
+
+                    try {
+                        const cdioColsJson = mapping.getAttribute('data-cdio-columns') || '[]';
+                        const cdioCols = JSON.parse(cdioColsJson);
+                        if (Array.isArray(cdioCols)) desiredCdioCount = cdioCols.length;
+                    } catch (e) {
+                        console.warn('Failed to parse data-cdio-columns in refreshIloCdioSdgPartial', e);
+                    }
+
+                    try {
+                        const sdgColsJson = mapping.getAttribute('data-sdg-columns') || '[]';
+                        const sdgCols = JSON.parse(sdgColsJson);
+                        if (Array.isArray(sdgCols)) desiredSdgCount = sdgCols.length;
+                    } catch (e) {
+                        console.warn('Failed to parse data-sdg-columns in refreshIloCdioSdgPartial', e);
+                    }
+
+                    // Fallback: derive counts from mapping keys if column arrays are missing
+                    if (!desiredCdioCount) {
                         const set = new Set();
                         desiredMappings.forEach(m => { if (m && m.cdios && typeof m.cdios === 'object') Object.keys(m.cdios).forEach(k => set.add(k)); });
-                        return Array.from(set);
-                    })();
-                    const desiredSdgLabels = (() => {
+                        desiredCdioCount = set.size;
+                    }
+                    if (!desiredSdgCount) {
                         const set = new Set();
                         desiredMappings.forEach(m => { if (m && m.sdgs && typeof m.sdgs === 'object') Object.keys(m.sdgs).forEach(k => set.add(k)); });
-                        return Array.from(set);
-                    })();
+                        desiredSdgCount = set.size;
+                    }
 
-                    // Ensure CDIO columns count
+                    // Ensure CDIO columns count (use desiredCdioCount from normalized columns)
                     let currentCdio = countCdioCols();
-                    while (currentCdio < desiredCdioLabels.length) { addCdioColumn(); currentCdio = countCdioCols(); }
-                    while (currentCdio > desiredCdioLabels.length) { removeCdioColumn(); currentCdio = countCdioCols(); }
-                    // Set CDIO labels
+                    while (currentCdio < desiredCdioCount) { addCdioColumn(); currentCdio = countCdioCols(); }
+                    while (currentCdio > desiredCdioCount) { removeCdioColumn(); currentCdio = countCdioCols(); }
                     const cdioHeaders = Array.from(headerRow2.querySelectorAll('th.cdio-label-cell')).filter(th => !th.textContent.includes('No CDIO'));
-                    cdioHeaders.forEach((th, idx) => { const input = th.querySelector('input'); if (input) input.value = desiredCdioLabels[idx] || ''; });
 
-                    // Ensure SDG columns count
+                    // Ensure SDG columns count (use desiredSdgCount from normalized columns)
                     let currentSdg = countSdgCols();
-                    while (currentSdg < desiredSdgLabels.length) { addSdgColumn(); currentSdg = countSdgCols(); }
-                    while (currentSdg > desiredSdgLabels.length) { removeSdgColumn(); currentSdg = countSdgCols(); }
-                    // Set SDG labels
+                    while (currentSdg < desiredSdgCount) { addSdgColumn(); currentSdg = countSdgCols(); }
+                    while (currentSdg > desiredSdgCount) { removeSdgColumn(); currentSdg = countSdgCols(); }
                     const sdgHeaders = Array.from(headerRow2.querySelectorAll('th.sdg-label-cell')).filter(th => !th.textContent.includes('No SDG'));
-                    sdgHeaders.forEach((th, idx) => { const input = th.querySelector('input'); if (input) input.value = desiredSdgLabels[idx] || ''; });
 
                     // Ensure ILO rows count
                     const dataRowsAll = Array.from(innerTable.querySelectorAll('tr')).slice(3); // rows after headers
@@ -180,23 +229,27 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     // Populate rows
-                    const cdioKeys = cdioHeaders.map(th => th.querySelector('input')?.value.trim() || th.textContent.trim()).filter(Boolean);
-                    const sdgKeys = sdgHeaders.map(th => th.querySelector('input')?.value.trim() || th.textContent.trim()).filter(Boolean);
                     desiredMappings.forEach((m, idx) => {
                         const row = dataRows[idx];
                         if (!row) return;
                         const cells = Array.from(row.querySelectorAll('td'));
                         const iloInput = cells[0]?.querySelector('input');
                         if (iloInput) iloInput.value = m?.ilo_text || '';
-                        cdioKeys.forEach((key, cIdx) => {
+                        // Populate CDIO values using position-based keys ("1", "2", ...)
+                        cdioHeaders.forEach((_, cIdx) => {
                             const cell = cells[1 + cIdx];
                             const ta = cell?.querySelector('textarea');
-                            if (ta) ta.value = (m?.cdios && typeof m.cdios === 'object' && m.cdios[key] !== undefined && m.cdios[key] !== null) ? m.cdios[key] : '';
+                            const key = String(cIdx + 1);
+                            const val = (m?.cdios && typeof m.cdios === 'object') ? m.cdios[key] : undefined;
+                            if (ta) ta.value = (val !== undefined && val !== null) ? val : '';
                         });
-                        sdgKeys.forEach((key, sIdx) => {
-                            const cell = cells[1 + cdioKeys.length + sIdx];
+                        // Populate SDG values using position-based keys ("1", "2", ...)
+                        sdgHeaders.forEach((_, sIdx) => {
+                            const cell = cells[1 + cdioHeaders.length + sIdx];
                             const ta = cell?.querySelector('textarea');
-                            if (ta) ta.value = (m?.sdgs && typeof m.sdgs === 'object' && m.sdgs[key] !== undefined && m.sdgs[key] !== null) ? m.sdgs[key] : '';
+                            const key = String(sIdx + 1);
+                            const val = (m?.sdgs && typeof m.sdgs === 'object') ? m.sdgs[key] : undefined;
+                            if (ta) ta.value = (val !== undefined && val !== null) ? val : '';
                         });
                     });
 
@@ -229,10 +282,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 const partial = doc.querySelector('.ilo-cdio-sdg-mapping');
                 if (!partial) throw new Error('ILO-CDIO-SDG partial not found in response');
                 const mappingsData = partial.getAttribute('data-mappings') || '[]';
+                const cdioColsData = partial.getAttribute('data-cdio-columns') || '[]';
+                const sdgColsData = partial.getAttribute('data-sdg-columns') || '[]';
+
+                // Sync root data-* attributes with latest from server
+                mapping.setAttribute('data-mappings', mappingsData);
+                mapping.setAttribute('data-cdio-columns', cdioColsData);
+                mapping.setAttribute('data-sdg-columns', sdgColsData);
+
                 let mappings = [];
                 try { mappings = JSON.parse(mappingsData); } catch(_) { mappings = []; }
                 if (typeof window.refreshIloCdioSdgPartial === 'function') window.refreshIloCdioSdgPartial(mappings);
-                return { mappings };
+
+                let cdioCols = [];
+                let sdgCols = [];
+                try { cdioCols = JSON.parse(cdioColsData); } catch(_) { cdioCols = []; }
+                try { sdgCols = JSON.parse(sdgColsData); } catch(_) { sdgCols = []; }
+
+                return { mappings, cdioColumns: cdioCols, sdgColumns: sdgCols };
             };
 
             // Add SDG columns
@@ -283,30 +350,36 @@ document.addEventListener('DOMContentLoaded', function() {
                         const iloInput = cells[0].querySelector('input');
                         if (iloInput) iloInput.value = mappingRow.ilo_text;
                         
-                        // Set CDIO values
+                        // Set CDIO values by column position (keys "1", "2", ...)
                         if (mappingRow.cdios && typeof mappingRow.cdios === 'object') {
-                            Object.entries(mappingRow.cdios).forEach(([cdioLabel, cdioValue], cdioIndex) => {
-                                const cdioCell = cells[1 + cdioIndex]; // +1 because first cell is ILO
-                                if (cdioCell) {
-                                    const textarea = cdioCell.querySelector('textarea');
-                                    if (textarea) {
-                                        textarea.value = cdioValue;
-                                    }
+                            for (let cIdx = 0; cIdx < cdioLabels.length; cIdx++) {
+                                const key = String(cIdx + 1);
+                                const cdioCell = cells[1 + cIdx]; // +1 because first cell is ILO
+                                if (!cdioCell) continue;
+                                const textarea = cdioCell.querySelector('textarea');
+                                if (textarea) {
+                                    const cdioValue = Object.prototype.hasOwnProperty.call(mappingRow.cdios, key)
+                                        ? mappingRow.cdios[key]
+                                        : '';
+                                    textarea.value = (cdioValue !== undefined && cdioValue !== null) ? cdioValue : '';
                                 }
-                            });
+                            }
                         }
-                        
-                        // Set SDG values (after CDIO cells)
+
+                        // Set SDG values by column position (keys "1", "2", ...)
                         if (mappingRow.sdgs && typeof mappingRow.sdgs === 'object') {
-                            Object.entries(mappingRow.sdgs).forEach(([sdgLabel, sdgValue], sdgIndex) => {
-                                const sdgCell = cells[1 + cdioLabels.length + sdgIndex]; // +1 for ILO, +cdioLabels.length for CDIO columns
-                                if (sdgCell) {
-                                    const textarea = sdgCell.querySelector('textarea');
-                                    if (textarea) {
-                                        textarea.value = sdgValue;
-                                    }
+                            for (let sIdx = 0; sIdx < sdgLabels.length; sIdx++) {
+                                const key = String(sIdx + 1);
+                                const sdgCell = cells[1 + cdioLabels.length + sIdx]; // +1 for ILO, +cdioLabels.length for CDIO columns
+                                if (!sdgCell) continue;
+                                const textarea = sdgCell.querySelector('textarea');
+                                if (textarea) {
+                                    const sdgValue = Object.prototype.hasOwnProperty.call(mappingRow.sdgs, key)
+                                        ? mappingRow.sdgs[key]
+                                        : '';
+                                    textarea.value = (sdgValue !== undefined && sdgValue !== null) ? sdgValue : '';
                                 }
-                            });
+                            }
                         }
                     }
                 } else {
@@ -322,30 +395,36 @@ document.addEventListener('DOMContentLoaded', function() {
                         const iloInput = cells[0].querySelector('input');
                         if (iloInput) iloInput.value = mappingRow.ilo_text;
                         
-                        // Set CDIO values
+                        // Set CDIO values by column position (keys "1", "2", ...)
                         if (mappingRow.cdios && typeof mappingRow.cdios === 'object') {
-                            Object.entries(mappingRow.cdios).forEach(([cdioLabel, cdioValue], cdioIndex) => {
-                                const cdioCell = cells[1 + cdioIndex]; // +1 because first cell is ILO
-                                if (cdioCell) {
-                                    const textarea = cdioCell.querySelector('textarea');
-                                    if (textarea) {
-                                        textarea.value = cdioValue;
-                                    }
+                            for (let cIdx = 0; cIdx < cdioLabels.length; cIdx++) {
+                                const key = String(cIdx + 1);
+                                const cdioCell = cells[1 + cIdx]; // +1 because first cell is ILO
+                                if (!cdioCell) continue;
+                                const textarea = cdioCell.querySelector('textarea');
+                                if (textarea) {
+                                    const cdioValue = Object.prototype.hasOwnProperty.call(mappingRow.cdios, key)
+                                        ? mappingRow.cdios[key]
+                                        : '';
+                                    textarea.value = (cdioValue !== undefined && cdioValue !== null) ? cdioValue : '';
                                 }
-                            });
+                            }
                         }
-                        
-                        // Set SDG values (after CDIO cells)
+
+                        // Set SDG values by column position (keys "1", "2", ...)
                         if (mappingRow.sdgs && typeof mappingRow.sdgs === 'object') {
-                            Object.entries(mappingRow.sdgs).forEach(([sdgLabel, sdgValue], sdgIndex) => {
-                                const sdgCell = cells[1 + cdioLabels.length + sdgIndex]; // +1 for ILO, +cdioLabels.length for CDIO columns
-                                if (sdgCell) {
-                                    const textarea = sdgCell.querySelector('textarea');
-                                    if (textarea) {
-                                        textarea.value = sdgValue;
-                                    }
+                            for (let sIdx = 0; sIdx < sdgLabels.length; sIdx++) {
+                                const key = String(sIdx + 1);
+                                const sdgCell = cells[1 + cdioLabels.length + sIdx]; // +1 for ILO, +cdioLabels.length for CDIO columns
+                                if (!sdgCell) continue;
+                                const textarea = sdgCell.querySelector('textarea');
+                                if (textarea) {
+                                    const sdgValue = Object.prototype.hasOwnProperty.call(mappingRow.sdgs, key)
+                                        ? mappingRow.sdgs[key]
+                                        : '';
+                                    textarea.value = (sdgValue !== undefined && sdgValue !== null) ? sdgValue : '';
                                 }
-                            });
+                            }
                         }
                     }
                 }
@@ -1290,8 +1369,13 @@ window.removeSdgColumn = function() {
 
 /**
  * Save ILO-CDIO-SDG mapping to the database
+ *
+ * Mirrors the ILO-SO-CPA save contract by sending:
+ * - cdio_columns: array of CDIO column labels (in DOM order, excluding placeholder)
+ * - sdg_columns: array of SDG column labels (in DOM order, excluding placeholder)
+ * - mappings: per-row data with cdios/sdgs keyed by column position ("1", "2", ...)
  */
-window.saveIloCdioSdgMapping = function(showAlert = false) {
+window.saveIloCdioSdgMapping = function(showAlert = true) {
     const container = document.querySelector('.ilo-cdio-sdg-mapping');
     if (!container) {
         const error = new Error('ILO-CDIO-SDG mapping container not found.');
@@ -1327,13 +1411,35 @@ window.saveIloCdioSdgMapping = function(showAlert = false) {
     // Get individual column headers from row 2
     const allColumnHeaders = Array.from(headerRow2.querySelectorAll('th'));
     console.log('Header cells:', allColumnHeaders.length);
-    
+
+    // Helper to extract a header label (input value or text)
+    const getHeaderLabel = (th) => {
+        if (!th) return '';
+        const input = th.querySelector('input');
+        const text = input ? input.value.trim() : th.textContent.trim();
+        return text;
+    };
+
     // Separate CDIO and SDG headers based on class names
     const cdioHeaderCells = allColumnHeaders.filter(th => th.classList.contains('cdio-label-cell'));
     const sdgHeaderCells = allColumnHeaders.filter(th => th.classList.contains('sdg-label-cell'));
-    
+
     console.log('CDIO headers:', cdioHeaderCells.length);
     console.log('SDG headers:', sdgHeaderCells.length);
+
+    // Build column label arrays (exclude placeholders)
+    const realCdioHeaders = cdioHeaderCells
+        .map((th, idx) => ({ th, domIndex: idx, label: getHeaderLabel(th) }))
+        .filter(h => h.label !== 'No CDIO');
+    const realSdgHeaders = sdgHeaderCells
+        .map((th, idx) => ({ th, domIndex: idx, label: getHeaderLabel(th) }))
+        .filter(h => h.label !== 'No SDG');
+
+    const cdioColumns = realCdioHeaders.map(h => h.label);
+    const sdgColumns = realSdgHeaders.map(h => h.label);
+
+    console.log('CDIO columns (labels):', cdioColumns);
+    console.log('SDG columns (labels):', sdgColumns);
 
     // Build mapping data
     const mappingData = [];
@@ -1363,12 +1469,13 @@ window.saveIloCdioSdgMapping = function(showAlert = false) {
             return;
         }
 
-        // Collect CDIO values as sequential numeric keys (DB expects "1", "2", ...)
+        // Collect CDIO values using real CDIO headers (exclude placeholder)
         const cdios = {};
         const cdioStartIndex = 1; // first CDIO cell is after ILO cell
-        cdioHeaderCells.forEach((headerCell, idx) => {
-            const key = String(idx + 1);
-            const cdioCell = cells[cdioStartIndex + idx];
+        realCdioHeaders.forEach((headerInfo, realIdx) => {
+            const domIdx = headerInfo.domIndex;
+            const key = String(realIdx + 1); // position-based key: "1", "2", ...
+            const cdioCell = cells[cdioStartIndex + domIdx];
             if (!cdioCell) return;
             const textarea = cdioCell.querySelector('textarea');
             if (textarea && !textarea.disabled) {
@@ -1377,12 +1484,13 @@ window.saveIloCdioSdgMapping = function(showAlert = false) {
             }
         });
 
-        // Collect SDG values as sequential numeric keys (DB expects "1", "2", ...)
+        // Collect SDG values using real SDG headers (exclude placeholder)
         const sdgs = {};
         const sdgStartIndex = 1 + cdioHeaderCells.length; // SDG cells come after all CDIO cells
-        sdgHeaderCells.forEach((headerCell, idx) => {
-            const key = String(idx + 1);
-            const sdgCell = cells[sdgStartIndex + idx];
+        realSdgHeaders.forEach((headerInfo, realIdx) => {
+            const domIdx = headerInfo.domIndex;
+            const key = String(realIdx + 1); // position-based key: "1", "2", ...
+            const sdgCell = cells[sdgStartIndex + domIdx];
             if (!sdgCell) return;
             const textarea = sdgCell.querySelector('textarea');
             if (textarea && !textarea.disabled) {
@@ -1417,6 +1525,8 @@ window.saveIloCdioSdgMapping = function(showAlert = false) {
 
     console.log('Sending to server:', {
         syllabus_id: syllabusId,
+        cdio_columns: cdioColumns,
+        sdg_columns: sdgColumns,
         mappings: mappingData
     });
 
@@ -1429,6 +1539,8 @@ window.saveIloCdioSdgMapping = function(showAlert = false) {
         },
         body: JSON.stringify({
             syllabus_id: syllabusId,
+            cdio_columns: cdioColumns,
+            sdg_columns: sdgColumns,
             mappings: mappingData
         })
     })

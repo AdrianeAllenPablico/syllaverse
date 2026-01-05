@@ -11,18 +11,21 @@ class SyllabusIloCdioSdg extends Model
     protected $fillable = [
         'syllabus_id',
         'ilo_text',
-        'cdios',
-        'sdgs',
         'position',
-    ];
-
-    protected $casts = [
-        'cdios' => 'array',
-        'sdgs' => 'array',
     ];
 
     public function syllabus()
     {
         return $this->belongsTo(Syllabus::class);
+    }
+
+    public function cdioValues()
+    {
+        return $this->hasMany(SyllabusIloCdioValue::class, 'ilo_id');
+    }
+
+    public function sdgValues()
+    {
+        return $this->hasMany(SyllabusIloSdgValue::class, 'ilo_id');
     }
 }

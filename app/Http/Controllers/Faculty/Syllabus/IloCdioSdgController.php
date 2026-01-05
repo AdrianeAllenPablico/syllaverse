@@ -14,6 +14,10 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Syllabus;
 use App\Models\SyllabusIloCdioSdg;
+use App\Models\SyllabusIloCdioColumn;
+use App\Models\SyllabusIloCdioValue;
+use App\Models\SyllabusIloSdgColumn;
+use App\Models\SyllabusIloSdgValue;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
@@ -31,6 +35,10 @@ class IloCdioSdgController extends Controller
             // Validate incoming data - allow empty arrays for deletion
             $validated = $request->validate([
                 'syllabus_id' => 'required|integer',
+                'cdio_columns' => 'nullable|array',
+                'cdio_columns.*' => 'nullable|string',
+                'sdg_columns' => 'nullable|array',
+                'sdg_columns.*' => 'nullable|string',
                 'mappings' => 'nullable|array',
                 'mappings.*.ilo_text' => 'nullable|string',
                 'mappings.*.cdios' => 'nullable|array',
@@ -40,38 +48,119 @@ class IloCdioSdgController extends Controller
 
             $syllabusId = $validated['syllabus_id'];
 
-            \Log::info('ILO-CDIO-SDG Save Request', [
-                'syllabus_id' => $syllabusId,
-                'mappings_count' => count($validated['mappings'] ?? []),
-                'mappings' => $validated['mappings'] ?? []
-            ]);
-
             // Find syllabus and verify ownership
             $syllabus = Syllabus::whereHas('facultyMembers', function($q) { $q->where('faculty_id', Auth::id())->where('can_edit', true); })->findOrFail($syllabusId);
 
             DB::beginTransaction();
 
-            // Delete existing ILO-CDIO-SDG mappings for this syllabus
-            $deletedCount = SyllabusIloCdioSdg::where('syllabus_id', $syllabusId)->delete();
-            \Log::info('Deleted existing mappings', ['count' => $deletedCount]);
+            $mappings = $validated['mappings'] ?? [];
 
-            // Insert new mappings only if there are any
-            if (!empty($validated['mappings'])) {
-                $insertedCount = 0;
-                foreach ($validated['mappings'] as $mapping) {
-                    $created = SyllabusIloCdioSdg::create([
+            // Normalized column label arrays (optional, like SO columns in ILO-SO-CPA)
+            $cdioColumnLabels = $validated['cdio_columns'] ?? [];
+            $sdgColumnLabels = $validated['sdg_columns'] ?? [];
+
+            // --- Step 1: Rebuild CDIO/SDG column definitions for this syllabus ---
+            // This will cascade-delete existing values via FK on *_values tables
+            SyllabusIloCdioColumn::where('syllabus_id', $syllabusId)->delete();
+            SyllabusIloSdgColumn::where('syllabus_id', $syllabusId)->delete();
+
+            // Prefer explicit column label arrays when provided; fall back to
+            // deriving max column counts from mapping keys for backward compatibility.
+            $maxCdioCols = is_array($cdioColumnLabels) && count($cdioColumnLabels) > 0
+                ? count($cdioColumnLabels)
+                : 0;
+            $maxSdgCols = is_array($sdgColumnLabels) && count($sdgColumnLabels) > 0
+                ? count($sdgColumnLabels)
+                : 0;
+
+            if ($maxCdioCols === 0 || $maxSdgCols === 0) {
+                foreach ($mappings as $mapping) {
+                    $cdios = $mapping['cdios'] ?? [];
+                    if (! empty($cdios)) {
+                        $maxCdioCols = max($maxCdioCols, max(array_map('intval', array_keys($cdios))));
+                    }
+
+                    $sdgs = $mapping['sdgs'] ?? [];
+                    if (! empty($sdgs)) {
+                        $maxSdgCols = max($maxSdgCols, max(array_map('intval', array_keys($sdgs))));
+                    }
+                }
+            }
+
+            $cdioColumns = [];
+            for ($i = 0; $i < $maxCdioCols; $i++) {
+                $cdioColumns[$i] = SyllabusIloCdioColumn::create([
+                    'syllabus_id' => $syllabusId,
+                    'label' => $cdioColumnLabels[$i] ?? null,
+                    'position' => $i,
+                ]);
+            }
+
+            $sdgColumns = [];
+            for ($i = 0; $i < $maxSdgCols; $i++) {
+                $sdgColumns[$i] = SyllabusIloSdgColumn::create([
+                    'syllabus_id' => $syllabusId,
+                    'label' => $sdgColumnLabels[$i] ?? null,
+                    'position' => $i,
+                ]);
+            }
+
+            // --- Step 2: Reset base ILO-CDIO-SDG row mappings for this syllabus ---
+            // This will also cascade-delete values via FK on *_values tables
+            SyllabusIloCdioSdg::where('syllabus_id', $syllabusId)->delete();
+
+            // Insert new mappings and normalized cell values
+            if (!empty($mappings)) {
+                foreach ($mappings as $mapping) {
+                    $ilo = SyllabusIloCdioSdg::create([
                         'syllabus_id' => $syllabusId,
                         'ilo_text' => $mapping['ilo_text'] ?? '',
-                        'cdios' => $mapping['cdios'] ?? [],
-                        'sdgs' => $mapping['sdgs'] ?? [],
                         'position' => $mapping['position'] ?? 0,
                     ]);
-                    $insertedCount++;
-                    \Log::info('Inserted mapping', ['id' => $created->id, 'ilo_text' => $created->ilo_text]);
+
+                    $cdios = $mapping['cdios'] ?? [];
+                    for ($i = 0; $i < $maxCdioCols; $i++) {
+                        if (! isset($cdioColumns[$i])) {
+                            continue;
+                        }
+
+                        $key = (string) ($i + 1);
+                        if (! array_key_exists($key, $cdios)) {
+                            continue;
+                        }
+
+                        $cellValue = $cdios[$key] ?? null;
+
+                        // Always persist a row when the key exists, even if value is null,
+                        // so blank cells are represented explicitly like in ILO-SO-CPA.
+                        SyllabusIloCdioValue::create([
+                            'ilo_id' => $ilo->id,
+                            'cdio_column_id' => $cdioColumns[$i]->id,
+                            'value' => $cellValue,
+                        ]);
+                    }
+
+                    $sdgs = $mapping['sdgs'] ?? [];
+                    for ($i = 0; $i < $maxSdgCols; $i++) {
+                        if (! isset($sdgColumns[$i])) {
+                            continue;
+                        }
+
+                        $key = (string) ($i + 1);
+                        if (! array_key_exists($key, $sdgs)) {
+                            continue;
+                        }
+
+                        $cellValue = $sdgs[$key] ?? null;
+
+                        // Always persist a row when the key exists, even if value is null.
+                        SyllabusIloSdgValue::create([
+                            'ilo_id' => $ilo->id,
+                            'sdg_column_id' => $sdgColumns[$i]->id,
+                            'value' => $cellValue,
+                        ]);
+                    }
                 }
-                \Log::info('Total inserted', ['count' => $insertedCount]);
-            } else {
-                \Log::info('No mappings to insert');
             }
 
             DB::commit();
