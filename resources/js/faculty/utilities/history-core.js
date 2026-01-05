@@ -918,13 +918,6 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         }
       }
 
-      // Restore textarea values for non-placeholder rows
-      finalDataTrs.forEach((tr, idx) => {
-        const tas = Array.from(tr.querySelectorAll('textarea')).filter(ta => !ta.disabled);
-        const values = dataRows[idx]?.values || [];
-        tas.forEach((ta, cIdx) => { ta.value = values[cIdx] || ''; });
-      });
-
       // Restore SO header input values
       if (Array.isArray(snap?.soHeaders) && snap.soHeaders.length > 0) {
         const headerRow2 = mappingTable.querySelectorAll('tr')[1];
@@ -988,6 +981,13 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           }
         });
       }
+
+      // Restore textarea values for non-placeholder rows (after structure/ILO cells are normalized)
+      finalDataTrs.forEach((tr, idx) => {
+        const tas = Array.from(tr.querySelectorAll('textarea')).filter(ta => !ta.disabled);
+        const values = dataRows[idx]?.values || [];
+        tas.forEach((ta, cIdx) => { ta.value = values[cIdx] || ''; });
+      });
       try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
     } finally {
       st.isApplying = false;
