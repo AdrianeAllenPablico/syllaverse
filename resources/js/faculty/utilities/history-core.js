@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla, snapshotAssessmentMapping, snapshotIloSoCpaMapping, snapshotIloIgaMapping } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla, snapshotAssessmentMapping, snapshotIloSoCpaMapping, snapshotIloIgaMapping, snapshotIloCdioSdgMapping } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -1487,6 +1487,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       } catch(e) {}
       try { const isc = snapshotIloSoCpaMapping(); safeInitialize('iloSoCpa', isc); } catch(e) {}
       try { const iigm = snapshotIloIgaMapping(); safeInitialize('iloIgaMapping', iigm); } catch(e) {}
+      try { const ics = snapshotIloCdioSdgMapping(); safeInitialize('iloCdioSdg', ics); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -2414,7 +2415,10 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     const lastSavedText = new WeakMap();
 
     const take = () => {
-      if (st.isApplying || window.globalApplying) return;
+      // Skip recording while applying programmatically, during global
+      // applies, or while the module is still hydrating its initial
+      // server-rendered state.
+      if (st.isApplying || window.globalApplying || window.SV_IloCdioSdgInitializing) return;
       try {
         const snap = snapshotIloCdioSdgMapping();
         if (snap && Array.isArray(snap.rows)) {

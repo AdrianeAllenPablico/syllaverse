@@ -2,6 +2,12 @@
 // ILO-CDIO-SDG mapping - Functions for add/remove ILO rows and CDIO/SDG columns
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Track initialization/hydration lifecycle for ILO-CDIO-SDG so that
+    // undo/redo watchers can ignore server-driven DOM changes.
+    if (typeof window !== 'undefined') {
+        window.SV_IloCdioSdgHydrated = false;
+        window.SV_IloCdioSdgInitializing = true;
+    }
     const mapping = document.querySelector('.ilo-cdio-sdg-mapping');
     if (!mapping) return;
 
@@ -281,9 +287,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 const doc = parser.parseFromString(html, 'text/html');
                 const partial = doc.querySelector('.ilo-cdio-sdg-mapping');
                 if (!partial) throw new Error('ILO-CDIO-SDG partial not found in response');
-                const mappingsData = partial.getAttribute('data-mappings') || '[]';
-                const cdioColsData = partial.getAttribute('data-cdio-columns') || '[]';
-                const sdgColsData = partial.getAttribute('data-sdg-columns') || '[]';
+                const mappingsData = partial.getAttribute('data-mappings');
+                const cdioColsData = partial.getAttribute('data-cdio-columns');
+                const sdgColsData = partial.getAttribute('data-sdg-columns');
 
                 // Sync root data-* attributes with latest from server
                 mapping.setAttribute('data-mappings', mappingsData);
@@ -292,7 +298,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 let mappings = [];
                 try { mappings = JSON.parse(mappingsData); } catch(_) { mappings = []; }
-                if (typeof window.refreshIloCdioSdgPartial === 'function') window.refreshIloCdioSdgPartial(mappings);
+                if (typeof window.refreshIloCdioSdgPartial === 'function') {
+                    window.refreshIloCdioSdgPartial(mappings);
+                }
+
+                if (typeof window !== 'undefined') {
+                    window.SV_IloCdioSdgHydrated = true;
+                }
 
                 let cdioCols = [];
                 let sdgCols = [];
@@ -429,6 +441,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             });
+            if (typeof window !== 'undefined') {
+                // After hydration from server data, prime the undo/redo
+                // baseline so the loaded state is treated as the starting
+                // point rather than the empty placeholder grid.
+                try {
+                    if (window.SVHistory && typeof window.SVHistory.primeSnapshot === 'function' && typeof window.snapshotIloCdioSdgMapping === 'function') {
+                        const snap = window.snapshotIloCdioSdgMapping();
+                        window.SVHistory.primeSnapshot('iloCdioSdg', snap);
+                    }
+                } catch (e) {
+                    console.warn('[ILO-CDIO-SDG] Failed to prime snapshot after hydration', e);
+                }
+                window.SV_IloCdioSdgHydrated = true;
+            }
         } catch (e) {
             console.error('Error loading saved ILO-CDIO-SDG data:', e);
         }
@@ -436,7 +462,19 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load data after a short delay to ensure DOM is fully ready
     setTimeout(() => {
-        loadSavedData();
+        try {
+            loadSavedData();
+        } finally {
+            // Even if there was nothing to load, mark initialization
+            // complete so subsequent edits and saves are treated as
+            // intentional user actions.
+            if (typeof window !== 'undefined') {
+                window.SV_IloCdioSdgInitializing = false;
+                if (!window.SV_IloCdioSdgHydrated) {
+                    window.SV_IloCdioSdgHydrated = true;
+                }
+            }
+        }
     }, 100);
 });
 
@@ -1512,6 +1550,17 @@ window.saveIloCdioSdgMapping = function(showAlert = true) {
         mappingDataCount: mappingData.length,
         mappingData: mappingData
     });
+
+    // Guard against destructive saves before the mapping has been hydrated
+    // from server data. If the module is not yet hydrated and we see no
+    // mapping rows, skip the save to avoid wiping out existing data.
+    if (typeof window !== 'undefined') {
+        const hydrated = !!window.SV_IloCdioSdgHydrated;
+        if (!hydrated && mappingData.length === 0) {
+            console.warn('[ILO-CDIO-SDG] Skipping save: mapping not hydrated and payload is empty.');
+            return Promise.resolve({ success: true, skipped: true, reason: 'notHydrated' });
+        }
+    }
 
     // Get syllabus ID from the page context
     const syllabusDoc = document.getElementById('syllabus-document');
