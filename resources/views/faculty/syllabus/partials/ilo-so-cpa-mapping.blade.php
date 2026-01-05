@@ -209,8 +209,8 @@
 </style>
 
 <div class="ilo-so-cpa-mapping mb-4" 
-     data-so-columns="{{ json_encode($soColumns ?? []) }}"
-     data-mappings="{{ json_encode($syllabus->iloSoCpa ?? []) }}">
+     data-so-columns="{{ json_encode($soColumnsData ?? []) }}"
+     data-mappings="{{ json_encode($iloMappingsData ?? []) }}">
 	<table class="table table-bordered" style="width:100%; border:1px solid #343a40; border-collapse:collapse; overflow:visible;">
 		<thead>
 			<tr>

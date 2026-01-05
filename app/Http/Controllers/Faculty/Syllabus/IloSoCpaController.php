@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Faculty\Syllabus;
 
 use App\Http\Controllers\Controller;
 use App\Models\SyllabusIloSoCpa;
+use App\Models\SyllabusIloSoCpaColumn;
+use App\Models\SyllabusIloSoCpaValue;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -21,8 +23,8 @@ class IloSoCpaController extends Controller
                 'so_columns' => 'nullable|array',
                 'so_columns.*' => 'string',
                 'mappings' => 'array', // Allow empty array to delete all
-                'mappings.*.ilo_text' => 'nullable|string', // Allow empty ILO text
-                'mappings.*.sos' => 'nullable|array', // sos should be an array/object
+                'mappings.*.ilo_text' => 'nullable|string',
+                'mappings.*.sos' => 'nullable|array', // sos will have position as keys
                 'mappings.*.c' => 'nullable|string',
                 'mappings.*.p' => 'nullable|string',
                 'mappings.*.a' => 'nullable|string',
@@ -44,25 +46,48 @@ class IloSoCpaController extends Controller
 
             $syllabusId = $request->syllabus_id;
 
-            // Update SO columns in syllabi table
-            DB::table('syllabi')
-                ->where('id', $syllabusId)
-                ->update(['so_columns' => json_encode($request->so_columns ?? [])]);
+            // Step 1: Delete existing SO columns and their values (cascade will handle values)
+            SyllabusIloSoCpaColumn::where('syllabus_id', $syllabusId)->delete();
 
-            // Delete existing mappings for this syllabus
+            // Step 2: Save SO column labels
+            $soColumns = $request->so_columns ?? [];
+            foreach ($soColumns as $index => $label) {
+                SyllabusIloSoCpaColumn::create([
+                    'syllabus_id' => $syllabusId,
+                    'label' => $label,
+                    'position' => $index,
+                ]);
+            }
+
+            // Step 3: Delete existing ILO rows and their values (cascade will handle values)
             SyllabusIloSoCpa::where('syllabus_id', $syllabusId)->delete();
 
-            // Insert new mappings
+            // Step 4: Save ILO rows and their SO values
             foreach ($request->mappings as $mapping) {
-                SyllabusIloSoCpa::create([
+                $ilo = SyllabusIloSoCpa::create([
                     'syllabus_id' => $syllabusId,
                     'ilo_text' => $mapping['ilo_text'],
-                    'sos' => $mapping['sos'] ?? [],
                     'c' => $mapping['c'] ?? null,
                     'p' => $mapping['p'] ?? null,
                     'a' => $mapping['a'] ?? null,
                     'position' => $mapping['position'],
                 ]);
+
+                // Save SO values using column position as key
+                $sos = $mapping['sos'] ?? [];
+                foreach ($sos as $soIndex => $soValue) {
+                    $soColumn = SyllabusIloSoCpaColumn::where('syllabus_id', $syllabusId)
+                        ->where('position', (int)$soIndex)
+                        ->first();
+
+                    if ($soColumn) {
+                        SyllabusIloSoCpaValue::create([
+                            'ilo_id' => $ilo->id,
+                            'so_column_id' => $soColumn->id,
+                            'value' => $soValue,
+                        ]);
+                    }
+                }
             }
 
             DB::commit();

@@ -627,6 +627,28 @@ class SyllabusController extends Controller
             'coursePolicies' => $coursePolicies,
             'soColumns' => $syllabus->so_columns ? json_decode($syllabus->so_columns, true) : [],
             'iloIgaMappings' => $syllabus->iloIga ?? collect(),
+            'soColumnsData' => \App\Models\SyllabusIloSoCpaColumn::where('syllabus_id', $syllabus->id)
+                ->orderBy('position')
+                ->get(['id', 'label', 'position'])
+                ->toArray(),
+            'iloMappingsData' => $syllabus->iloSoCpa()
+                ->with('values')
+                ->orderBy('position')
+                ->get(['id', 'ilo_text', 'c', 'p', 'a', 'position'])
+                ->map(function($ilo) {
+                    return [
+                        'id' => $ilo->id,
+                        'ilo_text' => $ilo->ilo_text,
+                        'c' => $ilo->c,
+                        'p' => $ilo->p,
+                        'a' => $ilo->a,
+                        'position' => $ilo->position,
+                        'sos' => $ilo->values->mapWithKeys(function($val) {
+                            return [(string)$val->so_column_id => $val->value];
+                        })->toArray(),
+                    ];
+                })
+                ->toArray(),
         ]);
     }
 

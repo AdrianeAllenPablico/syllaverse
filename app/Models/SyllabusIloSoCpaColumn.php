@@ -5,22 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class SyllabusIloSoCpa extends Model
+class SyllabusIloSoCpaColumn extends Model
 {
     use HasFactory;
 
-    protected $table = 'syllabus_ilo_so_cpa';
+    protected $table = 'syllabus_ilo_so_cpa_columns';
 
     protected $fillable = [
         'syllabus_id',
-        'ilo_text',
-        'c',
-        'p',
-        'a',
+        'label',
         'position',
-    ];
-
-    protected $casts = [
     ];
 
     public function syllabus()
@@ -30,6 +24,6 @@ class SyllabusIloSoCpa extends Model
 
     public function values()
     {
-        return $this->hasMany(SyllabusIloSoCpaValue::class, 'ilo_id');
+        return $this->hasMany(SyllabusIloSoCpaValue::class, 'so_column_id');
     }
 }

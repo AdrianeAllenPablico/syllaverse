@@ -643,12 +643,13 @@ document.addEventListener('DOMContentLoaded', function() {
 		const cHeaderIndex = allHeaders.findIndex(th => th.textContent.trim() === 'C');
 		const soHeaders = allHeaders.slice(iloHeaderIndex + 1, cHeaderIndex);
 		
-		// Collect SO column labels
+		// Collect SO column labels (allow duplicates and empty labels)
 		const soColumns = [];
 		soHeaders.forEach(th => {
 			const input = th.querySelector('input');
 			const label = input ? input.value.trim() : th.textContent.trim();
-			if (label && label !== 'No SO') {
+			// Include all labels except "No SO" placeholder - allow empty labels
+			if (label !== 'No SO') {
 				soColumns.push(label);
 			}
 		});
@@ -664,7 +665,7 @@ document.addEventListener('DOMContentLoaded', function() {
 			// Skip only placeholder rows - allow empty rows to be saved
 			if (iloText === 'No ILO') return;
 			
-			// Collect SO values as object with column labels as keys
+			// Collect SO values using column position as key (allows duplicate labels)
 			const sos = {};
 			soHeaders.forEach((header, soIndex) => {
 				const input = header.querySelector('input');
@@ -676,8 +677,8 @@ document.addEventListener('DOMContentLoaded', function() {
 				if (soCell) {
 					const textarea = soCell.querySelector('textarea');
 					if (textarea) {
-						// Save the value even if empty
-						sos[soLabel || ''] = textarea.value.trim();
+						// Use column position as key to support duplicate labels
+						sos[String(soIndex)] = textarea.value.trim();
 					}
 				}
 			});
@@ -752,8 +753,34 @@ document.addEventListener('DOMContentLoaded', function() {
 		if (!soColumnsData || !mappingsData) return;
 		
 		try {
-			const soColumns = JSON.parse(soColumnsData);
-			const mappings = JSON.parse(mappingsData);
+			const soColumnsArray = JSON.parse(soColumnsData); // Array of {id, label, position}
+			const mappingsArray = JSON.parse(mappingsData); // Array of {id, ilo_text, c, p, a, position, sos}
+			
+			if (!mappingsArray || mappingsArray.length === 0) return;
+			
+			// Extract just the labels for compatibility
+			const soColumns = soColumnsArray.map(col => col.label);
+			const mappings = mappingsArray.map(row => {
+				// Convert SO values from column ID keys to position keys
+				const sosWithPositions = {};
+				if (row.sos && typeof row.sos === 'object') {
+					Object.entries(row.sos).forEach(([colId, value]) => {
+						// Find position by matching column ID
+						const colPosition = soColumnsArray.findIndex(col => col.id == colId);
+						if (colPosition !== -1) {
+							sosWithPositions[String(colPosition)] = value;
+						}
+					});
+				}
+				return {
+					ilo_text: row.ilo_text,
+					sos: sosWithPositions,
+					c: row.c,
+					p: row.p,
+					a: row.a,
+					position: row.position
+				};
+			});
 			
 			if (!mappings || mappings.length === 0) return;
 			
@@ -809,14 +836,15 @@ document.addEventListener('DOMContentLoaded', function() {
 						const iloInput = cells[0].querySelector('input');
 						if (iloInput) iloInput.value = mappingRow.ilo_text;
 						
-						// Set SO values
+						// Set SO values using position as key (supports duplicate labels)
 						if (mappingRow.sos && typeof mappingRow.sos === 'object') {
-							Object.entries(mappingRow.sos).forEach(([soLabel, soValue], soIndex) => {
+							Object.keys(mappingRow.sos).forEach((posKey) => {
+								const soIndex = parseInt(posKey, 10);
 								const soCell = cells[soIndex + 1];
 								if (soCell) {
 									const textarea = soCell.querySelector('textarea');
 									if (textarea) {
-										textarea.value = soValue;
+										textarea.value = mappingRow.sos[posKey];
 										autoResize(textarea);
 									}
 								}
@@ -862,14 +890,15 @@ document.addEventListener('DOMContentLoaded', function() {
 						const iloInput = cells[0].querySelector('input');
 						if (iloInput) iloInput.value = mappingRow.ilo_text;
 						
-						// Set SO values
+						// Set SO values using position as key (supports duplicate labels)
 						if (mappingRow.sos && typeof mappingRow.sos === 'object') {
-							Object.entries(mappingRow.sos).forEach(([soLabel, soValue], soIndex) => {
+							Object.keys(mappingRow.sos).forEach((posKey) => {
+								const soIndex = parseInt(posKey, 10);
 								const soCell = cells[soIndex + 1];
 								if (soCell) {
 									const textarea = soCell.querySelector('textarea');
 									if (textarea) {
-										textarea.value = soValue;
+										textarea.value = mappingRow.sos[posKey];
 										autoResize(textarea);
 									}
 								}
@@ -1017,7 +1046,8 @@ document.addEventListener('DOMContentLoaded', function() {
 					soKeys.forEach((key, sIdx) => {
 						const cell = cells[sIdx + 1];
 						const ta = cell?.querySelector('textarea');
-						const val = m.sos?.[key];
+						// Use position as key (supports duplicate SO labels)
+						const val = m.sos?.[String(sIdx)];
 						if (ta) { ta.value = Array.isArray(val) ? val.join(',') : (val || ''); if (typeof autoResize === 'function') autoResize(ta); }
 					});
 					const cCell = cells[cells.length - 3];
