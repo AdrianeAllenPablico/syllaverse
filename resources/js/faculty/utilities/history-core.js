@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla, snapshotAssessmentMapping } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla, snapshotAssessmentMapping, snapshotIloSoCpaMapping } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -835,6 +835,137 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
   }
 
+  function applyIloSoCpa(snap){
+    const st = ensure('iloSoCpa');
+    st.isApplying = true;
+    try {
+      const container = document.querySelector('.ilo-so-cpa-mapping');
+      const mappingTable = container ? container.querySelector('.mapping') : null;
+      if (!mappingTable) {
+        console.warn('[APPLY ILO–SO/CPA] Mapping table not found');
+        return;
+      }
+      const dataRows = Array.isArray(snap?.rows) ? snap.rows : [];
+      const targetRowCount = Number.isInteger(snap?.rowCount) ? snap.rowCount : dataRows.length;
+      const targetIloPlaceholder = !!snap?.iloPlaceholder;
+      const targetSoCount = Number(snap?.soColCount || 0);
+
+      // Determine current counts
+      // Count all data TRs (with TDs) for structure, not only enabled textareas
+      const currentDataTrs = Array.from(mappingTable.querySelectorAll('tr')).filter(tr => tr.querySelector('td'));
+      const currentRowCount = currentDataTrs.length;
+      // Compute current SO column count using structure (only count real SO headers, not "No SO" placeholder)
+      const headerRow2 = mappingTable.querySelectorAll('tr')[1];
+      let currentSoCount = 0;
+      if (headerRow2) {
+        const hdrs = Array.from(headerRow2.querySelectorAll('th'));
+        // Count non-placeholder SO headers: all except C/P/A
+        const soHeaders = hdrs.slice(0, hdrs.length - 3); // All except C/P/A
+        const realSoHeaders = soHeaders.filter(th => {
+          const input = th.querySelector('input');
+          const text = input ? input.value.trim() : th.textContent.trim();
+          return text !== 'No SO'; // Exclude placeholder
+        });
+        currentSoCount = realSoHeaders.length;
+      }
+
+      // Adjust rows (use provided global functions if available)
+      try {
+        if (typeof window.addIloRow === 'function' && typeof window.removeIloRow === 'function') {
+          if (currentRowCount < targetRowCount) {
+            for (let i = currentRowCount; i < targetRowCount; i++) window.addIloRow();
+          } else if (currentRowCount > targetRowCount) {
+            for (let i = targetRowCount; i < currentRowCount; i++) window.removeIloRow();
+          }
+        }
+      } catch(e) { console.warn('[APPLY ILO–SO/CPA] Row adjust error:', e); }
+
+      // Adjust columns (SO columns), ignoring headers structure
+      try {
+        if (typeof window.addSoColumn === 'function' && typeof window.removeSoColumn === 'function') {
+          if (currentSoCount < targetSoCount) {
+            for (let i = currentSoCount; i < targetSoCount; i++) window.addSoColumn();
+          } else if (currentSoCount > targetSoCount) {
+            for (let i = targetSoCount; i < currentSoCount; i++) window.removeSoColumn();
+          }
+        }
+      } catch(e) { console.warn('[APPLY ILO–SO/CPA] Column adjust error:', e); }
+
+      // Requery rows after structure adjustments
+      const finalDataTrs = Array.from(mappingTable.querySelectorAll('tr')).filter(tr => tr.querySelector('td'));
+
+      // If target is placeholder, convert first row to placeholder state
+      if (targetIloPlaceholder && finalDataTrs.length > 0) {
+        const firstRow = finalDataTrs[0];
+        const cells = Array.from(firstRow.querySelectorAll('td'));
+        if (cells.length > 0) {
+          cells[0].textContent = 'No ILO';
+          cells[0].style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; font-family:Georgia, serif; font-size:13px; text-align:center; vertical-align:middle; color:#999; font-style:italic;';
+          for (let i = 1; i < cells.length; i++) {
+            const ta = cells[i].querySelector('textarea');
+            if (ta) {
+              ta.disabled = false;
+              ta.value = '';
+              ta.style.backgroundColor = '';
+              ta.style.cursor = '';
+            }
+            if (i === cells.length - 1) {
+              cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
+            } else {
+              cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
+            }
+          }
+        }
+      }
+
+      // Restore textarea values for non-placeholder rows
+      finalDataTrs.forEach((tr, idx) => {
+        const tas = Array.from(tr.querySelectorAll('textarea')).filter(ta => !ta.disabled);
+        const values = dataRows[idx]?.values || [];
+        tas.forEach((ta, cIdx) => { ta.value = values[cIdx] || ''; });
+      });
+
+      // Restore SO header input values
+      if (Array.isArray(snap?.soHeaders) && snap.soHeaders.length > 0) {
+        const headerRow2 = mappingTable.querySelectorAll('tr')[1];
+        if (headerRow2) {
+          const hdrs = Array.from(headerRow2.querySelectorAll('th'));
+          const soHdrs = hdrs.slice(0, hdrs.length - 3); // All except C/P/A
+          let soIdx = 0;
+          soHdrs.forEach(th => {
+            const input = th.querySelector('input');
+            const text = input ? input.value.trim() : th.textContent.trim();
+            if (text !== 'No SO' && soIdx < snap.soHeaders.length) {
+              if (input) {
+                input.value = snap.soHeaders[soIdx] || '';
+              }
+              soIdx++;
+            }
+          });
+        }
+      }
+
+      // Restore ILO input values
+      if (Array.isArray(snap?.iloInputs) && snap.iloInputs.length > 0) {
+        finalDataTrs.forEach((tr, idx) => {
+          const firstTd = tr.querySelector('td:first-child');
+          if (firstTd && idx < snap.iloInputs.length) {
+            const input = firstTd.querySelector('input');
+            if (input) {
+              input.value = snap.iloInputs[idx] || '';
+            } else if (snap.iloInputs[idx] !== 'No ILO') {
+              // If no input exists but we have a value, just set text (shouldn't happen normally)
+              firstTd.textContent = snap.iloInputs[idx];
+            }
+          }
+        });
+      }
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function undo(){
     if (!globalHistory.length) return false;
     setGlobalApplying(true);
@@ -873,6 +1004,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           break;
         case 'assessmentTasks':
           applyAssessmentTasks(prev);
+          break;
+        case 'iloSoCpa':
+          applyIloSoCpa(prev);
           break;
         case 'iga':
           applyIga(prev);
@@ -933,6 +1067,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'assessmentTasks':
           applyAssessmentTasks(next);
           break;
+        case 'iloSoCpa':
+          applyIloSoCpa(next);
+          break;
         case 'iga':
           applyIga(next);
           break;
@@ -985,6 +1122,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           console.log('[RESET AFTER SAVE] Cached AM marks baseline:', lastValidAssessmentMarks.length);
         }
       } catch(e) {}
+      try { const isc = snapshotIloSoCpaMapping(); safeInitialize('iloSoCpa', isc); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -1630,6 +1768,138 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerIloSoCpaWatchers(){
+    const st = ensure('iloSoCpa');
+    let captureTimeout = null;
+    let lastRowCount = 0;
+    let lastSoCount = 0;
+    const lastSavedText = new WeakMap();
+
+    const take = () => {
+      if (st.isApplying || window.globalApplying) return;
+      // Skip watcher snapshots within 100ms of manual add/remove
+      if (window.__ILO_SO_CPA_BLOCK_UNTIL && Date.now() < window.__ILO_SO_CPA_BLOCK_UNTIL) return;
+      try {
+        clearTimeout(captureTimeout);
+        const isc = snapshotIloSoCpaMapping();
+        if (isc && Array.isArray(isc.rows)) {
+          safePush('iloSoCpa', isc);
+        }
+      } catch (e) { /* noop */ }
+    };
+
+    const container = document.querySelector('.ilo-so-cpa-mapping');
+    const mappingTable = container ? container.querySelector('.mapping') : null;
+    if (mappingTable){
+      // Word-by-word snapshots for textareas (avoid pause-based debounce)
+      mappingTable.addEventListener('input', (e) => {
+        const ta = e.target;
+        if (!(ta && ta.tagName === 'TEXTAREA' && !ta.disabled)) return;
+        const current = ta.value || '';
+        const prev = lastSavedText.get(ta) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(ta, current);
+          take();
+        }
+      }, { capture: true });
+
+      // Change fallback to capture blur and non-delimiter edits
+      mappingTable.addEventListener('change', (e) => {
+        const ta = e.target;
+        if (ta && ta.tagName === 'TEXTAREA' && !ta.disabled) {
+          lastSavedText.set(ta, ta.value || '');
+          take();
+        }
+      }, { capture: true });
+
+      // Observe structural changes (row/column add/remove) and snapshot immediately
+      const countStructure = () => {
+        const trs = Array.from(mappingTable.querySelectorAll('tr')).filter(tr => tr.querySelector('td'));
+        const rowCount = trs.length;
+        // SO count from headers using structure (row 2 = SO headers + C/P/A, only count real SOs)
+        const headerRow2 = mappingTable.querySelectorAll('tr')[1];
+        let soCount = 0;
+        if (headerRow2) {
+          const hdrs = Array.from(headerRow2.querySelectorAll('th'));
+          // Count non-placeholder SO headers: all except C/P/A
+          const soHeaders = hdrs.slice(0, hdrs.length - 3); // All except C/P/A
+          const realSoHeaders = soHeaders.filter(th => {
+            const input = th.querySelector('input');
+            const text = input ? input.value.trim() : th.textContent.trim();
+            return text !== 'No SO'; // Exclude placeholder
+          });
+          soCount = realSoHeaders.length;
+        }
+        return { rowCount, soCount };
+      };
+      // Initialize last counts from baseline
+      try {
+        const base = snapshotIloSoCpaMapping();
+        lastRowCount = Array.isArray(base.rows) ? base.rows.length : 0;
+        lastSoCount = Number(base.soColCount || 0);
+      } catch(e) {}
+
+      if (window.MutationObserver){
+        const mo = new MutationObserver(() => {
+          const { rowCount, soCount } = countStructure();
+          if (rowCount !== lastRowCount || soCount !== lastSoCount) {
+            lastRowCount = rowCount;
+            lastSoCount = soCount;
+            take();
+          }
+        });
+        mo.observe(mappingTable, { childList: true, subtree: true });
+      }
+
+      // Capture snapshots on structural control button clicks
+      mappingTable.addEventListener('click', (e) => {
+        const btn = e.target.closest('.so-add-btn, .so-remove-btn, .ilo-add-btn, .ilo-remove-btn');
+        if (btn) {
+          // Defer to allow DOM to update
+          setTimeout(() => {
+            const { rowCount, soCount } = countStructure();
+            lastRowCount = rowCount;
+            lastSoCount = soCount;
+            take();
+          }, 20);
+        }
+      }, { capture: true });
+
+      // Snapshot header input edits (SO labels) on word boundaries
+      mappingTable.addEventListener('input', (e) => {
+        const input = e.target;
+        if (!(input && input.tagName === 'INPUT')) return;
+        const current = input.value || '';
+        const prev = lastSavedText.get(input) || '';
+        if (current === prev) return;
+        const lastChar = current.slice(-1);
+        const isDelimiter = /[\s.!?,;:"'\-]/.test(lastChar);
+        const isDeletion = current.length < prev.length;
+        if (isDelimiter || isDeletion) {
+          lastSavedText.set(input, current);
+          take();
+        }
+      }, { capture: true });
+      mappingTable.addEventListener('change', (e) => {
+        const input = e.target;
+        if (input && input.tagName === 'INPUT') {
+          lastSavedText.set(input, input.value || '');
+          take();
+        }
+      }, { capture: true });
+
+      mappingTable.addEventListener('focusin', () => { window.SVActiveModuleName = 'iloSoCpa'; }, true);
+      mappingTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'iloSoCpa'; }, true);
+    }
+    // baseline snapshot (do not add to global history)
+    try { safeInitialize('iloSoCpa', snapshotIloSoCpaMapping()); } catch(e) {}
+    updateButtons();
+  }
+
   function registerIgaWatchers(){
     const st = ensure('iga');
     const take = () => {
@@ -1719,6 +1989,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerSoWatchers();
     registerIgaWatchers();
     registerAssessmentMappingWatchers();
+    registerIloSoCpaWatchers();
   });
 
   // expose API

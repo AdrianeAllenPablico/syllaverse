@@ -511,6 +511,94 @@ export function snapshotAssessmentMapping(){
   };
 }
 
+// ILO–SO/CPA Mapping: snapshot ONLY cell values (row/column), not structure
+export function snapshotIloSoCpaMapping(){
+  const container = document.querySelector('.ilo-so-cpa-mapping');
+  const mappingTable = container ? container.querySelector('.mapping') : null;
+  const rows = [];
+  const lines = ['PARTIAL_BEGIN:ilo_so_cpa', 'TITLE: ILO–SO/CPA Mapping', 'COLUMNS: Row | Values'];
+  let soColCount = 0;
+  let rowCount = 0;
+  let iloPlaceholder = false;
+  const soHeaders = [];
+  const iloInputs = [];
+
+  if (mappingTable) {
+    // Determine SO column count using header structure (header count minus C/P/A)
+    // Only count real SO headers, exclude "No SO" placeholders
+    const headerRow2 = mappingTable.querySelectorAll('tr')[1];
+    if (headerRow2) {
+      const hdrs = Array.from(headerRow2.querySelectorAll('th'));
+      // Count non-placeholder SO headers: total - C/P/A, but exclude "No SO" text
+      const soHdrs = hdrs.slice(0, hdrs.length - 3); // All except C/P/A
+      
+      // Capture SO header input values
+      soHdrs.forEach(th => {
+        const input = th.querySelector('input');
+        const text = input ? input.value.trim() : th.textContent.trim();
+        if (text !== 'No SO') {
+          soHeaders.push(text);
+          soColCount++;
+        }
+      });
+    }
+    // Count all data rows (any TR with TDs) to preserve structure even when inputs are disabled
+    rowCount = Array.from(mappingTable.querySelectorAll('tr')).filter(tr => tr.querySelector('td')).length;
+
+    // Detect ILO placeholder (first data row first cell text "No ILO")
+    const dataRows = Array.from(mappingTable.querySelectorAll('tr')).filter(tr => tr.querySelector('td'));
+    if (dataRows.length > 0) {
+      const firstCell = dataRows[0].querySelector('td');
+      iloPlaceholder = !!(firstCell && firstCell.textContent.trim() === 'No ILO');
+      
+      // Capture ILO input values from each data row
+      dataRows.forEach(row => {
+        const firstTd = row.querySelector('td:first-child');
+        if (firstTd) {
+          const input = firstTd.querySelector('input');
+          if (input) {
+            iloInputs.push(input.value.trim());
+          } else {
+            iloInputs.push(firstTd.textContent.trim());
+          }
+        }
+      });
+    }
+
+    const trList = Array.from(mappingTable.querySelectorAll('tr'));
+    trList.forEach((tr) => {
+      // Collect only editable textareas (skip disabled placeholders and header rows)
+      const tas = Array.from(tr.querySelectorAll('textarea')).filter(ta => !ta.disabled);
+      if (tas.length > 0) {
+        const values = tas.map(ta => (ta.value || '').trim());
+        rows.push({ values });
+        lines.push('ROW: ' + (values.length ? values.join(' | ') : '-'));
+      }
+    });
+  }
+  // Include structure info in text to make hash differ on column-only changes
+  lines.push('STRUCT: soCols=' + soColCount + ' rows=' + rowCount + ' iloPlaceholder=' + (iloPlaceholder ? 'yes' : 'no'));
+  lines.push('SO_HEADERS: ' + soHeaders.join('|'));
+  lines.push('ILO_INPUTS: ' + iloInputs.join('|'));
+  lines.push('PARTIAL_END:ilo_so_cpa');
+  const text = lines.join('\n');
+  const hash = simpleHash(`${text}|cols:${soColCount}`);
+
+  return {
+    partial: 'iloSoCpa',
+    title: 'ILO–SO/CPA Mapping',
+    rows,
+    soColCount,
+    iloPlaceholder,
+    rowCount,
+    soHeaders,
+    iloInputs,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Student Outcomes
 export function snapshotSo(){
   const list = document.getElementById('syllabus-so-sortable');
@@ -564,7 +652,8 @@ if (typeof window !== 'undefined') {
     snapshotSdg,
     snapshotCoursePolicies,
     snapshotTla,
-    snapshotAssessmentMapping
+    snapshotAssessmentMapping,
+    snapshotIloSoCpaMapping
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -579,4 +668,5 @@ if (typeof window !== 'undefined') {
   window.snapshotCoursePolicies = snapshotCoursePolicies;
   window.snapshotTla = snapshotTla;
   window.snapshotAssessmentMapping = snapshotAssessmentMapping;
+  window.snapshotIloSoCpaMapping = snapshotIloSoCpaMapping;
 }

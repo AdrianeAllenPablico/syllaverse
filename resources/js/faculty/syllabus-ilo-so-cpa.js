@@ -5,6 +5,27 @@ document.addEventListener('DOMContentLoaded', function() {
 	const mapping = document.querySelector('.ilo-so-cpa-mapping');
 	if (!mapping) return;
 
+	// Helper to push a snapshot so undo/redo picks up structural changes immediately
+	function pushIloSoCpaSnapshot(force = false) {
+		try {
+			window.SVActiveModuleName = 'iloSoCpa';
+			// Set a blocking timestamp to prevent watcher from firing for 100ms
+			window.__ILO_SO_CPA_BLOCK_UNTIL = Date.now() + 100;
+			if (window.SVHistory?.pushSnapshot && window.snapshotIloSoCpaMapping) {
+				const snap = window.snapshotIloSoCpaMapping();
+				// Optionally force a unique hash so hash dedupe does not drop structural-only changes
+				if (force) {
+					snap.hash = `${snap.hash}|t:${Date.now()}`;
+					snap.ts = Date.now();
+				}
+				window.SVHistory.pushSnapshot('iloSoCpa', snap);
+				if (window.SVHistory.refreshButtons) window.SVHistory.refreshButtons();
+			}
+		} catch (e) {
+			console.warn('[ILO-SO-CPA] Snapshot push failed:', e);
+		}
+	}
+
 	// Evenly distribute non-ILO columns while keeping ILO at 60px
 	function equalizeNonIloColumns() {
 		const mappingTable = mapping.querySelector('.mapping');
@@ -252,6 +273,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		tbody.appendChild(newRow);
 		checkPartialLabelOverflow();
 		updateInputStates();
+		// Push snapshot for undo/redo after structural row add
+		pushIloSoCpaSnapshot(true);
 	};
 	
 	// Remove row function
@@ -302,6 +325,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		lastRow.remove();
 		checkPartialLabelOverflow();
 		updateInputStates();
+		// Push snapshot for undo/redo after structural row remove
+		pushIloSoCpaSnapshot(true);
 	};
 	
 	// Add SO column function
@@ -380,7 +405,9 @@ document.addEventListener('DOMContentLoaded', function() {
 			});
 				// After converting placeholder, keep columns even
 				equalizeNonIloColumns();
-			return;
+				// Push snapshot for undo/redo after converting placeholder to SO column
+				pushIloSoCpaSnapshot(true);
+				return;
 		}
 		
 		// Add column to colgroup (before C, P, A columns)
@@ -465,6 +492,8 @@ document.addEventListener('DOMContentLoaded', function() {
 			// After adding a column, ensure even widths
 			equalizeNonIloColumns();
 		updateInputStates();
+			// Push snapshot for undo/redo after SO column add
+			pushIloSoCpaSnapshot(true);
 	};
 	
 	// Remove SO column function
@@ -538,7 +567,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 				// After converting to placeholder, keep columns even
 				equalizeNonIloColumns();
-			return;
+				// Push snapshot for undo/redo after converting last SO to placeholder
+				pushIloSoCpaSnapshot(true);
+				return;
 		}
 		
 		// Remove last SO column from colgroup (4th from end: SO before C, P, A)
@@ -595,6 +626,8 @@ document.addEventListener('DOMContentLoaded', function() {
 		equalizeNonIloColumns();
 
 		// Allow non-ILO columns to use natural widths (no forced sizing)
+		// Push snapshot for undo/redo after SO column remove
+		pushIloSoCpaSnapshot(true);
 	};
 	
 	// Save ILO-SO-CPA mapping function
