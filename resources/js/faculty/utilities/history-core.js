@@ -1,7 +1,7 @@
 // resources/js/faculty/utilities/history-core.js
 // Lightweight undo/redo core using snapshot functions per partial
 
-import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla, snapshotAssessmentMapping, snapshotIloSoCpaMapping } from './snapshot.js';
+import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIlo, snapshotAssessmentTasks, snapshotIga, snapshotSo, snapshotCdio, snapshotSdg, snapshotCoursePolicies, snapshotTla, snapshotAssessmentMapping, snapshotIloSoCpaMapping, snapshotIloIgaMapping } from './snapshot.js';
 
 (function(){
   const HISTORY_LIMIT = 200;
@@ -994,6 +994,157 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
   }
 
+  function applyIloIga(snap){
+    const st = ensure('iloIgaMapping');
+    st.isApplying = true;
+    try {
+      const container = document.querySelector('.ilo-iga-mapping');
+      const mappingTable = container ? container.querySelector('.mapping') : null;
+      if (!mappingTable) {
+        console.warn('[APPLY ILO–IGA] Mapping table not found');
+        return;
+      }
+
+      const dataRows = Array.isArray(snap?.rows) ? snap.rows : [];
+      const targetRowCount = Number.isInteger(snap?.rowCount) ? snap.rowCount : dataRows.length;
+      const targetIgaCount = Number(snap?.igaColCount || 0);
+
+      // Determine current structure
+      const currentDataTrs = Array.from(mappingTable.querySelectorAll('tr')).filter(tr => tr.querySelector('td'));
+      const currentRowCount = currentDataTrs.length;
+      let currentIgaCount = 0;
+      const headerRow2 = mappingTable.querySelectorAll('tr')[1];
+      if (headerRow2) {
+        const hdrs = Array.from(headerRow2.querySelectorAll('th'));
+        const iloIdx = hdrs.findIndex(th => th.textContent.includes('ILOs'));
+        const igaHdrs = hdrs.slice(iloIdx + 1);
+        const realIgaHdrs = igaHdrs.filter(th => {
+          const input = th.querySelector('input');
+          const text = input ? input.value.trim() : th.textContent.trim();
+          return text !== 'No IGA';
+        });
+        currentIgaCount = realIgaHdrs.length;
+      }
+
+      // Adjust rows using global helpers
+      try {
+        if (typeof window.addIloRowIga === 'function' && typeof window.removeIloRowIga === 'function') {
+          if (currentRowCount < targetRowCount) {
+            for (let i = currentRowCount; i < targetRowCount; i++) window.addIloRowIga();
+          } else if (currentRowCount > targetRowCount) {
+            for (let i = targetRowCount; i < currentRowCount; i++) window.removeIloRowIga();
+          }
+        }
+      } catch(e) { console.warn('[APPLY ILO–IGA] Row adjust error:', e); }
+
+      // Adjust IGA columns
+      try {
+        if (typeof window.addIgaColumn === 'function' && typeof window.removeIgaColumn === 'function') {
+          if (currentIgaCount < targetIgaCount) {
+            for (let i = currentIgaCount; i < targetIgaCount; i++) window.addIgaColumn();
+          } else if (currentIgaCount > targetIgaCount) {
+            for (let i = targetIgaCount; i < currentIgaCount; i++) window.removeIgaColumn();
+          }
+        }
+      } catch(e) { console.warn('[APPLY ILO–IGA] Column adjust error:', e); }
+
+      // Requery rows after structure adjustments
+      const finalDataTrs = Array.from(mappingTable.querySelectorAll('tr')).filter(tr => tr.querySelector('td'));
+
+      // Compute current real IGA header labels in DOM order so we can
+      // map snapshot values back to the correct columns by label.
+      let currentIgaLabels = [];
+      const hdr2ForValues = mappingTable.querySelectorAll('tr')[1];
+      if (hdr2ForValues) {
+        const hdrs = Array.from(hdr2ForValues.querySelectorAll('th'));
+        const iloIdx = hdrs.findIndex(th => th.textContent.includes('ILOs'));
+        const igaHdrs = hdrs.slice(iloIdx + 1);
+        currentIgaLabels = igaHdrs
+          .map(th => {
+            const input = th.querySelector('input');
+            return input ? input.value.trim() : th.textContent.trim();
+          })
+          .filter(text => text !== 'No IGA');
+      }
+
+      // Restore IGA header labels
+      if (Array.isArray(snap?.igaHeaders) && snap.igaHeaders.length > 0) {
+        const hdr2 = mappingTable.querySelectorAll('tr')[1];
+        if (hdr2) {
+          const hdrs = Array.from(hdr2.querySelectorAll('th'));
+          const iloIdx = hdrs.findIndex(th => th.textContent.includes('ILOs'));
+          const igaHdrs = hdrs.slice(iloIdx + 1);
+          let idx = 0;
+          igaHdrs.forEach(th => {
+            const input = th.querySelector('input');
+            const text = input ? input.value.trim() : th.textContent.trim();
+            if (text !== 'No IGA' && idx < snap.igaHeaders.length) {
+              if (input) input.value = snap.igaHeaders[idx] || '';
+              idx++;
+            }
+          });
+        }
+      }
+
+      // Restore ILO cell contents per row
+      if (Array.isArray(snap?.iloInputs) && snap.iloInputs.length > 0) {
+        finalDataTrs.forEach((tr, idx) => {
+          const firstTd = tr.querySelector('td:first-child');
+          if (!firstTd || idx >= snap.iloInputs.length) return;
+          const iloValue = snap.iloInputs[idx] || '';
+
+          if (iloValue === 'No ILO') {
+            firstTd.innerHTML = 'No ILO';
+            firstTd.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.2rem 0.5rem; font-family:Georgia, serif; font-size:13px; text-align:center; vertical-align:middle; color:#999; font-style:italic;';
+          } else {
+            let input = firstTd.querySelector('input');
+            if (!input) {
+              firstTd.innerHTML = '';
+              input = document.createElement('input');
+              input.type = 'text';
+              input.placeholder = '-';
+              input.className = 'form-control form-control-sm';
+              input.style.cssText = 'width:100%; border:none; padding:0.1rem 0.25rem; font-family:Georgia,serif; font-size:13px; text-align:center; box-sizing:border-box; background:transparent;';
+              input.addEventListener('input', function(e) {
+                const value = e.target.value;
+                if (/^\d+$/.test(value)) {
+                  e.target.value = 'ILO' + value;
+                }
+              });
+              firstTd.appendChild(input);
+            }
+            input.value = iloValue;
+            firstTd.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.1rem 0.25rem; font-family:Georgia, serif; font-size:13px; color:#000; text-align:center; vertical-align:middle;';
+          }
+        });
+      }
+
+      // Restore textarea values (IGA cells) by matching snapshot data
+      // to the current header labels. This prevents data loss on the
+      // final undo step when columns have been added/removed.
+      finalDataTrs.forEach((tr, idx) => {
+        const tas = Array.from(tr.querySelectorAll('textarea'));
+        const rowSnap = dataRows[idx] || {};
+        const values = Array.isArray(rowSnap.values) ? rowSnap.values : [];
+        const byHeader = rowSnap.byHeader || null;
+        tas.forEach((ta, cIdx) => {
+          let v = '';
+          const colLabel = currentIgaLabels[cIdx];
+          if (byHeader && colLabel && Object.prototype.hasOwnProperty.call(byHeader, colLabel)) {
+            v = byHeader[colLabel] || '';
+          } else if (cIdx < values.length) {
+            v = values[cIdx] || '';
+          }
+          ta.value = v;
+        });
+      });
+
+      try { if (window.updateProgressBar) window.updateProgressBar(); } catch(e){}
+    } finally {
+      st.isApplying = false;
+    }
+  }
+
   function undo(){
     if (!globalHistory.length) return false;
     setGlobalApplying(true);
@@ -1035,6 +1186,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
           break;
         case 'iloSoCpa':
           applyIloSoCpa(prev);
+          break;
+        case 'iloIgaMapping':
+          applyIloIga(prev);
           break;
         case 'iga':
           applyIga(prev);
@@ -1098,6 +1252,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         case 'iloSoCpa':
           applyIloSoCpa(next);
           break;
+        case 'iloIgaMapping':
+          applyIloIga(next);
+          break;
         case 'iga':
           applyIga(next);
           break;
@@ -1151,6 +1308,36 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
         }
       } catch(e) {}
       try { const isc = snapshotIloSoCpaMapping(); safeInitialize('iloSoCpa', isc); } catch(e) {}
+      try { const iigm = snapshotIloIgaMapping(); safeInitialize('iloIgaMapping', iigm); } catch(e) {}
+    } finally {
+      globalApplying = false;
+      updateButtons();
+    }
+  }
+
+  // Reset history only for the ILO–IGA mapping module after a save.
+  // This clears undo/redo entries for that module and establishes the
+  // current DOM state as the new baseline, without affecting other
+  // partials' history stacks.
+  function resetIloIgaAfterSave(){
+    try {
+      globalApplying = true;
+      // Remove history entries for the ILO–IGA mapping module only
+      for (let i = globalHistory.length - 1; i >= 0; i--) {
+        if (globalHistory[i] && globalHistory[i].key === 'iloIgaMapping') {
+          globalHistory.splice(i, 1);
+        }
+      }
+      for (let i = globalRedo.length - 1; i >= 0; i--) {
+        if (globalRedo[i] && globalRedo[i].key === 'iloIgaMapping') {
+          globalRedo.splice(i, 1);
+        }
+      }
+      // Re-baseline the module to the current DOM snapshot
+      try {
+        const snap = snapshotIloIgaMapping();
+        safeInitialize('iloIgaMapping', snap);
+      } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -1987,6 +2174,63 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     updateButtons();
   }
 
+  function registerIloIgaWatchers(){
+    const st = ensure('iloIgaMapping');
+    const lastSavedText = new WeakMap();
+
+    const take = () => {
+      // Skip capturing while this module is being programmatically
+      // initialized (e.g., loadSavedData or AJAX refresh).
+      if (window.SV_IloIgaInitializing) return;
+      if (st.isApplying || window.globalApplying) return;
+      // Avoid creating undo entries during initial server-rendered load
+      if (Date.now() < initialLoadUntil) {
+        try {
+          const baseline = snapshotIloIgaMapping();
+          currentSnap['iloIgaMapping'] = baseline;
+          lastHashes['iloIgaMapping'] = baseline.hash;
+        } catch(e) {}
+        return;
+      }
+      try {
+        const snap = snapshotIloIgaMapping();
+        if (snap && Array.isArray(snap.rows)) {
+          safePush('iloIgaMapping', snap);
+        }
+      } catch (e) { /* noop */ }
+    };
+
+    const container = document.querySelector('.ilo-iga-mapping');
+    const mappingTable = container ? container.querySelector('.mapping') : null;
+    if (mappingTable){
+      // Snapshot on any change to textareas or inputs in the ILO–IGA
+      // table so that edits to intersection cells, IGA headers, and
+      // ILO codes are all undoable step by step.
+      mappingTable.addEventListener('input', (e) => {
+        const el = e.target;
+        if (!el || (el.tagName !== 'TEXTAREA' && el.tagName !== 'INPUT')) return;
+        const current = el.value || '';
+        const prev = lastSavedText.get(el) || '';
+        if (current === prev) return;
+        lastSavedText.set(el, current);
+        take();
+      }, { capture: true });
+
+      mappingTable.addEventListener('change', (e) => {
+        const el = e.target;
+        if (!el || (el.tagName !== 'TEXTAREA' && el.tagName !== 'INPUT')) return;
+        lastSavedText.set(el, el.value || '');
+        take();
+      }, { capture: true });
+
+      mappingTable.addEventListener('focusin', () => { window.SVActiveModuleName = 'iloIgaMapping'; }, true);
+      mappingTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'iloIgaMapping'; }, true);
+    }
+
+    try { safeInitialize('iloIgaMapping', snapshotIloIgaMapping()); } catch(e) {}
+    updateButtons();
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
     // wire toolbar buttons
     const undoBtn = document.getElementById('syllabusUndoBtn');
@@ -2019,6 +2263,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     registerTlaWatchers();
     registerSoWatchers();
     registerIgaWatchers();
+    registerIloIgaWatchers();
     registerAssessmentMappingWatchers();
     registerIloSoCpaWatchers();
   });
@@ -2031,6 +2276,12 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       undo, redo,
       setRestricted,
       resetAfterSave,
+      resetIloIgaAfterSave,
+      // Allow modules to explicitly update their current baseline
+      // snapshot without creating a history entry. This is used by
+      // ILO–IGA structural actions so that undo restores the exact
+      // state immediately before a row/column change.
+      primeSnapshot: safeInitialize,
       getActiveKey,
       applyMissionVision,
       applyCourseInfo,

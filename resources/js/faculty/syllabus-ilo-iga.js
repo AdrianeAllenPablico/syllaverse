@@ -44,9 +44,47 @@ document.addEventListener('DOMContentLoaded', function() {
 			autoResize(this);
 		});
 	});
+
+	// Helper to push a snapshot so undo/redo picks up structural changes immediately
+	function pushIloIgaSnapshot() {
+		try {
+			// During initial hydration from saved data or AJAX refresh,
+			// skip creating undo entries so the loaded state becomes
+			// the new baseline instead of an undoable action.
+			if (window.SV_IloIgaInitializing) return;
+			window.SVActiveModuleName = 'iloIgaMapping';
+			if (window.SVHistory?.pushSnapshot && window.snapshotIloIgaMapping) {
+				const snap = window.snapshotIloIgaMapping();
+				window.SVHistory.pushSnapshot('iloIgaMapping', snap);
+				if (window.SVHistory.refreshButtons) window.SVHistory.refreshButtons();
+			}
+		} catch (e) {
+			console.warn('[ILO-IGA] Snapshot push failed:', e);
+		}
+	}
+
+	// Helper to prime the current baseline snapshot for ILO–IGA before
+	// a structural action (add/remove row/column). This ensures that the
+	// "prev" state stored for the subsequent history entry matches the
+	// exact table state immediately before the structural change, even
+	// if no text watcher snapshot has fired yet.
+	function primeIloIgaBaseline() {
+		try {
+			if (window.SV_IloIgaInitializing) return;
+			if (window.SVHistory?.primeSnapshot && window.snapshotIloIgaMapping) {
+				const snap = window.snapshotIloIgaMapping();
+				window.SVHistory.primeSnapshot('iloIgaMapping', snap);
+			}
+		} catch (e) {
+			console.warn('[ILO-IGA] Baseline prime failed:', e);
+		}
+	}
 	
 	// Add IGA column function
 	window.addIgaColumn = function() {
+		// Capture the full current state so undo of this structural
+		// change can restore all headers and cell values.
+		primeIloIgaBaseline();
 		const mappingTable = mapping.querySelector('.mapping');
 		const colgroup = mappingTable.querySelector('colgroup');
 		const headerRow1 = mappingTable.querySelectorAll('tr')[0];
@@ -118,6 +156,7 @@ document.addEventListener('DOMContentLoaded', function() {
 					igaCell.appendChild(newTextarea);
 				}
 			});
+			pushIloIgaSnapshot();
 			return;
 		}
 		
@@ -193,10 +232,14 @@ document.addEventListener('DOMContentLoaded', function() {
 		if (typeof feather !== 'undefined') {
 			feather.replace();
 		}
+		pushIloIgaSnapshot();
 	};
 	
 	// Remove IGA column function
 	window.removeIgaColumn = function() {
+		// Prime baseline so undo of this removal restores the full
+		// state (including the last column's header and data).
+		primeIloIgaBaseline();
 		const mappingTable = mapping.querySelector('.mapping');
 		const colgroup = mappingTable.querySelector('colgroup');
 		const headerRow1 = mappingTable.querySelectorAll('tr')[0];
@@ -218,6 +261,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		
 		if (placeholderExists) {
 			// Already at placeholder, can't remove further
+			pushIloIgaSnapshot();
 			return;
 		}
 		
@@ -259,6 +303,9 @@ document.addEventListener('DOMContentLoaded', function() {
 					igaCell.style.cssText = 'border:none; border-top:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle; background:#f9f9f9;';
 				}
 			});
+			// Record this structural change so undo restores the last
+			// real IGA column and all its cell values.
+			pushIloIgaSnapshot();
 			return;
 		}
 		
@@ -310,10 +357,14 @@ document.addEventListener('DOMContentLoaded', function() {
 				}
 			}
 		}
+		pushIloIgaSnapshot();
 	};
 	
 	// Add ILO row function
 	window.addIloRowIga = function() {
+		// Prime baseline so undo of this row addition restores the
+		// full previous table state.
+		primeIloIgaBaseline();
 		const mappingTable = mapping.querySelector('.mapping');
 		const tbody = mappingTable.querySelector('tbody') || mappingTable;
 		const rows = tbody.querySelectorAll('tr');
@@ -361,6 +412,7 @@ document.addEventListener('DOMContentLoaded', function() {
 					cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; border-left:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
 				}
 			}
+			pushIloIgaSnapshot();
 			return;
 		}
 		
@@ -422,10 +474,14 @@ document.addEventListener('DOMContentLoaded', function() {
 		
 		tbody.appendChild(newRow);
 		checkPartialLabelOverflow();
+		pushIloIgaSnapshot();
 	};
 	
 	// Remove ILO row function
 	window.removeIloRowIga = function() {
+		// Prime baseline so undo of this row removal restores the
+		// exact prior ILO/IGA data.
+		primeIloIgaBaseline();
 		const mappingTable = mapping.querySelector('.mapping');
 		const tbody = mappingTable.querySelector('tbody') || mappingTable;
 		const rows = tbody.querySelectorAll('tr');
@@ -438,6 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
 		});
 		
 		if (placeholderExists) {
+			pushIloIgaSnapshot();
 			return;
 		}
 		
@@ -466,12 +523,16 @@ document.addEventListener('DOMContentLoaded', function() {
 					cells[i].style.cssText = 'border:none; border-top:1px solid #343a40; border-left:1px solid #343a40; padding:0.2rem 0.5rem; text-align:center; vertical-align:middle;';
 				}
 			}
+			// Record this structural/data change so undo restores the
+			// last real ILO row and its IGA cell values.
+			pushIloIgaSnapshot();
 			return;
 		}
 		
 		const lastRow = dataRows[dataRows.length - 1];
 		lastRow.remove();
 		checkPartialLabelOverflow();
+		pushIloIgaSnapshot();
 	};
 	
 	// Save ILO-IGA mapping function
@@ -565,8 +626,29 @@ document.addEventListener('DOMContentLoaded', function() {
 		})
 		.then(data => {
 			if (data.success) {
-				// After successful save, refresh the partial via AJAX to rehydrate state
-				try { if (typeof window.ajaxRefreshIloIgaPartial === 'function') window.ajaxRefreshIloIgaPartial(); } catch(_){}
+				// After successful save, refresh the partial via AJAX to rehydrate
+				// state and then reset the ILO–IGA history so the saved state
+				// becomes the new baseline (no undo that removes saved rows).
+				try {
+					if (typeof window.ajaxRefreshIloIgaPartial === 'function') {
+						// Mark initializing so snapshot pushes and watchers
+						// ignore DOM churn from the refresh itself.
+						window.SV_IloIgaInitializing = true;
+						return window.ajaxRefreshIloIgaPartial()
+							.then(() => {
+								try {
+									if (window.SVHistory && typeof window.SVHistory.resetIloIgaAfterSave === 'function') {
+										window.SVHistory.resetIloIgaAfterSave();
+									}
+								} catch(_){ }
+								return data;
+							})
+							.finally(() => {
+								// Allow normal snapshotting again after refresh
+								window.SV_IloIgaInitializing = false;
+							});
+					}
+				} catch(_){ }
 				return data;
 			} else {
 				throw new Error(data.message || 'Unknown error');
@@ -574,7 +656,22 @@ document.addEventListener('DOMContentLoaded', function() {
 		})
 		.catch(error => {
 			console.error('Error saving ILO-IGA mapping:', error);
-			throw error;
+				// During initial page hydration from DB state, do not
+				// record undo history entries for ILO–IGA. Instead, let
+				// the loaded state become the new baseline.
+				window.SV_IloIgaInitializing = true;
+				try {
+					loadSavedData();
+					// After hydration, reset only the ILO–IGA history so
+					// undo cannot remove rows/columns that came from DB.
+					if (window.SVHistory && typeof window.SVHistory.resetIloIgaAfterSave === 'function') {
+						window.SVHistory.resetIloIgaAfterSave();
+					}
+				} catch (e) {
+					console.error('Error loading saved ILO-IGA data:', e);
+				} finally {
+					window.SV_IloIgaInitializing = false;
+				}
 		});
 	};
 
@@ -827,8 +924,21 @@ document.addEventListener('DOMContentLoaded', function() {
 		return { igaHeaders, mappings };
 	};
 	
-	// Load data after a short delay to ensure DOM is fully ready
+	// Load data after a short delay to ensure DOM is fully ready.
+	// During this initial hydration from DB state, suppress history
+	// snapshots and then reset the ILO–IGA history so the loaded
+	// state becomes the baseline (no undo immediately after reload).
 	setTimeout(() => {
-		loadSavedData();
+		window.SV_IloIgaInitializing = true;
+		try {
+			loadSavedData();
+			if (window.SVHistory && typeof window.SVHistory.resetIloIgaAfterSave === 'function') {
+				window.SVHistory.resetIloIgaAfterSave();
+			}
+		} catch (e) {
+			console.error('[ILO-IGA] Error during initial load:', e);
+		} finally {
+			window.SV_IloIgaInitializing = false;
+		}
 	}, 100);
 });

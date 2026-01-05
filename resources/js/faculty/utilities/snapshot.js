@@ -599,6 +599,83 @@ export function snapshotIloSoCpaMapping(){
   };
 }
 
+// ILO–IGA Mapping: snapshot cell values and simple structure (row/column counts and labels)
+export function snapshotIloIgaMapping(){
+  const container = document.querySelector('.ilo-iga-mapping');
+  const mappingTable = container ? container.querySelector('.mapping') : null;
+  const rows = [];
+  const lines = ['PARTIAL_BEGIN:ilo_iga', 'TITLE: ILO–IGA Mapping', 'COLUMNS: Row | Values'];
+  let igaColCount = 0;
+  let rowCount = 0;
+  const igaHeaders = [];
+  const iloInputs = [];
+
+  if (mappingTable) {
+    const headerRow2 = mappingTable.querySelectorAll('tr')[1];
+    if (headerRow2) {
+      const hdrs = Array.from(headerRow2.querySelectorAll('th'));
+      const iloIdx = hdrs.findIndex(th => th.textContent.includes('ILOs'));
+      const igaHdrs = hdrs.slice(iloIdx + 1);
+      igaHdrs.forEach(th => {
+        const input = th.querySelector('input');
+        const text = input ? input.value.trim() : th.textContent.trim();
+        if (text !== 'No IGA') {
+          igaHeaders.push(text);
+          igaColCount++;
+        }
+      });
+    }
+
+    const dataRows = Array.from(mappingTable.querySelectorAll('tr')).filter(tr => tr.querySelector('td'));
+    rowCount = dataRows.length;
+
+    dataRows.forEach((row) => {
+      const firstTd = row.querySelector('td:first-child');
+      if (firstTd) {
+        const input = firstTd.querySelector('input');
+        if (input) {
+          iloInputs.push(input.value.trim());
+        } else {
+          iloInputs.push(firstTd.textContent.trim());
+        }
+      }
+      const tas = Array.from(row.querySelectorAll('textarea'));
+      const values = tas.map(ta => (ta.value || '').trim());
+      // Map values to their IGA headers so we can reliably restore
+      // data by column label even after complex add/remove sequences.
+      const byHeader = {};
+      if (igaHeaders.length && values.length) {
+        const len = Math.min(igaHeaders.length, values.length);
+        for (let i = 0; i < len; i++) {
+          byHeader[igaHeaders[i]] = values[i];
+        }
+      }
+      rows.push({ values, byHeader });
+      lines.push('ROW: ' + (values.length ? values.join(' | ') : '-'));
+    });
+  }
+
+  lines.push('STRUCT: igaCols=' + igaColCount + ' rows=' + rowCount);
+  lines.push('IGA_HEADERS: ' + igaHeaders.join('|'));
+  lines.push('ILO_INPUTS: ' + iloInputs.join('|'));
+  lines.push('PARTIAL_END:ilo_iga');
+  const text = lines.join('\n');
+  const hash = simpleHash(`${text}|cols:${igaColCount}`);
+
+  return {
+    partial: 'iloIga',
+    title: 'ILO–IGA Mapping',
+    rows,
+    igaColCount,
+    rowCount,
+    igaHeaders,
+    iloInputs,
+    text,
+    hash,
+    ts: Date.now()
+  };
+}
+
 // Student Outcomes
 export function snapshotSo(){
   const list = document.getElementById('syllabus-so-sortable');
@@ -653,7 +730,8 @@ if (typeof window !== 'undefined') {
     snapshotCoursePolicies,
     snapshotTla,
     snapshotAssessmentMapping,
-    snapshotIloSoCpaMapping
+    snapshotIloSoCpaMapping,
+    snapshotIloIgaMapping
   };
   // Also expose directly on window for easy access
   window.snapshotMissionVision = snapshotMissionVision;
@@ -669,4 +747,5 @@ if (typeof window !== 'undefined') {
   window.snapshotTla = snapshotTla;
   window.snapshotAssessmentMapping = snapshotAssessmentMapping;
   window.snapshotIloSoCpaMapping = snapshotIloSoCpaMapping;
+  window.snapshotIloIgaMapping = snapshotIloIgaMapping;
 }
