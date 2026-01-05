@@ -78,6 +78,10 @@ export default defineConfig({
                 'resources/js/faculty/utilities/syllabus-back.js',
                 'resources/js/faculty/utilities/syllabus-save-state.js',
                 'resources/js/faculty/utilities/syllabus-save.js',
+                'resources/js/faculty/utilities/snapshot.js',
+                'resources/js/faculty/utilities/history-core.js',
+                'resources/js/faculty/utilities/syllabus-undo.js',
+                'resources/js/faculty/utilities/syllabus-redo.js',
                 // Undo/Redo removed per request
                 'resources/js/faculty/syllabus-sdg.js',
                 'resources/js/faculty/syllabus-textbook.js',
@@ -113,7 +117,17 @@ export default defineConfig({
                 'resources/js/superadmin/manage-accounts/manage-accounts.js',
 
                 // Shared libs
-                'resources/js/lib/api.js'
+                'resources/js/lib/api.js',
+
+                // Faculty AI JS
+                'resources/js/faculty/ai/ai.js',
+                'resources/js/faculty/ai/prompts.js',
+                'resources/js/faculty/ai/snapshot.js',
+                'resources/js/faculty/ai/ilo-so-cpa-mapping.js',
+                'resources/js/faculty/ai/assessment-schedule.js',
+                'resources/js/faculty/ai/ilo-iga-mapping.js',
+                'resources/js/faculty/ai/ilo-cdio-sdg-mapping.js',
+                'resources/js/faculty/ai/chat-panel.js'
             ],
             refresh: true,
         }),

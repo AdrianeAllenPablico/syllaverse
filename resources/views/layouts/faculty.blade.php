@@ -97,6 +97,7 @@
   @vite('resources/js/faculty/syllabus-tla.js')
   @vite('resources/js/faculty/syllabus-criteria.js')
   @vite('resources/js/faculty/syllabus-assessment-mapping.js')
+  @vite('resources/js/faculty/ai/ai.js')
   @vite('resources/js/faculty/ai/prompts.js')
   @vite('resources/js/faculty/ai/snapshot.js')
   @vite('resources/js/faculty/ai/ilo-so-cpa-mapping.js')

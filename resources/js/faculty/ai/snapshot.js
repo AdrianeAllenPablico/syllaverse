@@ -172,15 +172,37 @@
 
   // ---------- Criteria for Assessment Snapshot ----------
   function snapshotCriteriaAssessment(){
-    const criteriaDataEl = document.getElementById('criteria_data_input');
+    const criteriaContainer = document.getElementById('criteria-sections-container');
     let sections = [];
-    
-    if (criteriaDataEl && criteriaDataEl.value) {
-      try {
-        const parsed = JSON.parse(criteriaDataEl.value);
-        sections = Array.isArray(parsed) ? parsed : [];
-      } catch(e) {
-        console.warn('[snapshot] Failed to parse criteria data', e);
+
+    // Prefer live DOM (current edits), fallback to hidden JSON payload
+    if (criteriaContainer) {
+      const sectionEls = Array.from(criteriaContainer.querySelectorAll('.section'));
+      sections = sectionEls.map((sec, idx) => {
+        const key = sec.dataset.sectionKey || `section_${idx+1}`;
+        const heading = textTrim(sec.querySelector('.section-head .category')?.value || '');
+        const values = [];
+        sec.querySelectorAll('.sub-list .sub-line').forEach(line => {
+          const desc = textTrim(line.querySelector('.sub-input')?.value || '');
+          const pct  = textTrim(line.querySelector('.sub-percent')?.value || '');
+          if (!desc && !pct) return;
+          values.push({ description: desc, percent: pct });
+        });
+        return { key, heading, value: values };
+      });
+    }
+
+    // If DOM is not available (or empty), fall back to the serialized
+    // JSON stored in the hidden criteria_data_input field.
+    if ((!sections || sections.length === 0)) {
+      const criteriaDataEl = document.getElementById('criteria_data_input');
+      if (criteriaDataEl && criteriaDataEl.value) {
+        try {
+          const parsed = JSON.parse(criteriaDataEl.value);
+          sections = Array.isArray(parsed) ? parsed : [];
+        } catch(e) {
+          console.warn('[snapshot] Failed to parse criteria data', e);
+        }
       }
     }
 
@@ -196,14 +218,10 @@
     } else {
       sections.forEach(section => {
         const key = section.key || '';
-        const heading = section.heading || '-';
+        const heading = textTrim(section.heading || '-');
         const values = Array.isArray(section.value) ? section.value : [];
-        
-        raw.sections.push({
-          key,
-          heading,
-          values
-        });
+
+        raw.sections.push({ key, heading, values });
         
         if (values.length === 0) {
           md.push(`| ${heading} | - | - |`);
@@ -736,14 +754,17 @@
     const allHeaders = Array.from(headerRow2.querySelectorAll('th'));
     const iloHeaderIndex = allHeaders.findIndex(th => th.textContent.includes('ILOs'));
 
-    // IGA columns are after ILOs (all remaining headers)
+    // IGA columns are after ILOs (all remaining headers). Mirror the
+    // same selection semantics as saveIloIga so raw.iga_columns and
+    // raw.mappings match what we persist, including empty labels.
     const igaHeaders = allHeaders.slice(iloHeaderIndex + 1);
     igaHeaders.forEach(th => {
       const input = th.querySelector('input');
       const label = input ? textTrim(input.value) : textTrim(th.textContent);
-      if (label && label !== 'No IGA') {
-        raw.iga_columns.push(label);
-      }
+      // Skip only the "No IGA" placeholder; include empty labels so the
+      // column count and ordering match the save payload.
+      if (label === 'No IGA') return;
+      raw.iga_columns.push(label || '');
     });
 
     // Get ILO rows
@@ -764,13 +785,13 @@
       igaHeaders.forEach((header, igaIdx) => {
         const input = header.querySelector('input');
         const igaLabel = input ? textTrim(input.value) : textTrim(header.textContent);
-
-        // Skip "No IGA" placeholder but collect actual IGA values
+        // Skip only the "No IGA" placeholder; allow empty labels so
+        // they align with raw.iga_columns.
         if (igaLabel === 'No IGA') return;
-
+        const normalizedLabel = igaLabel || '';
         const igaCell = cells[igaIdx + 1];
         const igaValue = igaCell ? formatWithNewlines(igaCell.querySelector('textarea')?.value ?? igaCell.textContent ?? '') : '';
-        igas[igaLabel] = igaValue;
+        igas[normalizedLabel] = igaValue;
       });
 
       if (iloText) {
@@ -788,8 +809,8 @@
       md.push('| ILO | (No data) |');
       md.push('|---|---|');
     } else {
-      // Build header: ILO | IGA1 | IGA2 | ...
-      const headerCols = ['ILO', ...raw.iga_columns];
+      // Build header: ILO | IGA1 | IGA2 | ... (blank labels render as '-')
+      const headerCols = ['ILO', ...raw.iga_columns.map(label => label || '-')];
       md.push('| ' + headerCols.join(' | ') + ' |');
       md.push('|' + Array(headerCols.length).fill(':--').join('|') + '|');
 
