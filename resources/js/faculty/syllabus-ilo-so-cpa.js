@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', function() {
 	// Helper to push a snapshot so undo/redo picks up structural changes immediately
 	function pushIloSoCpaSnapshot(force = false) {
 		try {
+			// During initial hydration from saved data, ignore manual snapshot pushes
+			if (window.SV_IloSoCpaInitializing) return;
 			window.SVActiveModuleName = 'iloSoCpa';
 			// Set a blocking timestamp to prevent watcher from firing for 100ms
 			window.__ILO_SO_CPA_BLOCK_UNTIL = Date.now() + 100;
@@ -298,6 +300,12 @@ document.addEventListener('DOMContentLoaded', function() {
 			iloCell.appendChild(iloInput);
 		}
 		iloCell.style.cssText = 'border:none; border-top:1px solid #343a40; border-right:1px solid #343a40; padding:0.1rem 0.25rem; font-family:Georgia, serif; font-size:13px; color:#000; text-align:center; vertical-align:middle;';
+
+		// Clear all non-ILO cells so the new row starts empty
+		const newRowCells = Array.from(newRow.querySelectorAll('td'));
+		for (let i = 1; i < newRowCells.length; i++) {
+			newRowCells[i].innerHTML = '';
+		}
 		
 		// Update all cells in new row
 		updateAllCellsInRow(newRow);
@@ -1001,9 +1009,23 @@ document.addEventListener('DOMContentLoaded', function() {
 	
 	// Load data after a short delay to ensure DOM is fully ready
 	setTimeout(() => {
-		loadSavedData();
-		updateInputStates();
-		equalizeNonIloColumns();
+		// Mark this module as initializing so history watchers and manual
+		// snapshot pushes do not create undo entries from server-hydrated state.
+		window.SV_IloSoCpaInitializing = true;
+		try {
+			loadSavedData();
+			updateInputStates();
+			equalizeNonIloColumns();
+			// After hydration, reset history baselines so the loaded state is
+			// treated as the starting point (no undo available yet).
+			if (window.SVHistory && typeof window.SVHistory.resetAfterSave === 'function') {
+				window.SVHistory.resetAfterSave();
+			}
+		} catch (e) {
+			console.error('[ILO-SO-CPA] Error during initial load:', e);
+		} finally {
+			window.SV_IloSoCpaInitializing = false;
+		}
 	}, 100);
 	
 	// Legacy function for compatibility with existing save flow

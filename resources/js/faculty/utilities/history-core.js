@@ -1804,6 +1804,9 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     const lastSavedText = new WeakMap();
 
     const take = () => {
+      // Skip capturing while this module is being programmatically initialized
+      // (e.g., when loadSavedData() hydrates from server state on page load)
+      if (window.SV_IloSoCpaInitializing) return;
       if (st.isApplying || window.globalApplying) return;
       // Skip watcher snapshots within 100ms of manual add/remove
       if (window.__ILO_SO_CPA_BLOCK_UNTIL && Date.now() < window.__ILO_SO_CPA_BLOCK_UNTIL) return;

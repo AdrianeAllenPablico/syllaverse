@@ -14,6 +14,8 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Syllabus;
 use App\Models\SyllabusIloIga;
+use App\Models\SyllabusIloIgaColumn;
+use App\Models\SyllabusIloIgaValue;
 use App\Models\SyllabusIga;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -33,6 +35,7 @@ class IloIgaController extends Controller
             $validated = $request->validate([
                 'syllabus_id' => 'required|integer',
                 'iga_labels' => 'nullable|array',
+                'iga_labels.*' => 'nullable|string',
                 'mappings' => 'nullable|array',
                 'mappings.*.ilo_text' => 'nullable|string',
                 'mappings.*.igas' => 'nullable|array',
@@ -48,21 +51,70 @@ class IloIgaController extends Controller
 
             // Note: We do NOT delete SyllabusIga records here.
             // The IGAs are managed separately in the IGA partial.
-            // The mapping only manages SyllabusIloIga records.
+            // The mapping only manages ILO→IGA links.
             // Deleting IGA columns from the mapping does NOT delete the actual IGAs.
 
-            // Delete existing ILO-IGA mappings for this syllabus
+            // --- Step 1: Reset IGA column definitions for this syllabus ---
+            // This will cascade-delete existing values via FK on syllabus_ilo_iga_values
+            SyllabusIloIgaColumn::where('syllabus_id', $syllabusId)->delete();
+
+            $igaLabels = $validated['iga_labels'] ?? [];
+
+            foreach ($igaLabels as $index => $label) {
+                SyllabusIloIgaColumn::create([
+                    'syllabus_id' => $syllabusId,
+                    'label' => $label,
+                    'position' => $index,
+                ]);
+            }
+
+            // --- Step 2: Reset ILO-IGA row mappings for this syllabus ---
+            // This will also cascade-delete values via FK on syllabus_ilo_iga_values
             SyllabusIloIga::where('syllabus_id', $syllabusId)->delete();
 
-            // Insert new mappings only if there are any
-            if (!empty($validated['mappings'])) {
-                foreach ($validated['mappings'] as $mapping) {
-                    SyllabusIloIga::create([
+            $mappings = $validated['mappings'] ?? [];
+
+            if (!empty($mappings)) {
+                foreach ($mappings as $mapping) {
+                    // Persist base row (keep JSON igas for backward compatibility)
+                    $ilo = SyllabusIloIga::create([
                         'syllabus_id' => $syllabusId,
                         'ilo_text' => $mapping['ilo_text'] ?? '',
                         'igas' => $mapping['igas'] ?? [],
                         'position' => $mapping['position'] ?? 0,
                     ]);
+
+                    // Persist per-cell values into normalized table using column position
+                    $igas = $mapping['igas'] ?? [];
+
+                    foreach ($igaLabels as $position => $label) {
+                        // Skip placeholder label "No IGA" just in case, allow empty labels
+                        if ($label === 'No IGA') {
+                            continue;
+                        }
+
+                        // Frontend currently keys IGA values by label
+                        $cellValue = array_key_exists($label ?? '', $igas)
+                            ? $igas[$label ?? '']
+                            : null;
+
+                        // Save even empty strings so explicit blanks are preserved
+                        if ($cellValue === null) {
+                            continue;
+                        }
+
+                        $column = SyllabusIloIgaColumn::where('syllabus_id', $syllabusId)
+                            ->where('position', (int) $position)
+                            ->first();
+
+                        if ($column) {
+                            SyllabusIloIgaValue::create([
+                                'ilo_id' => $ilo->id,
+                                'iga_column_id' => $column->id,
+                                'value' => $cellValue,
+                            ]);
+                        }
+                    }
                 }
             }
 
