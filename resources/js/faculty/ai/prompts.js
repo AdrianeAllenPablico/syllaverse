@@ -12,6 +12,9 @@
 			'Use institutional templates, course snapshots, and any default text only as supporting references, not as replacements for the user\'s intent. ' +
 			'If there is a conflict between a template and the instructor\'s own wording, follow the instructor\'s wording and offer suggestions in a respectful, optional way (never overwrite their voice).' 
 		),
+		'course-rationale': (
+			'The Course Rationale and Description field is a concise, well-written narrative that explains why the course exists, what it focuses on, and how it supports the program and institutional goals (including ILOs, IGA, SO, CDIO, and SDG where relevant). It should be grounded in the actual course title, code, category, level, and outcomes in the snapshots, and it must use professional, student-centered language. When you generate this, use all available context (course information, ILOs, assessment methods, TLA strategies, and mappings) to craft a single integrated paragraph or two that: (1) states the overall purpose and scope of the course, (2) highlights key knowledge and skills students will develop, and (3) briefly notes how the course contributes to graduate/program outcomes and institutional directions. Output your answer as one continuous narrative only (plain text, no markdown table and no bullet list), exactly as it should appear in the Course Rationale and Description field. Do not invent course details that clearly conflict with the snapshots; when in doubt, stay general but still meaningful.'
+		),
 		'mission-vision': (
 			'These are the official Vision and Mission of Batangas State University ARASOF TNEU. ' +
 			'Vision: "A premier national university that develops leaders in the global knowledge economy." ' +

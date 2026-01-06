@@ -39,7 +39,7 @@
           <i class="bi bi-chevron-left"></i>
         </button>
         <div class="ai-chat-section-body">
-          <button type="button" class="ai-chip">Course Rationale and Description</button>
+          <button type="button" class="ai-chip" id="aiChipCourseRationale" data-partial-key="course-rationale">Course Rationale and Description</button>
           <button type="button" class="ai-chip">Teaching, Learning, and Assessment Strategies</button>
           <button type="button" class="ai-chip">ILO</button>
           <button type="button" class="ai-chip">Teaching, Learning, and Assessment (TLA) Activities</button>

@@ -18,15 +18,29 @@
 		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
 		if (lines.length < 2) return false;
 		if (lines[0].indexOf('|') === -1) return false;
-		const divider = lines[1];
-		return /^\|?\s*:?-{3,}/.test(divider);
+		// Treat as a table if there is at least one more line that also
+		// looks like a row (contains "|") or if there is a markdown
+		// divider/alignment row. This is more lenient so AI outputs
+		// without explicit "---" divider still render as tables.
+		for (let i = 1; i < lines.length; i++){
+			const ln = lines[i];
+			if (ln.indexOf('|') !== -1) return true;
+			if (/^\|?\s*:?-{3,}/.test(ln)) return true;
+		}
+		return false;
 	}
 
 	function renderTableBlock(parent, block){
 		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
 		if (lines.length < 2) return;
 		const headerLine = lines[0];
-		const bodyLines = lines.slice(2);
+		// Skip markdown divider row if present, otherwise treat all
+		// remaining lines as body rows.
+		let bodyStart = 1;
+		if (lines[1] && /^\|?\s*:?-{3,}/.test(lines[1])){
+			bodyStart = 2;
+		}
+		const bodyLines = lines.slice(bodyStart);
 		function splitRow(line){
 			let s = line.trim();
 			if (s.startsWith('|')) s = s.slice(1);
@@ -128,6 +142,65 @@
 		}
 	}
 
+	function renderMarkdownBody(parent, content){
+		const text = (content || '').trim();
+		if (!text) return;
+		const blocks = splitBlocks(text);
+		blocks.forEach(function(block){
+			let handledComposite = false;
+			// Handle cases where a plain heading or paragraph is followed by a markdown table
+			// without a blank line between them (common in AI replies).
+			if (!isTableBlock(block) && block.indexOf('\n|') !== -1){
+				const lines = block.split(/\n/);
+				let tableStart = -1;
+				for (let i = 0; i < lines.length - 1; i++){
+					const ln = lines[i].trim();
+					if (ln.indexOf('|') !== -1){
+						const next = lines[i+1].trim();
+						// Start a table where a row with '|' is followed by
+						// another row that also looks like a table row or
+						// an alignment/divider row.
+						if (next.indexOf('|') !== -1 || /^\|?\s*:?-{3,}/.test(next)){
+							tableStart = i;
+							break;
+						}
+					}
+				}
+				if (tableStart > -1){
+					const before = lines.slice(0, tableStart).join('\n').trim();
+					const tablePart = lines.slice(tableStart).join('\n');
+					if (before){
+						if (isHeadingBlock(before)) {
+							renderHeadingBlock(parent, before);
+						} else {
+							const p = document.createElement('p');
+							renderInlineMarkdown(p, before);
+							parent.appendChild(p);
+						}
+					}
+					if (isTableBlock(tablePart)){
+						renderTableBlock(parent, tablePart);
+						handledComposite = true;
+					}
+				}
+			}
+
+			if (handledComposite) return;
+
+			if (isTableBlock(block)) {
+				renderTableBlock(parent, block);
+			} else if (isListBlock(block)) {
+				renderListBlock(parent, block);
+			} else if (isHeadingBlock(block)) {
+				renderHeadingBlock(parent, block);
+			} else {
+				const p = document.createElement('p');
+				renderInlineMarkdown(p, block);
+				parent.appendChild(p);
+			}
+		});
+	}
+
 	function renderHeadingBlock(parent, block){
 		const match = block.trim().match(/^(#{1,3})\s+(.+)$/);
 		if (!match) return;
@@ -152,22 +225,80 @@
 			bubble.appendChild(title);
 			return;
 		}
-		const blocks = splitBlocks(content);
-		blocks.forEach(function(block){
-			if (isTableBlock(block)) {
-				renderTableBlock(body, block);
-			} else if (isListBlock(block)) {
-				renderListBlock(body, block);
-			} else if (isHeadingBlock(block)) {
-				renderHeadingBlock(body, block);
-			} else {
-				const p = document.createElement('p');
-				renderInlineMarkdown(p, block);
-				body.appendChild(p);
-			}
-		});
+		renderMarkdownBody(body, content);
 		bubble.appendChild(title);
 		bubble.appendChild(body);
+	}
+
+	function getOrCreateCourseRationaleContainer(){
+		const messages = $('aiChatMessages');
+		if (!messages) return null;
+		let container = messages.querySelector('.ai-course-rationale-container');
+		if (!container){
+			container = document.createElement('div');
+			container.className = 'ai-course-rationale-container';
+			messages.appendChild(container);
+		}
+		return container;
+	}
+
+	function extractCourseDescriptionFromMarkdown(markdown){
+		// For course rationale we now expect a plain-text narrative,
+		// so just return the trimmed string.
+		return String(markdown || '').trim();
+	}
+
+	function renderCourseRationaleCard(markdown){
+		const container = getOrCreateCourseRationaleContainer();
+		if (!container) return;
+		container.innerHTML = '';
+
+		const card = document.createElement('div');
+		card.className = 'ai-course-rationale-card';
+		card.dataset.markdown = markdown || '';
+
+		const header = document.createElement('div');
+		header.className = 'ai-card-header';
+		const title = document.createElement('div');
+		title.className = 'ai-card-title';
+		title.textContent = 'Course Rationale and Description (AI Draft)';
+		header.appendChild(title);
+		const btnWrap = document.createElement('div');
+		btnWrap.className = 'ai-card-button-wrapper';
+		const insertBtn = document.createElement('button');
+		insertBtn.type = 'button';
+		insertBtn.className = 'ai-card-insert-btn';
+		insertBtn.textContent = 'Insert into syllabus';
+		btnWrap.appendChild(insertBtn);
+		header.appendChild(btnWrap);
+		card.appendChild(header);
+
+		const body = document.createElement('div');
+		body.className = 'ai-card-body';
+		// Show the draft as simple text (no special table rendering)
+		const p = document.createElement('p');
+		p.className = 'ai-card-text';
+		renderInlineMarkdown(p, markdown || '');
+		body.appendChild(p);
+		card.appendChild(body);
+
+		insertBtn.addEventListener('click', function(){
+			const raw = card.dataset.markdown || '';
+			const text = extractCourseDescriptionFromMarkdown(raw).trim();
+			if (!text) return;
+			const field = document.querySelector('[name="course_description"]');
+			if (!field) return;
+			if (typeof field.value !== 'undefined') {
+				field.value = text;
+			} else {
+				field.textContent = text;
+			}
+			try {
+				field.dispatchEvent(new Event('input', { bubbles:true }));
+			} catch(e){}
+		});
+
+		container.appendChild(card);
 	}
 
 	function appendMessage(role, text, opts){
@@ -346,12 +477,13 @@
 		if (closeBtn) closeBtn.addEventListener('click', function(){ closePanel(); });
 
 		// Basic send handler
-		async function handleSend(partialKey){
+		async function handleSend(partialKey, overrideMessage){
 			if (!window.SVAI || typeof window.SVAI.send !== 'function') {
 				console.warn('[AI] SVAI.send not available');
 				return;
 			}
-			const message = (input && input.value || '').trim();
+			const baseText = (input && input.value || '').trim();
+			const message = (overrideMessage || baseText).trim();
 			if (!message) return;
 
 			const history = getHistory();
@@ -362,7 +494,14 @@
 
 			try {
 				const reply = await window.SVAI.send(message, history, partialKey || '');
-				updateLoadingMessage(loadingMsg, reply);
+				if (partialKey === 'course-rationale') {
+					// For generate: do not show the full reply in the
+					// normal AI bubble, only in the unique card.
+					updateLoadingMessage(loadingMsg, 'Draft generated below.');
+					renderCourseRationaleCard(reply);
+				} else {
+					updateLoadingMessage(loadingMsg, reply);
+				}
 			} catch (err) {
 				console.error('[AI] Error', err);
 				updateLoadingMessage(loadingMsg, 'I had trouble answering this right now. Please check your internet connection and try again in a moment.');
@@ -374,29 +513,31 @@
 		if (form) {
 			form.addEventListener('submit', function(e){
 				e.preventDefault();
-				handleSend('');
+				handleSend('', '');
 			});
 		} else if (input) {
 			input.addEventListener('keydown', function(e){
 				if (e.key === 'Enter' && !e.shiftKey) {
 					e.preventDefault();
-					handleSend('');
+					handleSend('', '');
 				}
 			});
 		}
 		if (sendBtn) {
-			sendBtn.addEventListener('click', function(){ handleSend(''); });
+			sendBtn.addEventListener('click', function(){ handleSend('', ''); });
 		}
 
-		// Quick action chips (section-specific prompts)
-		const chipsContainer = $('aiSectionChips');
-		if (chipsContainer) {
-			chipsContainer.addEventListener('click', function(e){
-				const chip = e.target.closest('.ai-chip');
-				if (!chip) return;
-				const key = getPartialKeyFromChip(chip);
+		// Course Rationale and Description generate chip
+		const courseRationaleChip = document.getElementById('aiChipCourseRationale');
+		if (courseRationaleChip) {
+			courseRationaleChip.addEventListener('click', function(){
 				openPanel();
-				handleSend(key);
+				const partialKey = this.getAttribute('data-partial-key') || 'course-rationale';
+				const basePrompt = 'Generate a high-quality Course Rationale and Description for this syllabus, as a single narrative suitable for the Course Rationale and Description field.';
+				const input = $('aiChatInput');
+				const userHint = input && input.value ? input.value.trim() : '';
+				const msg = userHint ? (basePrompt + ' ' + userHint) : basePrompt;
+				handleSend(partialKey, msg);
 			});
 		}
 
