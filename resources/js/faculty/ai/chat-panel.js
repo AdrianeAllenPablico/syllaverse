@@ -171,9 +171,14 @@
 			}
 		}
 
-		// Course Rationale and Description special card (requires explicit insert key)
+		// Special insertable cards (require explicit insert keys)
 		if (insertKey === 'course-rationale'){
 			renderCourseRationaleCard(body, content);
+			bubble.appendChild(title);
+			bubble.appendChild(body);
+			return;
+		} else if (insertKey === 'tlas'){
+			renderTlasCard(body, content);
 			bubble.appendChild(title);
 			bubble.appendChild(body);
 			return;
@@ -251,6 +256,66 @@
 		const feedback = document.createElement('div');
 		feedback.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:0.75rem 1.5rem;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:9999;font-weight:500;animation:slideUp 0.3s ease;';
 		feedback.textContent = 'Course Rationale inserted successfully!';
+		document.body.appendChild(feedback);
+		setTimeout(() => {
+			feedback.style.animation = 'slideDown 0.3s ease';
+			setTimeout(() => feedback.remove(), 300);
+		}, 2000);
+
+		field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		field.focus();
+	}
+
+	function renderTlasCard(parent, content){
+		const container = document.createElement('div');
+		container.className = 'ai-tlas-container';
+
+		const card = document.createElement('div');
+		card.className = 'ai-tlas-card';
+
+		const header = document.createElement('div');
+		header.className = 'ai-card-header';
+		const headerTitle = document.createElement('div');
+		headerTitle.className = 'ai-card-title';
+		headerTitle.textContent = 'Teaching, Learning, and Assessment Strategies';
+		header.appendChild(headerTitle);
+
+		const body = document.createElement('div');
+		body.className = 'ai-card-body';
+		const p = document.createElement('p');
+		p.textContent = content;
+		body.appendChild(p);
+
+		const buttonWrapper = document.createElement('div');
+		buttonWrapper.className = 'ai-card-button-wrapper';
+		const insertBtn = document.createElement('button');
+		insertBtn.className = 'ai-card-insert-btn';
+		insertBtn.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Insert into TLA Strategies';
+		insertBtn.addEventListener('click', function(){
+			insertTlas(content);
+		});
+		buttonWrapper.appendChild(insertBtn);
+		body.appendChild(buttonWrapper);
+
+		card.appendChild(header);
+		card.appendChild(body);
+		container.appendChild(card);
+		parent.appendChild(container);
+	}
+
+	function insertTlas(content){
+		const field = document.querySelector('textarea[name="tla_strategies"]');
+		if (!field) {
+			console.warn('[AI] TLA strategies field not found');
+			return;
+		}
+		field.value = content;
+		field.dispatchEvent(new Event('input', { bubbles: true }));
+		field.dispatchEvent(new Event('change', { bubbles: true }));
+
+		const feedback = document.createElement('div');
+		feedback.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:0.75rem 1.5rem;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:9999;font-weight:500;animation:slideUp 0.3s ease;';
+		feedback.textContent = 'TLA Strategies inserted successfully!';
 		document.body.appendChild(feedback);
 		setTimeout(() => {
 			feedback.style.animation = 'slideDown 0.3s ease';
@@ -517,6 +582,8 @@
 				let message = '';
 				if (key === 'course-rationale') {
 					message = 'Generate a course rationale and description for this course.';
+				} else if (key === 'tlas') {
+					message = 'Generate teaching, learning, and assessment strategies for this course.';
 				}
 				
 				if (message) {
