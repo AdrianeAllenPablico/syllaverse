@@ -424,11 +424,6 @@
   color: #6b7280;
 }
 
-.ai-chat-divider {
-  border-top: 1px dashed #e5e7eb;
-  margin: 0.5rem 0 0.75rem 0;
-}
-
 /* AI Tables */
 .ai-chat-table-wrap {
   width: 100%;

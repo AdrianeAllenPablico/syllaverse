@@ -123,10 +123,6 @@ export default defineConfig({
                 'resources/js/faculty/ai/ai.js',
                 'resources/js/faculty/ai/prompts.js',
                 'resources/js/faculty/ai/snapshot.js',
-                'resources/js/faculty/ai/ilo-so-cpa-mapping.js',
-                'resources/js/faculty/ai/assessment-schedule.js',
-                'resources/js/faculty/ai/ilo-iga-mapping.js',
-                'resources/js/faculty/ai/ilo-cdio-sdg-mapping.js',
                 'resources/js/faculty/ai/chat-panel.js'
             ],
             refresh: true,

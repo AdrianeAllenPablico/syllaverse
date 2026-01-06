@@ -95,17 +95,6 @@
 		return /^#{1,3}\s+/.test(block.trim());
 	}
 
-	function isRuleBlock(block){
-		const t = String(block || '').trim();
-		return t === '---' || t === '***' || t === '___';
-	}
-
-	function renderRuleBlock(parent){
-		const div = document.createElement('div');
-		div.className = 'ai-chat-divider';
-		parent.appendChild(div);
-	}
-
 	function renderInlineMarkdown(parent, text){
 		const src = String(text || '');
 		if (!src){
@@ -165,49 +154,6 @@
 		}
 		const blocks = splitBlocks(content);
 		blocks.forEach(function(block){
-			// Horizontal rule blocks (---) as visual dividers
-			if (isRuleBlock(block)){
-				renderRuleBlock(body);
-				return;
-			}
-
-			// Handle cases where a plain heading line is followed by a markdown table
-			// without a blank line between them (common in AI replies).
-			let handledComposite = false;
-			if (!isTableBlock(block) && block.indexOf('\n|') !== -1){
-				const lines = block.split(/\n/);
-				let tableStart = -1;
-				for (let i = 0; i < lines.length - 1; i++){
-					const ln = lines[i].trim();
-					if (ln.indexOf('|') !== -1){
-						// Require divider row after header
-						const next = lines[i+1].trim();
-						if (/^\|?\s*:?-{3,}/.test(next)){
-							tableStart = i;
-							break;
-						}
-					}
-				}
-				if (tableStart > -1){
-					const before = lines.slice(0, tableStart).join('\n').trim();
-					const tablePart = lines.slice(tableStart).join('\n');
-					if (before){
-						if (isHeadingBlock(before)) renderHeadingBlock(body, before);
-						else {
-							const p = document.createElement('p');
-							renderInlineMarkdown(p, before);
-							body.appendChild(p);
-						}
-					}
-					if (isTableBlock(tablePart)){
-						renderTableBlock(body, tablePart);
-						handledComposite = true;
-					}
-				}
-			}
-
-			if (handledComposite) return;
-
 			if (isTableBlock(block)) {
 				renderTableBlock(body, block);
 			} else if (isListBlock(block)) {
