@@ -18,29 +18,15 @@
 		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
 		if (lines.length < 2) return false;
 		if (lines[0].indexOf('|') === -1) return false;
-		// Treat as a table if there is at least one more line that also
-		// looks like a row (contains "|") or if there is a markdown
-		// divider/alignment row. This is more lenient so AI outputs
-		// without explicit "---" divider still render as tables.
-		for (let i = 1; i < lines.length; i++){
-			const ln = lines[i];
-			if (ln.indexOf('|') !== -1) return true;
-			if (/^\|?\s*:?-{3,}/.test(ln)) return true;
-		}
-		return false;
+		const divider = lines[1];
+		return /^\|?\s*:?-{3,}/.test(divider);
 	}
 
 	function renderTableBlock(parent, block){
 		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
 		if (lines.length < 2) return;
 		const headerLine = lines[0];
-		// Skip markdown divider row if present, otherwise treat all
-		// remaining lines as body rows.
-		let bodyStart = 1;
-		if (lines[1] && /^\|?\s*:?-{3,}/.test(lines[1])){
-			bodyStart = 2;
-		}
-		const bodyLines = lines.slice(bodyStart);
+		const bodyLines = lines.slice(2);
 		function splitRow(line){
 			let s = line.trim();
 			if (s.startsWith('|')) s = s.slice(1);
@@ -142,51 +128,20 @@
 		}
 	}
 
-	function renderMarkdownBody(parent, content){
-		const text = (content || '').trim();
-		if (!text) return;
-		const blocks = splitBlocks(text);
+	function renderHeadingBlock(parent, block){
+		const match = block.trim().match(/^(#{1,3})\s+(.+)$/);
+		if (!match) return;
+		const level = match[1].length;
+		const text = match[2].trim();
+		const h = document.createElement('div');
+		h.className = 'ai-chat-heading ai-chat-heading-' + level;
+		renderInlineMarkdown(h, text);
+		parent.appendChild(h);
+	}
+
+	function renderMarkdownBlocks(parent, content){
+		const blocks = splitBlocks(content || '');
 		blocks.forEach(function(block){
-			let handledComposite = false;
-			// Handle cases where a plain heading or paragraph is followed by a markdown table
-			// without a blank line between them (common in AI replies).
-			if (!isTableBlock(block) && block.indexOf('\n|') !== -1){
-				const lines = block.split(/\n/);
-				let tableStart = -1;
-				for (let i = 0; i < lines.length - 1; i++){
-					const ln = lines[i].trim();
-					if (ln.indexOf('|') !== -1){
-						const next = lines[i+1].trim();
-						// Start a table where a row with '|' is followed by
-						// another row that also looks like a table row or
-						// an alignment/divider row.
-						if (next.indexOf('|') !== -1 || /^\|?\s*:?-{3,}/.test(next)){
-							tableStart = i;
-							break;
-						}
-					}
-				}
-				if (tableStart > -1){
-					const before = lines.slice(0, tableStart).join('\n').trim();
-					const tablePart = lines.slice(tableStart).join('\n');
-					if (before){
-						if (isHeadingBlock(before)) {
-							renderHeadingBlock(parent, before);
-						} else {
-							const p = document.createElement('p');
-							renderInlineMarkdown(p, before);
-							parent.appendChild(p);
-						}
-					}
-					if (isTableBlock(tablePart)){
-						renderTableBlock(parent, tablePart);
-						handledComposite = true;
-					}
-				}
-			}
-
-			if (handledComposite) return;
-
 			if (isTableBlock(block)) {
 				renderTableBlock(parent, block);
 			} else if (isListBlock(block)) {
@@ -201,15 +156,55 @@
 		});
 	}
 
-	function renderHeadingBlock(parent, block){
-		const match = block.trim().match(/^(#{1,3})\s+(.+)$/);
-		if (!match) return;
-		const level = match[1].length;
-		const text = match[2].trim();
-		const h = document.createElement('div');
-		h.className = 'ai-chat-heading ai-chat-heading-' + level;
-		renderInlineMarkdown(h, text);
-		parent.appendChild(h);
+	function insertCourseRationale(text){
+		const target = document.querySelector('[name="course_description"]');
+		if (!target) {
+			console.warn('[AI] course_description field not found for insert');
+			return;
+		}
+		target.value = text || '';
+		try {
+			const evtInput = new Event('input', { bubbles: true });
+			target.dispatchEvent(evtInput);
+			const evtChange = new Event('change', { bubbles: true });
+			target.dispatchEvent(evtChange);
+		} catch (e) {
+			// Best-effort; swallowing to avoid breaking UI
+		}
+	}
+
+	function renderCourseRationaleCard(parent, text){
+		const container = document.createElement('div');
+		container.className = 'ai-course-rationale-container';
+		const card = document.createElement('div');
+		card.className = 'ai-course-rationale-card';
+		const header = document.createElement('div');
+		header.className = 'ai-card-header';
+		const title = document.createElement('div');
+		title.className = 'ai-card-title';
+		title.textContent = 'Course Rationale and Description';
+		header.appendChild(title);
+		card.appendChild(header);
+		const body = document.createElement('div');
+		body.className = 'ai-card-body';
+		// Render the generated text as simple paragraphs; allow basic markdown inline
+		const p = document.createElement('p');
+		renderInlineMarkdown(p, text || '');
+		body.appendChild(p);
+		const btnWrap = document.createElement('div');
+		btnWrap.className = 'ai-card-button-wrapper';
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'ai-card-insert-btn';
+		btn.textContent = 'Insert into Course Info';
+		btn.addEventListener('click', function(){
+			insertCourseRationale(text || '');
+		});
+		btnWrap.appendChild(btn);
+		body.appendChild(btnWrap);
+		card.appendChild(body);
+		container.appendChild(card);
+		parent.appendChild(container);
 	}
 
 	function renderAiMessage(bubble, text){
@@ -220,85 +215,34 @@
 		title.textContent = 'AI Assistant';
 		const body = document.createElement('div');
 		body.className = 'ai-chat-bubble-body';
-		const content = (text || '').trim();
+		let content = (text || '').trim();
 		if (!content){
 			bubble.appendChild(title);
 			return;
 		}
-		renderMarkdownBody(body, content);
+
+		// Look for specially tagged generated course rationale block
+		let insertBlockText = '';
+		const tagStart = '[GENERATED_COURSE_RATIONALE]';
+		const tagEnd = '[/GENERATED_COURSE_RATIONALE]';
+		const startIdx = content.indexOf(tagStart);
+		const endIdx = content.indexOf(tagEnd);
+		if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx){
+			const inner = content.slice(startIdx + tagStart.length, endIdx).trim();
+			insertBlockText = inner;
+			// Remove the tagged block from the rest of the content
+			content = (content.slice(0, startIdx) + content.slice(endIdx + tagEnd.length)).trim();
+		}
+
+		if (content){
+			renderMarkdownBlocks(body, content);
+		}
+
+		if (insertBlockText){
+			renderCourseRationaleCard(body, insertBlockText);
+		}
 		bubble.appendChild(title);
 		bubble.appendChild(body);
-	}
-
-	function getOrCreateCourseRationaleContainer(){
-		const messages = $('aiChatMessages');
-		if (!messages) return null;
-		let container = messages.querySelector('.ai-course-rationale-container');
-		if (!container){
-			container = document.createElement('div');
-			container.className = 'ai-course-rationale-container';
-			messages.appendChild(container);
-		}
-		return container;
-	}
-
-	function extractCourseDescriptionFromMarkdown(markdown){
-		// For course rationale we now expect a plain-text narrative,
-		// so just return the trimmed string.
-		return String(markdown || '').trim();
-	}
-
-	function renderCourseRationaleCard(markdown){
-		const container = getOrCreateCourseRationaleContainer();
-		if (!container) return;
-		container.innerHTML = '';
-
-		const card = document.createElement('div');
-		card.className = 'ai-course-rationale-card';
-		card.dataset.markdown = markdown || '';
-
-		const header = document.createElement('div');
-		header.className = 'ai-card-header';
-		const title = document.createElement('div');
-		title.className = 'ai-card-title';
-		title.textContent = 'Course Rationale and Description (AI Draft)';
-		header.appendChild(title);
-		const btnWrap = document.createElement('div');
-		btnWrap.className = 'ai-card-button-wrapper';
-		const insertBtn = document.createElement('button');
-		insertBtn.type = 'button';
-		insertBtn.className = 'ai-card-insert-btn';
-		insertBtn.textContent = 'Insert into syllabus';
-		btnWrap.appendChild(insertBtn);
-		header.appendChild(btnWrap);
-		card.appendChild(header);
-
-		const body = document.createElement('div');
-		body.className = 'ai-card-body';
-		// Show the draft as simple text (no special table rendering)
-		const p = document.createElement('p');
-		p.className = 'ai-card-text';
-		renderInlineMarkdown(p, markdown || '');
-		body.appendChild(p);
-		card.appendChild(body);
-
-		insertBtn.addEventListener('click', function(){
-			const raw = card.dataset.markdown || '';
-			const text = extractCourseDescriptionFromMarkdown(raw).trim();
-			if (!text) return;
-			const field = document.querySelector('[name="course_description"]');
-			if (!field) return;
-			if (typeof field.value !== 'undefined') {
-				field.value = text;
-			} else {
-				field.textContent = text;
-			}
-			try {
-				field.dispatchEvent(new Event('input', { bubbles:true }));
-			} catch(e){}
-		});
-
-		container.appendChild(card);
 	}
 
 	function appendMessage(role, text, opts){
@@ -482,8 +426,9 @@
 				console.warn('[AI] SVAI.send not available');
 				return;
 			}
-			const baseText = (input && input.value || '').trim();
-			const message = (overrideMessage || baseText).trim();
+			const message = (overrideMessage != null)
+				? String(overrideMessage || '').trim()
+				: (input && input.value || '').trim();
 			if (!message) return;
 
 			const history = getHistory();
@@ -494,14 +439,7 @@
 
 			try {
 				const reply = await window.SVAI.send(message, history, partialKey || '');
-				if (partialKey === 'course-rationale') {
-					// For generate: do not show the full reply in the
-					// normal AI bubble, only in the unique card.
-					updateLoadingMessage(loadingMsg, 'Draft generated below.');
-					renderCourseRationaleCard(reply);
-				} else {
-					updateLoadingMessage(loadingMsg, reply);
-				}
+				updateLoadingMessage(loadingMsg, reply);
 			} catch (err) {
 				console.error('[AI] Error', err);
 				updateLoadingMessage(loadingMsg, 'I had trouble answering this right now. Please check your internet connection and try again in a moment.');
@@ -513,33 +451,37 @@
 		if (form) {
 			form.addEventListener('submit', function(e){
 				e.preventDefault();
-				handleSend('', '');
+				handleSend('');
 			});
 		} else if (input) {
 			input.addEventListener('keydown', function(e){
 				if (e.key === 'Enter' && !e.shiftKey) {
 					e.preventDefault();
-					handleSend('', '');
+					handleSend('');
 				}
 			});
 		}
 		if (sendBtn) {
-			sendBtn.addEventListener('click', function(){ handleSend('', ''); });
+			sendBtn.addEventListener('click', function(){ handleSend(''); });
 		}
 
-		// Course Rationale and Description generate chip
-		const courseRationaleChip = document.getElementById('aiChipCourseRationale');
-		if (courseRationaleChip) {
-			courseRationaleChip.addEventListener('click', function(){
+		// Generate / Map chips
+		const chipContainers = panel.querySelectorAll('.ai-chat-section-body');
+		chipContainers.forEach(function(container){
+			container.addEventListener('click', function(e){
+				const chip = e.target.closest('.ai-chip');
+				if (!chip) return;
+				const action = chip.getAttribute('data-ai-action') || '';
+				if (!action) return;
 				openPanel();
-				const partialKey = this.getAttribute('data-partial-key') || 'course-rationale';
-				const basePrompt = 'Generate a high-quality Course Rationale and Description for this syllabus, as a single narrative suitable for the Course Rationale and Description field.';
-				const input = $('aiChatInput');
-				const userHint = input && input.value ? input.value.trim() : '';
-				const msg = userHint ? (basePrompt + ' ' + userHint) : basePrompt;
-				handleSend(partialKey, msg);
+				if (action === 'generate-course-rationale') {
+					const msg = 'Generate a concise Course Rationale and Description for this course based on the current syllabus context.';
+					handleSend('course-rationale', msg);
+				} else {
+					// Other actions can be wired later; for now do nothing
+				}
 			});
-		}
+		});
 
 		// Keyboard shortcut: Alt+Shift+A to toggle panel
 		document.addEventListener('keydown', function(e){

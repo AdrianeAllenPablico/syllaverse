@@ -39,10 +39,10 @@
           <i class="bi bi-chevron-left"></i>
         </button>
         <div class="ai-chat-section-body">
-          <button type="button" class="ai-chip" id="aiChipCourseRationale" data-partial-key="course-rationale">Course Rationale and Description</button>
-          <button type="button" class="ai-chip">Teaching, Learning, and Assessment Strategies</button>
-          <button type="button" class="ai-chip">ILO</button>
-          <button type="button" class="ai-chip">Teaching, Learning, and Assessment (TLA) Activities</button>
+          <button type="button" class="ai-chip" data-ai-action="generate-course-rationale">Course Rationale and Description</button>
+          <button type="button" class="ai-chip" data-ai-action="generate-tlas">Teaching, Learning, and Assessment Strategies</button>
+          <button type="button" class="ai-chip" data-ai-action="generate-ilo">ILO</button>
+          <button type="button" class="ai-chip" data-ai-action="generate-tla-activities">Teaching, Learning, and Assessment (TLA) Activities</button>
         </div>
         <button type="button" class="ai-section-nav ai-section-nav-next" aria-label="Scroll right">
           <i class="bi bi-chevron-right"></i>
@@ -56,10 +56,10 @@
           <i class="bi bi-chevron-left"></i>
         </button>
         <div class="ai-chat-section-body">
-          <button type="button" class="ai-chip">Assessment Schedule</button>
-          <button type="button" class="ai-chip">ILO-SO-CPA</button>
-          <button type="button" class="ai-chip">ILO-IGA</button>
-          <button type="button" class="ai-chip">ILO-CDIO-SDG</button>
+          <button type="button" class="ai-chip" data-ai-action="map-assessment-schedule">Assessment Schedule</button>
+          <button type="button" class="ai-chip" data-ai-action="map-ilo-so-cpa">ILO-SO-CPA</button>
+          <button type="button" class="ai-chip" data-ai-action="map-ilo-iga">ILO-IGA</button>
+          <button type="button" class="ai-chip" data-ai-action="map-ilo-cdio-sdg">ILO-CDIO-SDG</button>
         </div>
         <button type="button" class="ai-section-nav ai-section-nav-next" aria-label="Scroll right">
           <i class="bi bi-chevron-right"></i>
