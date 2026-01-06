@@ -325,7 +325,8 @@
   color: #111827;
   border: 1px solid #e5e7eb;
   border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  border-left: 3px solid #dc2626;
 }
 
 /* AI Message Formatting */
@@ -368,6 +369,64 @@
   background: transparent;
   color: inherit;
   padding: 0;
+}
+
+.ai-chat-bubble-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ca3af;
+  margin-bottom: 0.25rem;
+}
+
+.ai-chat-bubble-body {
+  font-size: 0.9rem;
+  color: #111827;
+}
+
+.ai-chat-bubble-body p {
+  margin: 0 0 0.45rem 0;
+}
+
+.ai-chat-bubble-body p:last-child {
+  margin-bottom: 0;
+}
+
+.ai-chat-bubble-body ul,
+.ai-chat-bubble-body ol {
+  margin: 0.25rem 0 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.ai-chat-bubble-body li {
+  margin: 0.15rem 0;
+}
+
+.ai-chat-heading {
+  font-weight: 600;
+  margin: 0.35rem 0 0.2rem 0;
+  color: #111827;
+}
+
+.ai-chat-heading-1 {
+  font-size: 1rem;
+}
+
+.ai-chat-heading-2 {
+  font-size: 0.95rem;
+}
+
+.ai-chat-heading-3 {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7280;
+}
+
+.ai-chat-divider {
+  border-top: 1px dashed #e5e7eb;
+  margin: 0.5rem 0 0.75rem 0;
 }
 
 /* AI Tables */
@@ -538,17 +597,17 @@
 .ai-chat-input-wrap {
   border-top: 1px solid #e5e7eb;
   background: #ffffff;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem;
 }
 
 .ai-chat-input-container {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.75rem;
   background: #f9fafb;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 0.625rem 0.75rem;
+  padding: 0.45rem 0.6rem;
   transition: all 0.2s ease;
 }
 
@@ -564,10 +623,10 @@
   outline: none;
   background: transparent;
   resize: none;
-  font-size: 0.9375rem;
-  line-height: 1.5;
+  font-size: 0.875rem;
+  line-height: 1.4;
   max-height: 120px;
-  padding: 0.25rem 0;
+  padding: 0.15rem 0;
   color: #111827;
   font-family: inherit;
 }
@@ -577,9 +636,9 @@
 }
 
 .ai-chat-send-btn {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
   border-radius: 8px;
   border: none;
   background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);

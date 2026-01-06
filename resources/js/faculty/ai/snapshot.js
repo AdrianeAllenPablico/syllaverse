@@ -20,6 +20,155 @@
     return String(val).replace(/\n/g, ' \\n ').trim();
   }
 
+  // ---------- Lightweight Markdown Renderer (for snapshot modal) ----------
+  function mdSplitBlocks(text){
+    return String(text || '').split(/\n{2,}/).map(function(b){ return b.trim(); }).filter(Boolean);
+  }
+
+  function mdIsTableBlock(block){
+    const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    if (lines.length < 2) return false;
+    if (lines[0].indexOf('|') === -1) return false;
+    const divider = lines[1];
+    return /^\|?\s*:?-{3,}/.test(divider);
+  }
+
+  function mdRenderTable(parent, block){
+    const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    if (lines.length < 2) return;
+    const headerLine = lines[0];
+    const bodyLines = lines.slice(2);
+    function splitRow(line){
+      var s = line.trim();
+      if (s.charAt(0) === '|') s = s.slice(1);
+      if (s.charAt(s.length - 1) === '|') s = s.slice(0, -1);
+      return s.split('|').map(function(c){ return c.trim(); });
+    }
+    const headers = splitRow(headerLine);
+    if (!headers.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-chat-table-wrap';
+    const table = document.createElement('table');
+    table.className = 'ai-chat-table';
+    const thead = document.createElement('thead');
+    const htr = document.createElement('tr');
+    headers.forEach(function(h){
+      const th = document.createElement('th');
+      th.textContent = h;
+      htr.appendChild(th);
+    });
+    thead.appendChild(htr);
+    table.appendChild(thead);
+    if (bodyLines.length){
+      const tbody = document.createElement('tbody');
+      bodyLines.forEach(function(line){
+        if (line.indexOf('|') === -1) return;
+        const cells = splitRow(line);
+        if (!cells.length) return;
+        const tr = document.createElement('tr');
+        cells.forEach(function(c){
+          const td = document.createElement('td');
+          td.textContent = c;
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+    }
+    wrap.appendChild(table);
+    parent.appendChild(wrap);
+  }
+
+  function mdIsListBlock(block){
+    const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    if (!lines.length) return false;
+    return lines.every(function(line){
+      return /^[-*\u2022]\s+/.test(line) || /^\d+\.\s+/.test(line);
+    });
+  }
+
+  function mdRenderList(parent, block){
+    const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    if (!lines.length) return;
+    const isOrdered = lines.every(function(line){ return /^\d+\.\s+/.test(line); });
+    const list = document.createElement(isOrdered ? 'ol' : 'ul');
+    lines.forEach(function(line){
+      var text = line.replace(/^[-*\u2022]\s+/, '').replace(/^\d+\.\s+/, '').trim();
+      if (!text) return;
+      const li = document.createElement('li');
+      mdRenderInline(li, text);
+      list.appendChild(li);
+    });
+    parent.appendChild(list);
+  }
+
+  function mdIsHeadingBlock(block){
+    return /^#{1,3}\s+/.test(String(block || '').trim());
+  }
+
+  function mdRenderHeading(parent, block){
+    const match = String(block || '').trim().match(/^(#{1,3})\s+(.+)$/);
+    if (!match) return;
+    const level = match[1].length;
+    const text = match[2].trim();
+    const h = document.createElement('div');
+    h.className = 'ai-chat-heading ai-chat-heading-' + level;
+    mdRenderInline(h, text);
+    parent.appendChild(h);
+  }
+
+  function mdRenderInline(parent, text){
+    const src = String(text || '');
+    if (!src) return;
+    const re = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+    let lastIndex = 0;
+    let match;
+    while ((match = re.exec(src))){
+      if (match.index > lastIndex){
+        parent.appendChild(document.createTextNode(src.slice(lastIndex, match.index)));
+      }
+      const token = match[0];
+      if (token.indexOf('**') === 0){
+        const strong = document.createElement('strong');
+        strong.textContent = token.slice(2, -2);
+        parent.appendChild(strong);
+      } else if (token.charAt(0) === '`'){
+        const code = document.createElement('code');
+        code.textContent = token.slice(1, -1);
+        parent.appendChild(code);
+      } else if (token.charAt(0) === '*'){
+        const em = document.createElement('em');
+        em.textContent = token.slice(1, -1);
+        parent.appendChild(em);
+      }
+      lastIndex = re.lastIndex;
+    }
+    if (lastIndex < src.length){
+      parent.appendChild(document.createTextNode(src.slice(lastIndex)));
+    }
+  }
+
+  function mdRenderMarkdown(parent, markdown){
+    parent.innerHTML = '';
+    const blocks = mdSplitBlocks(markdown || '');
+    if (!blocks.length){
+      return;
+    }
+    blocks.forEach(function(block){
+      if (mdIsTableBlock(block)){
+        mdRenderTable(parent, block);
+      } else if (mdIsListBlock(block)){
+        mdRenderList(parent, block);
+      } else if (mdIsHeadingBlock(block)){
+        mdRenderHeading(parent, block);
+      } else {
+        const p = document.createElement('p');
+        mdRenderInline(p, block);
+        parent.appendChild(p);
+      }
+    });
+  }
+
   // ---------- Course Policies Snapshot ----------
   function snapshotCoursePolicies(){
     const root = document.querySelector('.sv-partial[data-partial-key="course-policies"]')
@@ -1246,11 +1395,10 @@
       h.style.cssText = 'font-weight:600;color:#111827;';
       head.appendChild(h);
       const content = document.createElement('div');
-      content.style.cssText = 'padding:12px;';
-      const pre = document.createElement('pre');
-      pre.style.cssText = 'white-space:pre-wrap;word-wrap:break-word;font-size:12px;line-height:1.45;margin:0;';
-      pre.textContent = s.markdown || '';
-      content.appendChild(pre);
+      content.style.cssText = 'padding:12px;font-size:12px;line-height:1.5;';
+      const inner = document.createElement('div');
+      mdRenderMarkdown(inner, s.markdown || '');
+      content.appendChild(inner);
       card.appendChild(head);
       card.appendChild(content);
       body.appendChild(card);

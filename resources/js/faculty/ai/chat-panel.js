@@ -1,1282 +1,475 @@
-/**
+/*
  * File: resources/js/faculty/ai/chat-panel.js
- * Description: AI Chat Panel - modern slide-in interface with message handling
+ * Description: UI logic for the AI chat FAB + slide-in panel on the syllabus page.
+ * Depends on:
+ *   - window.SVAI (from ai.js)
+ *   - window.SVPrompts (from prompts.js)
  */
-
-(function() {
-  'use strict';
-
-  // State
-  let isOpen = false;
-  const conversationHistory = [];
-
-  // DOM Elements
-  let fab, panel, backdrop, closeBtn, messagesContainer, input, sendBtn;
-
-  /**
-   * Initialize the chat panel
-   */
-  function init() {
-    // Get DOM references
-    fab = document.getElementById('aiChatFab');
-    panel = document.getElementById('aiChatPanel');
-    backdrop = document.getElementById('aiChatBackdrop');
-    closeBtn = document.getElementById('aiChatClose');
-    messagesContainer = document.getElementById('aiChatMessages');
-    input = document.getElementById('aiChatInput');
-    sendBtn = document.getElementById('aiChatSend');
-
-    if (!fab || !panel) {
-      console.warn('[AI Chat] Required elements not found');
-      return;
-    }
-
-    // Attach event listeners
-    fab.addEventListener('click', openPanel);
-    closeBtn?.addEventListener('click', closePanel);
-    backdrop?.addEventListener('click', closePanel);
-    sendBtn?.addEventListener('click', handleSend);
-    
-    input?.addEventListener('input', handleInputResize);
-    input?.addEventListener('keydown', handleKeyDown);
-
-    // Action panel buttons
-    initActionButtons();
-
-    // Draggable and resizable
-    initDragAndResize();
-
-    // Initial resize
-    if (input) handleInputResize();
-
-    console.log('[AI Chat] Initialized');
-  }
-
-  /**
-   * Initialize drag and resize functionality
-   */
-  function initDragAndResize() {
-    const dragHandle = document.getElementById('aiChatDragHandle');
-    const resizeHandle = document.getElementById('aiChatResizeHandle');
-    
-    let isDragging = false;
-    let isResizing = false;
-    let startX, startY, startWidth, startRight;
-
-    // Dragging
-    if (dragHandle) {
-      dragHandle.addEventListener('mousedown', (e) => {
-        // Prevent drag if clicking on buttons
-        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
-          return;
-        }
-
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        
-        panel.classList.add('dragging');
-        dragHandle.classList.add('dragging');
-      });
-    }
-
-    // Resizing
-    if (resizeHandle) {
-      resizeHandle.addEventListener('mousedown', (e) => {
-        isResizing = true;
-        startX = e.clientX;
-        startWidth = panel.offsetWidth;
-        startRight = parseInt(getComputedStyle(panel).right) || 0;
-        
-        resizeHandle.classList.add('resizing');
-      });
-    }
-
-    // Mouse move for drag and resize
-    document.addEventListener('mousemove', (e) => {
-      if (isDragging && panel.classList.contains('open')) {
-        const deltaX = e.clientX - startX;
-        const deltaY = e.clientY - startY;
-        
-        const currentTop = parseInt(getComputedStyle(panel).top) || 0;
-        const currentLeft = parseInt(getComputedStyle(panel).left) || 0;
-        
-        // Update position
-        panel.style.top = (currentTop + deltaY) + 'px';
-        panel.style.left = (currentLeft + deltaX) + 'px';
-        panel.style.right = 'auto';
-        panel.style.transform = 'none';
-        
-        startX = e.clientX;
-        startY = e.clientY;
-      }
-      
-      if (isResizing && panel.classList.contains('open')) {
-        const deltaX = e.clientX - startX;
-        const newWidth = Math.max(300, Math.min(startWidth - deltaX, window.innerWidth - 50));
-        
-        panel.style.width = newWidth + 'px';
-      }
-    });
-
-    // Mouse up to stop drag/resize
-    document.addEventListener('mouseup', () => {
-      if (isDragging) {
-        isDragging = false;
-        panel.classList.remove('dragging');
-        dragHandle?.classList.remove('dragging');
-      }
-      
-      if (isResizing) {
-        isResizing = false;
-        resizeHandle?.classList.remove('resizing');
-      }
-    });
-
-    // Prevent text selection during drag
-    document.addEventListener('selectstart', (e) => {
-      if (isDragging || isResizing) {
-        e.preventDefault();
-      }
-    });
-  }
-
-  /**
-   * Initialize action panel buttons
-   */
-  function initActionButtons() {
-    const actionButtons = document.querySelectorAll('.ai-chip');
-    
-    actionButtons.forEach(btn => {
-      btn.addEventListener('click', function() {
-        const buttonText = this.textContent.trim();
-        
-        // Special handling for Assessment Schedule - use dedicated mapping module
-        if (buttonText === 'Assessment Schedule') {
-          if (!isOpen) {
-            openPanel();
-          }
-          
-          // Check if assessment schedule mapping module is loaded
-          if (window.SVAssessmentSchedule && typeof window.SVAssessmentSchedule.generate === 'function') {
-            // Call the assessment schedule mapping module (no user message shown)
-            window.SVAssessmentSchedule.generate().then(success => {
-              if (success) {
-                // Done message will be added by the module
-              }
-            });
-          } else {
-            appendMessage('ai', 'Assessment Schedule module is not loaded. Please reload the page.');
-          }
-          return;
-        }
-
-        // Special handling for ILO-SO-CPA Mapping - use dedicated mapping module
-        if (buttonText === 'ILO-SO-CPA') {
-          if (!isOpen) {
-            openPanel();
-          }
-          
-          // Check if ILO-SO-CPA mapping module is loaded
-          if (window.SVILOSOCPAMapping && typeof window.SVILOSOCPAMapping.generate === 'function') {
-            // Call the ILO-SO-CPA mapping module (no user message shown)
-            window.SVILOSOCPAMapping.generate().then(success => {
-              if (success) {
-                // Done message will be added by the module
-              }
-            });
-          } else {
-            appendMessage('ai', 'ILO-SO-CPA Mapping module is not loaded. Please reload the page.');
-          }
-          return;
-        }
-
-        // Special handling for ILO-IGA Mapping - use dedicated mapping module
-        if (buttonText === 'ILO-IGA') {
-          if (!isOpen) {
-            openPanel();
-          }
-          
-          // Check if ILO-IGA mapping module is loaded
-          if (window.SVILOIGAMapping && typeof window.SVILOIGAMapping.generate === 'function') {
-            // Call the ILO-IGA mapping module (no user message shown)
-            window.SVILOIGAMapping.generate().then(success => {
-              if (success) {
-                // Done message will be added by the module
-              }
-            });
-          } else {
-            appendMessage('ai', 'ILO-IGA Mapping module is not loaded. Please reload the page.');
-          }
-          return;
-        }
-
-        // Special handling for ILO-CDIO-SDG Mapping - use dedicated mapping module
-        if (buttonText === 'ILO-CDIO-SDG') {
-          if (!isOpen) {
-            openPanel();
-          }
-          
-          // Check if ILO-CDIO-SDG mapping module is loaded
-          if (window.SVILOCDIOSDGMapping && typeof window.SVILOCDIOSDGMapping.generate === 'function') {
-            // Call the ILO-CDIO-SDG mapping module (no user message shown)
-            window.SVILOCDIOSDGMapping.generate().then(success => {
-              if (success) {
-                // Done message will be added by the module
-              }
-            });
-          } else {
-            appendMessage('ai', 'ILO-CDIO-SDG Mapping module is not loaded. Please reload the page.');
-          }
-          return;
-        }
-        
-        // Open panel if not already open
-        if (!isOpen) {
-          openPanel();
-        }
-        
-        // Map button text to prompts
-        let message = '';
-        switch(buttonText) {
-          case 'Course Rationale and Description':
-            message = 'Generate a comprehensive course rationale and description';
-            break;
-          case 'Teaching, Learning, and Assessment Strategies':
-            message = 'Generate teaching, learning, and assessment strategies';
-            break;
-          case 'ILO':
-            message = 'Generate intended learning outcomes';
-            break;
-          case 'Teaching, Learning, and Assessment (TLA) Activities':
-            message = 'Generate teaching, learning, and assessment activities';
-            break;
-          case 'ILO-SO-CPA':
-            message = 'Create ILO-SO-CPA mapping';
-            break;
-          case 'ILO-IGA':
-            message = 'Create ILO-IGA mapping';
-            break;
-          case 'ILO-CDIO-SDG':
-            message = 'Create ILO-CDIO-SDG mapping';
-            break;
-          default:
-            message = buttonText;
-        }
-        
-        // Send message
-        if (message && input) {
-          input.value = message;
-          handleSend();
-        }
-      });
-    });
-  }
-
-  /**
-   * Open the chat panel
-   */
-  function openPanel() {
-    if (isOpen) return;
-    
-    isOpen = true;
-    panel.classList.add('open');
-    backdrop.classList.add('show');
-    panel.setAttribute('aria-hidden', 'false');
-    
-    // Reset to default position if not already positioned
-    if (!panel.style.left && !panel.style.top) {
-      panel.style.right = '0';
-      panel.style.top = '0';
-    }
-    
-    // Focus input
-    setTimeout(() => input?.focus(), 300);
-    
-    // Scroll to bottom
-    scrollToBottom();
-  }
-
-  /**
-   * Close the chat panel
-   */
-  function closePanel() {
-    if (!isOpen) return;
-    
-    isOpen = false;
-    panel.classList.remove('open');
-    backdrop.classList.remove('show');
-    panel.setAttribute('aria-hidden', 'true');
-  }
-
-  /**
-   * Handle keyboard shortcuts
-   */
-  function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    } else if (e.key === 'Escape') {
-      closePanel();
-    }
-  }
-
-  /**
-   * Auto-resize textarea as user types
-   */
-  function handleInputResize() {
-    if (!input) return;
-    
-    input.style.height = 'auto';
-    const newHeight = Math.min(input.scrollHeight, 120);
-    input.style.height = newHeight + 'px';
-  }
-
-  /**
-   * Handle send button click
-   */
-  async function handleSend() {
-    if (!input || !messagesContainer) return;
-    
-    const message = input.value.trim();
-    if (!message) return;
-
-    // Add user message to UI
-    appendMessage('user', message);
-    
-    // Clear input
-    input.value = '';
-    handleInputResize();
-
-    // Disable send button during processing
-    if (sendBtn) {
-      sendBtn.disabled = true;
-    }
-
-    // Add loading indicator
-    const loadingMsg = appendMessage('ai', 'Thinking...', true);
-
-    try {
-      // Send via core AI module
-      const response = await (window.SVAI ? window.SVAI.send(message, conversationHistory) : Promise.reject(new Error('SVAI not loaded')));
-      
-      // Remove loading
-      if (loadingMsg) loadingMsg.remove();
-      
-      // Add AI response
-      appendMessage('ai', response);
-      
-    } catch (error) {
-      console.error('[AI Chat] Error:', error);
-      
-      // Remove loading
-      if (loadingMsg) loadingMsg.remove();
-      
-      // Show error message
-      appendMessage('ai', 'Sorry, I encountered an error. Please try again.');
-    } finally {
-      // Re-enable send button
-      if (sendBtn) {
-        sendBtn.disabled = false;
-      }
-      
-      // Refocus input
-      input?.focus();
-    }
-  }
-
-  /**
-   * Append message to chat
-   */
-  function appendMessage(role, text, isLoading = false) {
-    if (!messagesContainer) return null;
-
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `ai-chat-msg ${role}${isLoading ? ' loading' : ''}`;
-    
-    const bubbleDiv = document.createElement('div');
-    bubbleDiv.className = 'ai-chat-bubble';
-    
-    if (role === 'ai' && !isLoading) {
-      // Assessment Tasks: render plainly (no card), before other table handlers
-      if (isAssessmentTasksResponse(text)) {
-        bubbleDiv.innerHTML = formatAIResponse(text);
-
-      // Check for TLA Activities first (tables can otherwise be misclassified)
-      } else if (isTlaActivitiesResponse(text)) {
-        const tlaTable = extractIloTable(text); // Reuse same table extraction
-
-        // Extract intro by removing the markdown table from the text
-        let introText = text;
-        if (tlaTable) {
-          // Remove markdown table pattern from text (lines with |)
-          const lines = text.split('\n');
-          const nonTableLines = [];
-          let inTable = false;
-
-          for (const line of lines) {
-            if (line.trim().startsWith('|')) {
-              inTable = true;
-            } else if (inTable && line.trim() === '') {
-              inTable = false;
-            } else if (!inTable) {
-              nonTableLines.push(line);
-            }
-          }
-
-          introText = nonTableLines.join('\n').trim();
-        }
-
-        if (introText) {
-          bubbleDiv.innerHTML = formatAIResponse(introText);
-        }
-
-        // Add a special card for TLA Activities with insert button
-        if (tlaTable) {
-          const containerDiv = document.createElement('div');
-          containerDiv.className = 'ai-tla-activities-container';
-
-          const cardDiv = document.createElement('div');
-          cardDiv.className = 'ai-tla-activities-card';
-          cardDiv.innerHTML = `
-            <div class="ai-card-header">
-              <span class="ai-card-title">Teaching, Learning, and Assessment (TLA) Activities</span>
-            </div>
-            <div class="ai-card-body">
-              ${tlaTable}
-            </div>
-          `;
-
-          const buttonDiv = document.createElement('div');
-          buttonDiv.className = 'ai-card-button-wrapper';
-          buttonDiv.innerHTML = `
-            <button type="button" class="ai-card-insert-btn" title="Insert into syllabus" aria-label="Insert TLA Activities">
-              <i class="bi bi-download me-2"></i>
-              Insert into Syllabus
-            </button>
-          `;
-
-          // Add click handler for insert button
-          const insertBtn = buttonDiv.querySelector('.ai-card-insert-btn');
-          insertBtn.addEventListener('click', () => {
-            insertTlaActivities(tlaTable);
-          });
-
-          containerDiv.appendChild(cardDiv);
-          containerDiv.appendChild(buttonDiv);
-          bubbleDiv.appendChild(containerDiv);
-        }
-      // Check if this is a TLAS response
-      } else if (isTlasResponse(text)) {
-        const tlas = extractTlasContent(text);
-        
-        // Extract only the conversational intro (everything before the TLAS)
-        const introText = extractConversationalIntro(text, tlas);
-        if (introText) {
-          bubbleDiv.innerHTML = formatAIResponse(introText);
-        }
-        
-        // Add a special card for TLAS with insert button
-        if (tlas) {
-          const containerDiv = document.createElement('div');
-          containerDiv.className = 'ai-tlas-container';
-          
-          const cardDiv = document.createElement('div');
-          cardDiv.className = 'ai-tlas-card';
-          cardDiv.innerHTML = `
-            <div class="ai-card-header">
-              <span class="ai-card-title">Teaching, Learning & Assessment Strategies</span>
-            </div>
-            <div class="ai-card-body">
-              ${tlas.split('\n\n').map(para => `<p>${escapeHtml(para)}</p>`).join('')}
-            </div>
-          `;
-          
-          const buttonDiv = document.createElement('div');
-          buttonDiv.className = 'ai-card-button-wrapper';
-          buttonDiv.innerHTML = `
-            <button type="button" class="ai-card-insert-btn" title="Insert into syllabus" aria-label="Insert TLAS">
-              <i class="bi bi-download me-2"></i>
-              Insert into Syllabus
-            </button>
-          `;
-          
-          // Add click handler for insert button
-          const insertBtn = buttonDiv.querySelector('.ai-card-insert-btn');
-          insertBtn.addEventListener('click', () => {
-            insertTlas(tlas);
-          });
-          
-          containerDiv.appendChild(cardDiv);
-          containerDiv.appendChild(buttonDiv);
-          bubbleDiv.appendChild(containerDiv);
-        }
-      } else if (isIloResponse(text)) {
-        const iloTable = extractIloTable(text);
-        
-        // Extract intro by removing the markdown table from the text
-        let introText = text;
-        if (iloTable) {
-          // Remove markdown table pattern from text (lines with |)
-          const lines = text.split('\n');
-          const nonTableLines = [];
-          let inTable = false;
-          
-          for (const line of lines) {
-            if (line.trim().startsWith('|')) {
-              inTable = true;
-            } else if (inTable && line.trim() === '') {
-              inTable = false;
-            } else if (!inTable) {
-              nonTableLines.push(line);
-            }
-          }
-          
-          introText = nonTableLines.join('\n').trim();
-        }
-        
-        if (introText) {
-          bubbleDiv.innerHTML = formatAIResponse(introText);
-        }
-        
-        // Add a special card for ILOs with insert button
-        if (iloTable) {
-          const containerDiv = document.createElement('div');
-          containerDiv.className = 'ai-ilo-container';
-          
-          const cardDiv = document.createElement('div');
-          cardDiv.className = 'ai-ilo-card';
-          cardDiv.innerHTML = `
-            <div class="ai-card-header">
-              <span class="ai-card-title">Intended Learning Outcomes (ILOs)</span>
-            </div>
-            <div class="ai-card-body">
-              ${iloTable}
-            </div>
-          `;
-          
-          const buttonDiv = document.createElement('div');
-          buttonDiv.className = 'ai-card-button-wrapper';
-          buttonDiv.innerHTML = `
-            <button type="button" class="ai-card-insert-btn" title="Insert into syllabus" aria-label="Insert ILOs">
-              <i class="bi bi-download me-2"></i>
-              Insert into Syllabus
-            </button>
-          `;
-          
-          // Add click handler for insert button
-          const insertBtn = buttonDiv.querySelector('.ai-card-insert-btn');
-          insertBtn.addEventListener('click', () => {
-            insertIlos(iloTable);
-          });
-          
-          containerDiv.appendChild(cardDiv);
-          containerDiv.appendChild(buttonDiv);
-          bubbleDiv.appendChild(containerDiv);
-        }
-      } else if (isCourseRationalResponse(text)) {
-        const rationale = extractCourseRational(text);
-        
-        // Extract only the conversational intro (everything before the rationale)
-        const introText = extractConversationalIntro(text, rationale);
-        if (introText) {
-          bubbleDiv.innerHTML = formatAIResponse(introText);
-        }
-        
-        // Add a special card for the course rationale with insert button
-        if (rationale) {
-          const containerDiv = document.createElement('div');
-          containerDiv.className = 'ai-course-rationale-container';
-          
-          const cardDiv = document.createElement('div');
-          cardDiv.className = 'ai-course-rationale-card';
-          cardDiv.innerHTML = `
-            <div class="ai-card-header">
-              <span class="ai-card-title">Course Rationale</span>
-            </div>
-            <div class="ai-card-body">
-              <p>${escapeHtml(rationale)}</p>
-            </div>
-          `;
-          
-          const buttonDiv = document.createElement('div');
-          buttonDiv.className = 'ai-card-button-wrapper';
-          buttonDiv.innerHTML = `
-            <button type="button" class="ai-card-insert-btn" title="Insert into syllabus" aria-label="Insert course rationale">
-              <i class="bi bi-download me-2"></i>
-              Insert into Syllabus
-            </button>
-          `;
-          
-          // Add click handler for insert button
-          const insertBtn = buttonDiv.querySelector('.ai-card-insert-btn');
-          insertBtn.addEventListener('click', () => {
-            insertCourseRationale(rationale);
-          });
-          
-          containerDiv.appendChild(cardDiv);
-          containerDiv.appendChild(buttonDiv);
-          bubbleDiv.appendChild(containerDiv);
-        }
-      } else {
-        // Format AI response (support basic markdown-like formatting)
-        bubbleDiv.innerHTML = formatAIResponse(text);
-      }
-    } else {
-      bubbleDiv.textContent = text;
-    }
-    
-    msgDiv.appendChild(bubbleDiv);
-    messagesContainer.appendChild(msgDiv);
-    
-    // Save to history (skip loading messages)
-    if (!isLoading) {
-      conversationHistory.push({ role, text });
-    }
-    
-    // Scroll to bottom
-    scrollToBottom();
-    
-    return msgDiv;
-  }
-
-  /**
-   * Check if response is about TLA Activities (check FIRST before ILO)
-   */
- function isTlaActivitiesResponse(text) {
-    const lowerText = text.toLowerCase();
-   // Check for TLA-specific indicators
-   if (lowerText.includes('tla activities') || 
-       lowerText.includes('teaching, learning, and assessment activities')) {
-     return text.includes('|');
-   }
-   // Check for 7-column table structure with specific headers
-   if (text.includes('| Ch. |') && 
-       text.includes('| Topics / Reading List |') && 
-       text.includes('| Wks. |') && 
-       text.includes('| Topic Outcomes |') && 
-       text.includes('| Delivery Method |')) {
-     return true;
-   }
-   return false;
-  }
-
-  /**
-   * Check if response is about ILOs (check AFTER TLA Activities)
-   */
- function isIloResponse(text) {
-    const lowerText = text.toLowerCase();
-   // First check it's NOT a TLA Activities response
-   if (isTlaActivitiesResponse(text)) {
-     return false;
-   }
-   // Skip assessment tasks tables (rendered plainly)
-   if (isAssessmentTasksResponse(text)) {
-     return false;
-   }
-   // Then check for ILO-specific indicators
-   return (lowerText.includes('intended learning outcome') || 
-           (lowerText.includes('ilo') && !lowerText.includes('tla'))) &&
-          text.includes('|'); // Contains table markers
-  }
-
-  /**
-   * Check if response is about TLAS
-   */
-  function isTlasResponse(text) {
-    const lowerText = text.toLowerCase();
-      // Skip if it looks like a course rationale/description
-      if (isCourseRationalResponse(text)) return false;
-      // Avoid treating table-based TLA Activities as TLAS
-      if (isTlaActivitiesResponse(text)) return false;
-      // Avoid assessment tasks tables
-      if (isAssessmentTasksResponse(text)) return false;
-
-      const hasStrategyCue = lowerText.includes('strategy') || lowerText.includes('strategies') || lowerText.includes('approach');
-      const hasModalities = lowerText.includes('hybrid') || lowerText.includes('modality') || lowerText.includes('lecture') || lowerText.includes('laboratory') || lowerText.includes('online');
-      const hasAssessmentCue = lowerText.includes('assessment') || lowerText.includes('rubric') || lowerText.includes('exam');
-
-      return (lowerText.includes('teaching') || lowerText.includes('learning') || lowerText.includes('assessment strategies') || hasStrategyCue) &&
-        (hasAssessmentCue && hasModalities);
-  }
-
-  /**
-   * Check if response is about Assessment Tasks (table output)
-   */
-  function isAssessmentTasksResponse(text) {
-    const lowerText = text.toLowerCase();
-    const hasAssessmentTaskCue = lowerText.includes('assessment tasks') || lowerText.includes('assessment task') || lowerText.includes('assessment distribution');
-    const looksLikeTable = text.includes('|');
-    return hasAssessmentTaskCue && looksLikeTable;
-  }
-
-  /**
-   * Extract ILO table from response
-   */
-  function extractIloTable(text) {
-    // Look for markdown table pattern (lines starting with |)
-    const lines = text.split('\n');
-    let tableStart = -1;
-    let tableEnd = -1;
-    
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].trim().startsWith('|')) {
-        if (tableStart === -1) {
-          tableStart = i;
-        }
-        tableEnd = i;
-      }
-    }
-    
-    if (tableStart !== -1 && tableEnd !== -1) {
-      const tableLines = lines.slice(tableStart, tableEnd + 1);
-      const tableMarkdown = tableLines.join('\n');
-      
-      // Convert markdown table to HTML table
-      return convertTables(tableMarkdown);
-    }
-    
-    return null;
-  }
-
-  /**
-   * Convert markdown table to plain text for intro extraction
-   */
-  function convertTablesToText(htmlTable) {
-    // Simple conversion of HTML table back to text for extraction purposes
-    return htmlTable.replace(/<[^>]*>/g, '').substring(0, 50) + '...';
-  }
-
-  /**
-   * Extract TLAS content from response
-   */
-  function extractTlasContent(text) {
-    // Split into paragraphs
-    const allParagraphs = text.split('\n\n').map(p => p.trim()).filter(p => p.length > 0);
-    
-    if (allParagraphs.length === 0) return null;
-    
-    // Identify and skip the conversational intro
-    // Intro paragraphs typically are short or contain phrases like "Here are", "Here's", "I'll provide"
-    let startIndex = 0;
-    for (let i = 0; i < allParagraphs.length; i++) {
-      const para = allParagraphs[i].toLowerCase();
-      const isIntro = (
-        para.length < 200 || // Intro is usually shorter
-        para.includes('here are') ||
-        para.includes("here's") ||
-        para.includes("i'll provide") ||
-        para.includes("i've created") ||
-        para.includes("certainly") ||
-        para.includes("comprehensive set") ||
-        para.includes("tailored for")
-      );
-      
-      if (!isIntro) {
-        startIndex = i;
-        break;
-      }
-    }
-    
-    // Extract the remaining paragraphs (the actual TLAS content)
-    const tlasContent = allParagraphs.slice(startIndex);
-    
-    // Filter for substantial paragraphs (TLAS paragraphs are typically 300+ characters)
-    const substantialParagraphs = tlasContent.filter(p => p.length > 250);
-    
-    if (substantialParagraphs.length > 0) {
-      // Return the three main TLAS sections (Assessment Methods, Teaching and Learning, Assessment Instruments)
-      return substantialParagraphs.slice(0, 3).join('\n\n').trim();
-    }
-    
-    return null;
-  }
-
-  /**
-   * Check if response is about course rationale
-   */
-  function isCourseRationalResponse(text) {
-    const lowerText = text.toLowerCase();
-    return lowerText.includes('rationale') || lowerText.includes('description') || lowerText.includes('course overview');
-  }
-
-  /**
-   * Extract the course rationale paragraph from response
-   */
-  function extractCourseRational(text) {
-    // Look for a paragraph enclosed in quotes or a distinct paragraph
-    const quoteMatch = text.match(/["'"']([^"'"']{50,}?)["'"']/);
-    if (quoteMatch) {
-      return quoteMatch[1].trim();
-    }
-    
-    // Try to find the longest single paragraph
-    const paragraphs = text.split('\n\n').filter(p => p.trim().length > 50);
-    if (paragraphs.length > 0) {
-      // Return the last substantial paragraph (usually the description)
-      return paragraphs[paragraphs.length - 1].trim();
-    }
-    
-    return null;
-  }
-
-  /**
-   * Extract only the conversational intro, excluding the rationale
-   */
-  function extractConversationalIntro(text, rationale) {
-    if (!rationale) return text;
-    
-    // Find the rationale in the text and remove it
-    const index = text.indexOf(rationale);
-    if (index !== -1) {
-      // Get everything before the rationale
-      let intro = text.substring(0, index).trim();
-      
-      // Clean up trailing punctuation/quotes if any
-      intro = intro.replace(/["\''…—–-]+\s*$/, '').trim();
-      
-      return intro || null;
-    }
-    
-    return text;
-  }
-
-  /**
-   * Insert course rationale into the syllabus form
-   */
-  function insertCourseRationale(rationale) {
-    // Look for the course description textarea/input in the form
-    const courseDescInput = document.querySelector('textarea[name*="description"], textarea[data-partial-key="course_info"], input[name*="description"]');
-    
-    if (courseDescInput) {
-      courseDescInput.value = rationale;
-      courseDescInput.dispatchEvent(new Event('input', { bubbles: true }));
-      courseDescInput.dispatchEvent(new Event('change', { bubbles: true }));
-      
-      // Show success feedback
-      showInsertFeedback('Course rationale inserted successfully!');
-    } else {
-      showInsertFeedback('Could not find course description field. Please copy manually.', 'warning');
-    }
-  }
-
-  /**
-   * Insert TLAS into the syllabus form
-   */
-  function insertTlas(tlas) {
-    // Look for the TLAS textarea/input in the form
-    const tlasInput = document.querySelector('textarea[name*="tla"], textarea[data-partial-key="tlas"], input[name*="tla"]');
-    
-    if (tlasInput) {
-      tlasInput.value = tlas;
-      tlasInput.dispatchEvent(new Event('input', { bubbles: true }));
-      tlasInput.dispatchEvent(new Event('change', { bubbles: true }));
-      
-      // Show success feedback
-      showInsertFeedback('TLAS inserted successfully!');
-    } else {
-      showInsertFeedback('Could not find TLAS field. Please copy manually.', 'warning');
-    }
-  }
-
-  /**
-   * Insert ILOs into the syllabus form
-   */
-  function insertIlos(iloHtml) {
-    // Find the ILO sortable list
-    const iloList = document.getElementById('syllabus-ilo-sortable');
-    
-    if (!iloList) {
-      showInsertFeedback('Could not find ILO list in syllabus. Please copy manually.', 'warning');
-      return;
-    }
-
-    try {
-      // Parse the HTML table
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(iloHtml, 'text/html');
-      const table = doc.querySelector('table');
-      
-      if (!table) {
-        showInsertFeedback('Could not parse ILO table. Please copy manually.', 'warning');
-        return;
-      }
-
-      // Extract ILO rows from the table (skip header row)
-      const rows = Array.from(table.querySelectorAll('tbody tr'));
-      
-      if (rows.length === 0) {
-        showInsertFeedback('No ILO rows found in table. Please copy manually.', 'warning');
-        return;
-      }
-
-      // Clear existing ILO rows and placeholders
-      iloList.innerHTML = '';
-
-      // Create new rows from the generated ILOs
-      rows.forEach((row, index) => {
-        const cells = Array.from(row.querySelectorAll('td'));
-        if (cells.length < 2) return; // Skip malformed rows
-
-        // Extract ILO text from second cell
-        const iloText = cells[1].textContent.trim();
-        const iloCode = `ILO${index + 1}`;
-
-        // Create new row matching the partial's structure
-        const newRow = document.createElement('tr');
-        newRow.setAttribute('data-id', `new-${Date.now()}-${index}`);
-        newRow.innerHTML = `
-          <td class="text-center align-middle">
-            <div class="ilo-badge fw-semibold">${iloCode}</div>
-          </td>
-          <td>
-            <div class="d-flex align-items-center gap-2">
-              <textarea
-                name="ilos[]"
-                class="cis-textarea cis-field autosize flex-grow-1"
-                placeholder="Description"
-                rows="1"
-                style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;"
-                required>${iloText}</textarea>
-              <input type="hidden" name="code[]" value="${iloCode}">
-              <button type="button" class="btn btn-sm btn-outline-danger btn-delete-ilo ms-2" title="Delete ILO">
-                <i class="bi bi-trash"></i>
-              </button>
-            </div>
-          </td>
-        `;
-        
-        iloList.appendChild(newRow);
-      });
-
-      // Renumber ILOs and trigger undo/redo tracking
-      try {
-        const rows = Array.from(iloList.querySelectorAll('tr')).filter(r => 
-          r.querySelector('textarea[name="ilos[]"]') || r.querySelector('.ilo-badge')
-        );
-        rows.forEach((row, i) => {
-          const code = `ILO${i + 1}`;
-          const badge = row.querySelector('.ilo-badge'); 
-          if (badge) badge.textContent = code;
-          const codeInput = row.querySelector('input[name="code[]"]'); 
-          if (codeInput) codeInput.value = code;
-        });
-        // Dispatch event for undo/redo tracking (matches history-core.js listener)
-        document.dispatchEvent(new CustomEvent('iloChanged'));
-      } catch (e) { /* noop */ }
-
-      // Trigger initialization of the ILO list (autosize, renumbering, etc.)
-      if (window.initAutosize) {
-        try { window.initAutosize(); } catch (e) { /* noop */ }
-      }
-
-      // Mark as unsaved
-      if (window.updateUnsavedCount) {
-        try { window.updateUnsavedCount(); } catch (e) { /* noop */ }
-      }
-
-      showInsertFeedback(`Successfully inserted ${rows.length} ILO(s)!`);
-    } catch (error) {
-      console.error('Error inserting ILOs:', error);
-      showInsertFeedback('Error inserting ILOs. Please copy manually.', 'warning');
-    }
-  }
-
-  /**
-   * Insert TLA Activities into the syllabus form
-   */
-  function insertTlaActivities(tlaHtml) {
-    // Find the TLA table body
-    const tlaBody = document.querySelector('#tlaTable tbody');
-    
-    if (!tlaBody) {
-      showInsertFeedback('Could not find TLA Activities table in syllabus. Please copy manually.', 'warning');
-      return;
-    }
-
-    try {
-      // Parse the HTML table
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(tlaHtml, 'text/html');
-      const table = doc.querySelector('table');
-      
-      if (!table) {
-        showInsertFeedback('Could not parse TLA table. Please copy manually.', 'warning');
-        return;
-      }
-
-      // Extract TLA rows from the table (skip header row)
-      const rows = Array.from(table.querySelectorAll('tbody tr'));
-      
-      if (rows.length === 0) {
-        showInsertFeedback('No TLA activity rows found in table. Please copy manually.', 'warning');
-        return;
-      }
-
-      // Extract text while preserving line breaks inside each cell
-      const readCell = (cell, trim = false) => {
-        if (!cell) return '';
-        // Prefer innerHTML to capture explicit <br> tags, then normalize to newlines
-        let value = cell.innerHTML
-          .replace(/\r\n/g, '\n')
-          .replace(/<br\s*\/?>(?!\n)/gi, '\n')
-          .replace(/<\/(p|div)>/gi, '\n')
-          .replace(/<[^>]+>/g, ''); // strip remaining tags
-        // Collapse Windows CRLF to LF again after HTML removal
-        value = value.replace(/\r\n/g, '\n');
-        return trim ? value.trim() : value;
-      };
-
-      // Remove placeholder if exists
-      const placeholder = tlaBody.querySelector('#tla-placeholder');
-      if (placeholder) {
-        placeholder.remove();
-      }
-
-      // Clear existing TLA rows
-      tlaBody.innerHTML = '';
-
-      // Create new rows from the generated TLA activities
-      rows.forEach((row, index) => {
-        const cells = Array.from(row.querySelectorAll('td'));
-        if (cells.length < 7) return; // Skip malformed rows (need 7 columns)
-
-        // Extract data from each cell
-        const ch = readCell(cells[0], true);
-        const topic = readCell(cells[1]);
-        const wks = readCell(cells[2], true);
-        const outcomes = readCell(cells[3]);
-        const ilo = readCell(cells[4], true);
-        const so = readCell(cells[5], true);
-        const delivery = readCell(cells[6]);
-
-        // Create new row matching the partial's structure
-        const newRow = document.createElement('tr');
-        newRow.className = 'text-center align-middle';
-        newRow.setAttribute('data-tla-id', '');
-        newRow.innerHTML = `
-          <td class="tla-ch">
-            <input name="tla[${index}][ch]" form="syllabusForm" class="form-control cis-input text-center" value="${ch}" placeholder="-">
-          </td>
-          <td class="tla-topic text-start">
-            <textarea name="tla[${index}][topic]" form="syllabusForm" class="form-control cis-textarea autosize cis-field" rows="2" placeholder="-" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${topic}</textarea>
-          </td>
-          <td class="tla-wks">
-            <input name="tla[${index}][wks]" form="syllabusForm" class="form-control cis-input text-center" value="${wks}" placeholder="-">
-          </td>
-          <td class="tla-outcomes text-start">
-            <textarea name="tla[${index}][outcomes]" form="syllabusForm" class="form-control cis-textarea autosize cis-field" rows="2" placeholder="-" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${outcomes}</textarea>
-          </td>
-          <td class="tla-ilo">
-            <input name="tla[${index}][ilo]" form="syllabusForm" class="form-control cis-input text-center" value="${ilo}" placeholder="-">
-          </td>
-          <td class="tla-so">
-            <input name="tla[${index}][so]" form="syllabusForm" class="form-control cis-input text-center" value="${so}" placeholder="-">
-          </td>
-          <td class="tla-delivery">
-            <textarea name="tla[${index}][delivery]" form="syllabusForm" class="form-control cis-textarea autosize cis-field" rows="1" placeholder="-" style="display:block;width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;">${delivery}</textarea>
-          </td>
-          <td class="tla-actions text-center">
-            <button type="button" class="btn btn-sm btn-outline-danger remove-tla-row" data-id="" title="Delete Row">
-              <i class="bi bi-trash"></i>
-            </button>
-          </td>
-          <input type="hidden" class="tla-id-field" name="tla[${index}][id]" value="">
-          <input type="hidden" class="tla-position-field" name="tla[${index}][position]" value="${index}">
-        `;
-        
-        tlaBody.appendChild(newRow);
-      });
-
-      // Trigger autosize initialization if available
-      if (window.initAutosize) {
-        try { window.initAutosize(); } catch (e) { /* noop */ }
-      }
-
-      // Trigger realtime context rebuild if available
-      if (typeof window.rebuildTlaRealtimeContext === 'function') {
-        try { window.rebuildTlaRealtimeContext(); } catch (e) { /* noop */ }
-      }
-
-      // Mark as unsaved
-      if (window.updateUnsavedCount) {
-        try { window.updateUnsavedCount(); } catch (e) { /* noop */ }
-      }
-
-      showInsertFeedback(`Successfully inserted ${rows.length} TLA activity row(s)!`);
-    } catch (error) {
-      console.error('Error inserting TLA activities:', error);
-      showInsertFeedback('Error inserting TLA activities. Please copy manually.', 'warning');
-    }
-  }
-
-  /**
-   * Show feedback for insert action
-   */
-  function showInsertFeedback(message, type = 'success') {
-    const feedback = document.createElement('div');
-    feedback.className = `ai-insert-feedback ai-insert-feedback-${type}`;
-    feedback.textContent = message;
-    feedback.style.cssText = `
-      position: fixed;
-      bottom: 2rem;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 0.75rem 1.5rem;
-      background: ${type === 'success' ? '#10b981' : '#f59e0b'};
-      color: white;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      z-index: 2000;
-      animation: slideUp 0.3s ease;
-    `;
-    document.body.appendChild(feedback);
-    
-    setTimeout(() => {
-      feedback.style.animation = 'slideDown 0.3s ease';
-      setTimeout(() => feedback.remove(), 300);
-    }, 3000);
-  }
-
-  /**
-   * Escape HTML entities
-   */
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  /**
-   * Format AI response with basic markdown support
-   */
-  function formatAIResponse(text) {
-    let html = text;
-
-    // Escape HTML
-    html = html
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    // Code blocks
-    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-    // Bold
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-    // Italic
-    html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-    // Markdown tables -> HTML tables
-    html = convertTables(html);
-
-    // Line breaks to paragraphs (preserve tables)
-    html = html.split('\n\n').map(para => {
-      const trimmed = para.trim();
-      if (!trimmed) return '';
-
-      if (trimmed.includes('<table')) {
-        return trimmed;
-      }
-
-      // Lists
-      if (/^[-*]\s/.test(trimmed)) {
-        const items = trimmed.split('\n').map(line => {
-          return line.replace(/^[-*]\s/, '<li>') + '</li>';
-        }).join('');
-        return '<ul>' + items + '</ul>';
-      }
-
-      return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
-    }).join('');
-
-    return html;
-  }
-
-  // Convert simple markdown tables to HTML tables
-  function convertTables(text) {
-    const lines = text.split('\n');
-    const out = [];
-    let i = 0;
-
-    while (i < lines.length) {
-      const line = lines[i];
-      const isRow = /^\s*\|.+\|\s*$/.test(line);
-      const hasNext = i + 1 < lines.length;
-      const isDivider = hasNext && /^\s*\|?\s*:?-{3,}.*\|\s*$/.test(lines[i + 1]);
-
-      if (isRow && isDivider) {
-        const headerCells = line.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
-        i += 2; // skip header and divider
-        const bodyRows = [];
-        while (i < lines.length && /^\s*\|.+\|\s*$/.test(lines[i])) {
-          bodyRows.push(lines[i].trim().replace(/^\||\|$/g, ''));
-          i++;
-        }
-
-        let tableHtml = '<div class="ai-chat-table-wrap"><table class="ai-chat-table"><thead><tr>';
-        headerCells.forEach(cell => { tableHtml += '<th>' + cell + '</th>'; });
-        tableHtml += '</tr></thead><tbody>';
-
-        if (bodyRows.length === 0) {
-          tableHtml += '<tr><td colspan="' + headerCells.length + '">-</td></tr>';
-        } else {
-          bodyRows.forEach(row => {
-            const cells = row.split('|').map(c => c.trim());
-            tableHtml += '<tr>' + cells.map(c => '<td>' + c + '</td>').join('') + '</tr>';
-          });
-        }
-
-        tableHtml += '</tbody></table></div>';
-        out.push(tableHtml);
-        continue;
-      }
-
-      out.push(line);
-      i++;
-    }
-
-    return out.join('\n');
-  }
-
-  /**
-   * Scroll messages container to bottom
-   */
-  function scrollToBottom() {
-    if (!messagesContainer) return;
-    
-    requestAnimationFrame(() => {
-      messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    });
-  }
-
-  /**
-   * Backend is handled by SVAI in ai.js; UI-only below
-   */
-
-  /**
-   * Public API
-   */
-  window.AIChat = {
-    open: openPanel,
-    close: closePanel,
-    send: (message) => {
-      if (input) {
-        input.value = message;
-        handleSend();
-      }
-    }
-  };
-
-  // Initialize when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-
+(function(){
+	'use strict';
+
+	function $(id){ return document.getElementById(id); }
+
+	function splitBlocks(text){
+		return (text || '').split(/\n{2,}/).map(function(b){ return b.trim(); }).filter(Boolean);
+	}
+
+	function isTableBlock(block){
+		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+		if (lines.length < 2) return false;
+		if (lines[0].indexOf('|') === -1) return false;
+		const divider = lines[1];
+		return /^\|?\s*:?-{3,}/.test(divider);
+	}
+
+	function renderTableBlock(parent, block){
+		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+		if (lines.length < 2) return;
+		const headerLine = lines[0];
+		const bodyLines = lines.slice(2);
+		function splitRow(line){
+			let s = line.trim();
+			if (s.startsWith('|')) s = s.slice(1);
+			if (s.endsWith('|')) s = s.slice(0, -1);
+			return s.split('|').map(function(c){ return c.trim(); });
+		}
+		const headers = splitRow(headerLine);
+		if (!headers.length) return;
+		const wrap = document.createElement('div');
+		wrap.className = 'ai-chat-table-wrap';
+		const table = document.createElement('table');
+		table.className = 'ai-chat-table';
+		const thead = document.createElement('thead');
+		const htr = document.createElement('tr');
+		headers.forEach(function(h){
+			const th = document.createElement('th');
+			th.textContent = h;
+			htr.appendChild(th);
+		});
+		thead.appendChild(htr);
+		table.appendChild(thead);
+		if (bodyLines.length){
+			const tbody = document.createElement('tbody');
+			bodyLines.forEach(function(line){
+				if (line.indexOf('|') === -1) return;
+				const cells = splitRow(line);
+				if (!cells.length) return;
+				const tr = document.createElement('tr');
+				cells.forEach(function(c){
+					const td = document.createElement('td');
+					td.textContent = c;
+					tr.appendChild(td);
+				});
+				tbody.appendChild(tr);
+			});
+			table.appendChild(tbody);
+		}
+		wrap.appendChild(table);
+		parent.appendChild(wrap);
+	}
+
+	function isListBlock(block){
+		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+		if (!lines.length) return false;
+		return lines.every(function(line){
+			return /^[-*\u2022]\s+/.test(line) || /^\d+\.\s+/.test(line);
+		});
+	}
+
+	function renderListBlock(parent, block){
+		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+		if (!lines.length) return;
+		const isOrdered = lines.every(function(line){ return /^\d+\.\s+/.test(line); });
+		const list = document.createElement(isOrdered ? 'ol' : 'ul');
+		lines.forEach(function(line){
+			let text = line.replace(/^[-*\u2022]\s+/, '').replace(/^\d+\.\s+/, '').trim();
+			if (!text) return;
+			const li = document.createElement('li');
+			renderInlineMarkdown(li, text);
+			list.appendChild(li);
+		});
+		parent.appendChild(list);
+	}
+
+	function isHeadingBlock(block){
+		return /^#{1,3}\s+/.test(block.trim());
+	}
+
+	function isRuleBlock(block){
+		const t = String(block || '').trim();
+		return t === '---' || t === '***' || t === '___';
+	}
+
+	function renderRuleBlock(parent){
+		const div = document.createElement('div');
+		div.className = 'ai-chat-divider';
+		parent.appendChild(div);
+	}
+
+	function renderInlineMarkdown(parent, text){
+		const src = String(text || '');
+		if (!src){
+			return;
+		}
+		const re = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+		let lastIndex = 0;
+		let match;
+		while ((match = re.exec(src))){
+			if (match.index > lastIndex){
+				parent.appendChild(document.createTextNode(src.slice(lastIndex, match.index)));
+			}
+			const token = match[0];
+			if (token.startsWith('**')){
+				const strong = document.createElement('strong');
+				strong.textContent = token.slice(2, -2);
+				parent.appendChild(strong);
+			} else if (token.startsWith('`')){
+				const code = document.createElement('code');
+				code.textContent = token.slice(1, -1);
+				parent.appendChild(code);
+			} else if (token.startsWith('*')){
+				const em = document.createElement('em');
+				em.textContent = token.slice(1, -1);
+				parent.appendChild(em);
+			}
+			lastIndex = re.lastIndex;
+		}
+		if (lastIndex < src.length){
+			parent.appendChild(document.createTextNode(src.slice(lastIndex)));
+		}
+	}
+
+	function renderHeadingBlock(parent, block){
+		const match = block.trim().match(/^(#{1,3})\s+(.+)$/);
+		if (!match) return;
+		const level = match[1].length;
+		const text = match[2].trim();
+		const h = document.createElement('div');
+		h.className = 'ai-chat-heading ai-chat-heading-' + level;
+		renderInlineMarkdown(h, text);
+		parent.appendChild(h);
+	}
+
+	function renderAiMessage(bubble, text){
+		if (!bubble) return;
+		bubble.innerHTML = '';
+		const title = document.createElement('div');
+		title.className = 'ai-chat-bubble-title';
+		title.textContent = 'AI Assistant';
+		const body = document.createElement('div');
+		body.className = 'ai-chat-bubble-body';
+		const content = (text || '').trim();
+		if (!content){
+			bubble.appendChild(title);
+			return;
+		}
+		const blocks = splitBlocks(content);
+		blocks.forEach(function(block){
+			// Horizontal rule blocks (---) as visual dividers
+			if (isRuleBlock(block)){
+				renderRuleBlock(body);
+				return;
+			}
+
+			// Handle cases where a plain heading line is followed by a markdown table
+			// without a blank line between them (common in AI replies).
+			let handledComposite = false;
+			if (!isTableBlock(block) && block.indexOf('\n|') !== -1){
+				const lines = block.split(/\n/);
+				let tableStart = -1;
+				for (let i = 0; i < lines.length - 1; i++){
+					const ln = lines[i].trim();
+					if (ln.indexOf('|') !== -1){
+						// Require divider row after header
+						const next = lines[i+1].trim();
+						if (/^\|?\s*:?-{3,}/.test(next)){
+							tableStart = i;
+							break;
+						}
+					}
+				}
+				if (tableStart > -1){
+					const before = lines.slice(0, tableStart).join('\n').trim();
+					const tablePart = lines.slice(tableStart).join('\n');
+					if (before){
+						if (isHeadingBlock(before)) renderHeadingBlock(body, before);
+						else {
+							const p = document.createElement('p');
+							renderInlineMarkdown(p, before);
+							body.appendChild(p);
+						}
+					}
+					if (isTableBlock(tablePart)){
+						renderTableBlock(body, tablePart);
+						handledComposite = true;
+					}
+				}
+			}
+
+			if (handledComposite) return;
+
+			if (isTableBlock(block)) {
+				renderTableBlock(body, block);
+			} else if (isListBlock(block)) {
+				renderListBlock(body, block);
+			} else if (isHeadingBlock(block)) {
+				renderHeadingBlock(body, block);
+			} else {
+				const p = document.createElement('p');
+				renderInlineMarkdown(p, block);
+				body.appendChild(p);
+			}
+		});
+		bubble.appendChild(title);
+		bubble.appendChild(body);
+	}
+
+	function appendMessage(role, text, opts){
+		const container = $('aiChatMessages');
+		if (!container) return;
+		const msg = document.createElement('div');
+		msg.className = 'ai-chat-msg ' + (role === 'user' ? 'user' : role === 'ai' ? 'ai' : role);
+
+		const bubble = document.createElement('div');
+		bubble.className = 'ai-chat-bubble';
+		if (opts && opts.loading) {
+			msg.classList.add('loading');
+		} else {
+			if (role === 'ai') renderAiMessage(bubble, text); else bubble.innerText = text;
+		}
+
+		msg.appendChild(bubble);
+		container.appendChild(msg);
+		container.scrollTop = container.scrollHeight + 100;
+		return msg;
+	}
+
+	function updateLoadingMessage(msgEl, text){
+		if (!msgEl) return;
+		msgEl.classList.remove('loading');
+		const bubble = msgEl.querySelector('.ai-chat-bubble');
+		if (!bubble) return;
+		if (msgEl.classList.contains('ai')) renderAiMessage(bubble, text); else bubble.innerText = text;
+	}
+
+	function getHistory(){
+		const container = $('aiChatMessages');
+		if (!container) return [];
+		const history = [];
+		container.querySelectorAll('.ai-chat-msg').forEach(el => {
+			const bubble = el.querySelector('.ai-chat-bubble');
+			if (!bubble) return;
+			const text = bubble.innerText || '';
+			if (!text.trim()) return;
+			if (el.classList.contains('user')) history.push({ role: 'user', content: text });
+			else if (el.classList.contains('ai')) history.push({ role: 'assistant', content: text });
+		});
+		return history;
+	}
+
+	function getPartialKeyFromChip(chip){
+		if (!chip) return '';
+		return chip.getAttribute('data-partial-key') || '';
+	}
+
+	function setSendingState(isSending){
+		const input = $('aiChatInput');
+		const sendBtn = $('aiChatSend');
+		if (input) input.disabled = isSending;
+		if (sendBtn) {
+			sendBtn.disabled = isSending;
+			sendBtn.classList.toggle('disabled', !!isSending);
+		}
+	}
+
+	function openPanel(){
+		const panel = $('aiChatPanel');
+		const backdrop = $('aiChatBackdrop');
+		if (!panel || !backdrop) return;
+		panel.classList.add('open');
+		backdrop.classList.add('show');
+		panel.setAttribute('aria-hidden','false');
+		const input = $('aiChatInput');
+		if (input) {
+			setTimeout(() => { try { input.focus(); } catch(e){} }, 50);
+		}
+	}
+
+	function closePanel(){
+		const panel = $('aiChatPanel');
+		const backdrop = $('aiChatBackdrop');
+		if (!panel || !backdrop) return;
+		panel.classList.remove('open');
+		backdrop.classList.remove('show');
+		panel.setAttribute('aria-hidden','true');
+	}
+
+	function wireDragAndResize(){
+		const panel = $('aiChatPanel');
+		if (!panel) return;
+
+		// Drag (header)
+		const header = panel.querySelector('.ai-chat-header');
+		if (header) {
+			let dragging = false;
+			let startX = 0;
+			let startRight = 0;
+			const onMove = (e) => {
+				if (!dragging) return;
+				const clientX = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
+				const dx = startX - clientX;
+				panel.style.right = Math.max(0, startRight + dx) + 'px';
+			};
+			const onUp = () => {
+				dragging = false;
+				panel.classList.remove('dragging');
+				document.removeEventListener('mousemove', onMove);
+				document.removeEventListener('mouseup', onUp);
+				document.removeEventListener('touchmove', onMove);
+				document.removeEventListener('touchend', onUp);
+			};
+			const onDown = (e) => {
+				if (e.target.closest('.ai-chat-close-btn') || e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea')) return;
+				dragging = true;
+				panel.classList.add('dragging');
+				startX = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
+				const rect = panel.getBoundingClientRect();
+				startRight = window.innerWidth - rect.right;
+				document.addEventListener('mousemove', onMove);
+				document.addEventListener('mouseup', onUp);
+				document.addEventListener('touchmove', onMove, { passive:false });
+				document.addEventListener('touchend', onUp);
+			};
+			header.addEventListener('mousedown', onDown);
+			header.addEventListener('touchstart', onDown, { passive:true });
+		}
+
+		// Resize (handle)
+		const handle = panel.querySelector('.ai-chat-resize-handle');
+		if (handle) {
+			let resizing = false;
+			let startX = 0;
+			let startWidth = 0;
+			const MIN_W = 260;
+			// Allow the panel to grow up to the CSS max-width (90vw)
+			const MAX_W = Math.floor(window.innerWidth * 0.9);
+			const onMove = (e) => {
+				if (!resizing) return;
+				const clientX = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
+				const dx = startX - clientX;
+				let w = startWidth + dx;
+				w = Math.max(MIN_W, Math.min(MAX_W, w));
+				panel.style.width = w + 'px';
+			};
+			const onUp = () => {
+				resizing = false;
+				handle.classList.remove('resizing');
+				document.removeEventListener('mousemove', onMove);
+				document.removeEventListener('mouseup', onUp);
+				document.removeEventListener('touchmove', onMove);
+				document.removeEventListener('touchend', onUp);
+			};
+			const onDown = (e) => {
+				resizing = true;
+				handle.classList.add('resizing');
+				startX = e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX;
+				startWidth = panel.getBoundingClientRect().width;
+				document.addEventListener('mousemove', onMove);
+				document.addEventListener('mouseup', onUp);
+				document.addEventListener('touchmove', onMove, { passive:false });
+				document.addEventListener('touchend', onUp);
+			};
+			handle.addEventListener('mousedown', onDown);
+			handle.addEventListener('touchstart', onDown, { passive:true });
+		}
+	}
+
+	function initAiChatPanel(){
+		const fab = $('aiChatFab');
+		const panel = $('aiChatPanel');
+		const backdrop = $('aiChatBackdrop');
+		const closeBtn = $('aiChatClose');
+		const form = $('aiChatForm');
+		const input = $('aiChatInput');
+		const sendBtn = $('aiChatSend');
+
+		if (!panel || !fab) return;
+
+		fab.addEventListener('click', function(){ openPanel(); });
+		if (backdrop) backdrop.addEventListener('click', function(){ closePanel(); });
+		if (closeBtn) closeBtn.addEventListener('click', function(){ closePanel(); });
+
+		// Basic send handler
+		async function handleSend(partialKey){
+			if (!window.SVAI || typeof window.SVAI.send !== 'function') {
+				console.warn('[AI] SVAI.send not available');
+				return;
+			}
+			const message = (input && input.value || '').trim();
+			if (!message) return;
+
+			const history = getHistory();
+			appendMessage('user', message);
+			if (input) input.value = '';
+			const loadingMsg = appendMessage('ai', 'Thinking…', { loading:true });
+			setSendingState(true);
+
+			try {
+				const reply = await window.SVAI.send(message, history, partialKey || '');
+				updateLoadingMessage(loadingMsg, reply);
+			} catch (err) {
+				console.error('[AI] Error', err);
+				updateLoadingMessage(loadingMsg, 'I had trouble answering this right now. Please check your internet connection and try again in a moment.');
+			} finally {
+				setSendingState(false);
+			}
+		}
+
+		if (form) {
+			form.addEventListener('submit', function(e){
+				e.preventDefault();
+				handleSend('');
+			});
+		} else if (input) {
+			input.addEventListener('keydown', function(e){
+				if (e.key === 'Enter' && !e.shiftKey) {
+					e.preventDefault();
+					handleSend('');
+				}
+			});
+		}
+		if (sendBtn) {
+			sendBtn.addEventListener('click', function(){ handleSend(''); });
+		}
+
+		// Quick action chips (section-specific prompts)
+		const chipsContainer = $('aiSectionChips');
+		if (chipsContainer) {
+			chipsContainer.addEventListener('click', function(e){
+				const chip = e.target.closest('.ai-chip');
+				if (!chip) return;
+				const key = getPartialKeyFromChip(chip);
+				openPanel();
+				handleSend(key);
+			});
+		}
+
+		// Keyboard shortcut: Alt+Shift+A to toggle panel
+		document.addEventListener('keydown', function(e){
+			if (e.altKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+				e.preventDefault();
+				const isOpen = panel.classList.contains('open');
+				if (isOpen) closePanel(); else openPanel();
+			}
+		});
+
+		wireDragAndResize();
+	}
+
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', initAiChatPanel);
+	} else {
+		initAiChatPanel();
+	}
 })();
+
