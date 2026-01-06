@@ -38,8 +38,8 @@
         <button type="button" class="ai-section-nav ai-section-nav-prev" aria-label="Scroll left">
           <i class="bi bi-chevron-left"></i>
         </button>
-        <div class="ai-chat-section-body">
-          <button type="button" class="ai-chip">Course Rationale and Description</button>
+        <div class="ai-chat-section-body" id="aiGenerateChips">
+          <button type="button" class="ai-chip" data-partial-key="course-rationale">Course Rationale and Description</button>
           <button type="button" class="ai-chip">Teaching, Learning, and Assessment Strategies</button>
           <button type="button" class="ai-chip">ILO</button>
           <button type="button" class="ai-chip">Teaching, Learning, and Assessment (TLA) Activities</button>
