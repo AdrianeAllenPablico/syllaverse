@@ -128,7 +128,6 @@
 		}
 	}
 
-
 	function renderHeadingBlock(parent, block){
 		const match = block.trim().match(/^(#{1,3})\s+(.+)$/);
 		if (!match) return;
@@ -140,7 +139,7 @@
 		parent.appendChild(h);
 	}
 
-	function renderAiMessage(bubble, text, metadata){
+	function renderAiMessage(bubble, text){
 		if (!bubble) return;
 		bubble.innerHTML = '';
 		const title = document.createElement('div');
@@ -148,42 +147,11 @@
 		title.textContent = 'AI Assistant';
 		const body = document.createElement('div');
 		body.className = 'ai-chat-bubble-body';
-		let content = (text || '').trim();
+		const content = (text || '').trim();
 		if (!content){
 			bubble.appendChild(title);
 			return;
 		}
-
-		// Detect explicit SV-INSERT markers (takes precedence over metadata)
-		let insertKey = null;
-		const lines = content.split(/\n+/);
-		if (lines.length){
-			const first = lines[0].trim();
-			// Normal chat reply marker – strip and treat as plain chat
-			if (/^\[SV-REPLY\]$/.test(first)){
-				content = lines.slice(1).join('\n').trim();
-			} else if (/^\[SV-INSERT:/.test(first)){
-				const m = first.match(/^\[SV-INSERT:([^\]]+)\]$/);
-				if (m && m[1]){
-					insertKey = m[1];
-					content = lines.slice(1).join('\n').trim();
-				}
-			}
-		}
-
-		// Special insertable cards (require explicit insert keys)
-		if (insertKey === 'course-rationale'){
-			renderCourseRationaleCard(body, content);
-			bubble.appendChild(title);
-			bubble.appendChild(body);
-			return;
-		} else if (insertKey === 'tlas'){
-			renderTlasCard(body, content);
-			bubble.appendChild(title);
-			bubble.appendChild(body);
-			return;
-		}
-
 		const blocks = splitBlocks(content);
 		blocks.forEach(function(block){
 			if (isTableBlock(block)) {
@@ -202,130 +170,6 @@
 		bubble.appendChild(body);
 	}
 
-	function renderCourseRationaleCard(parent, content){
-		// Keep only the main paragraph (strip any AI preamble like "Certainly..." that may precede the paragraph)
-		const blocks = splitBlocks(content);
-		const mainText = blocks.length ? blocks[blocks.length - 1] : content;
-
-		const container = document.createElement('div');
-		container.className = 'ai-course-rationale-container';
-
-		const card = document.createElement('div');
-		card.className = 'ai-course-rationale-card';
-
-		const header = document.createElement('div');
-		header.className = 'ai-card-header';
-		const headerTitle = document.createElement('div');
-		headerTitle.className = 'ai-card-title';
-		headerTitle.textContent = 'Course Rationale and Description';
-		header.appendChild(headerTitle);
-
-		const body = document.createElement('div');
-		body.className = 'ai-card-body';
-		const p = document.createElement('p');
-		p.textContent = mainText;
-		body.appendChild(p);
-
-		const buttonWrapper = document.createElement('div');
-		buttonWrapper.className = 'ai-card-button-wrapper';
-		const insertBtn = document.createElement('button');
-		insertBtn.className = 'ai-card-insert-btn';
-		insertBtn.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Insert into Course Info';
-		insertBtn.addEventListener('click', function(){
-			insertCourseRationale(mainText);
-		});
-		buttonWrapper.appendChild(insertBtn);
-		body.appendChild(buttonWrapper);
-
-		card.appendChild(header);
-		card.appendChild(body);
-		container.appendChild(card);
-		parent.appendChild(container);
-	}
-
-	function insertCourseRationale(content){
-		const field = document.querySelector('textarea[name="course_description"]');
-		if (!field) {
-			console.warn('[AI] Course description field not found');
-			return;
-		}
-		field.value = content;
-		field.dispatchEvent(new Event('input', { bubbles: true }));
-		field.dispatchEvent(new Event('change', { bubbles: true }));
-
-		const feedback = document.createElement('div');
-		feedback.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:0.75rem 1.5rem;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:9999;font-weight:500;animation:slideUp 0.3s ease;';
-		feedback.textContent = 'Course Rationale inserted successfully!';
-		document.body.appendChild(feedback);
-		setTimeout(() => {
-			feedback.style.animation = 'slideDown 0.3s ease';
-			setTimeout(() => feedback.remove(), 300);
-		}, 2000);
-
-		field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		field.focus();
-	}
-
-	function renderTlasCard(parent, content){
-		const container = document.createElement('div');
-		container.className = 'ai-tlas-container';
-
-		const card = document.createElement('div');
-		card.className = 'ai-tlas-card';
-
-		const header = document.createElement('div');
-		header.className = 'ai-card-header';
-		const headerTitle = document.createElement('div');
-		headerTitle.className = 'ai-card-title';
-		headerTitle.textContent = 'Teaching, Learning, and Assessment Strategies';
-		header.appendChild(headerTitle);
-
-		const body = document.createElement('div');
-		body.className = 'ai-card-body';
-		const p = document.createElement('p');
-		p.textContent = content;
-		body.appendChild(p);
-
-		const buttonWrapper = document.createElement('div');
-		buttonWrapper.className = 'ai-card-button-wrapper';
-		const insertBtn = document.createElement('button');
-		insertBtn.className = 'ai-card-insert-btn';
-		insertBtn.innerHTML = '<i class="bi bi-plus-circle me-2"></i>Insert into TLA Strategies';
-		insertBtn.addEventListener('click', function(){
-			insertTlas(content);
-		});
-		buttonWrapper.appendChild(insertBtn);
-		body.appendChild(buttonWrapper);
-
-		card.appendChild(header);
-		card.appendChild(body);
-		container.appendChild(card);
-		parent.appendChild(container);
-	}
-
-	function insertTlas(content){
-		const field = document.querySelector('textarea[name="tla_strategies"]');
-		if (!field) {
-			console.warn('[AI] TLA strategies field not found');
-			return;
-		}
-		field.value = content;
-		field.dispatchEvent(new Event('input', { bubbles: true }));
-		field.dispatchEvent(new Event('change', { bubbles: true }));
-
-		const feedback = document.createElement('div');
-		feedback.style.cssText = 'position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;padding:0.75rem 1.5rem;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);z-index:9999;font-weight:500;animation:slideUp 0.3s ease;';
-		feedback.textContent = 'TLA Strategies inserted successfully!';
-		document.body.appendChild(feedback);
-		setTimeout(() => {
-			feedback.style.animation = 'slideDown 0.3s ease';
-			setTimeout(() => feedback.remove(), 300);
-		}, 2000);
-
-		field.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		field.focus();
-	}
-
 	function appendMessage(role, text, opts){
 		const container = $('aiChatMessages');
 		if (!container) return;
@@ -337,12 +181,7 @@
 		if (opts && opts.loading) {
 			msg.classList.add('loading');
 		} else {
-			if (role === 'ai') renderAiMessage(bubble, text, opts && opts.metadata); else bubble.innerText = text;
-		}
-
-		// Store metadata for later use
-		if (opts && opts.metadata) {
-			msg.setAttribute('data-partial-key', opts.metadata.partialKey || '');
+			if (role === 'ai') renderAiMessage(bubble, text); else bubble.innerText = text;
 		}
 
 		msg.appendChild(bubble);
@@ -356,8 +195,7 @@
 		msgEl.classList.remove('loading');
 		const bubble = msgEl.querySelector('.ai-chat-bubble');
 		if (!bubble) return;
-		const metadata = msgEl.getAttribute('data-partial-key') ? { partialKey: msgEl.getAttribute('data-partial-key') } : null;
-		if (msgEl.classList.contains('ai')) renderAiMessage(bubble, text, metadata); else bubble.innerText = text;
+		if (msgEl.classList.contains('ai')) renderAiMessage(bubble, text); else bubble.innerText = text;
 	}
 
 	function getHistory(){
@@ -369,9 +207,8 @@
 			if (!bubble) return;
 			const text = bubble.innerText || '';
 			if (!text.trim()) return;
-			// Use `text` key so it matches what the backend AIController expects
-			if (el.classList.contains('user')) history.push({ role: 'user', text: text });
-			else if (el.classList.contains('ai')) history.push({ role: 'assistant', text: text });
+			if (el.classList.contains('user')) history.push({ role: 'user', content: text });
+			else if (el.classList.contains('ai')) history.push({ role: 'assistant', content: text });
 		});
 		return history;
 	}
@@ -501,7 +338,6 @@
 		const form = $('aiChatForm');
 		const input = $('aiChatInput');
 		const sendBtn = $('aiChatSend');
-		let currentPartialKey = '';
 
 		if (!panel || !fab) return;
 
@@ -510,25 +346,22 @@
 		if (closeBtn) closeBtn.addEventListener('click', function(){ closePanel(); });
 
 		// Basic send handler
-		async function handleSend(partialKey, userMessage){
+		async function handleSend(partialKey){
 			if (!window.SVAI || typeof window.SVAI.send !== 'function') {
 				console.warn('[AI] SVAI.send not available');
 				return;
 			}
-			const message = userMessage || (input && input.value || '').trim();
+			const message = (input && input.value || '').trim();
 			if (!message) return;
-
-			const effectivePartial = partialKey || currentPartialKey || '';
-			if (partialKey) currentPartialKey = partialKey;
 
 			const history = getHistory();
 			appendMessage('user', message);
-			if (input && !userMessage) input.value = '';
-			const loadingMsg = appendMessage('ai', 'Thinking…', { loading:true, metadata: { partialKey: effectivePartial } });
+			if (input) input.value = '';
+			const loadingMsg = appendMessage('ai', 'Thinking…', { loading:true });
 			setSendingState(true);
 
 			try {
-				const reply = await window.SVAI.send(message, history, effectivePartial);
+				const reply = await window.SVAI.send(message, history, partialKey || '');
 				updateLoadingMessage(loadingMsg, reply);
 			} catch (err) {
 				console.error('[AI] Error', err);
@@ -564,31 +397,6 @@
 				const key = getPartialKeyFromChip(chip);
 				openPanel();
 				handleSend(key);
-			});
-		}
-
-		// Generate section chips
-		const generateChips = $('aiGenerateChips');
-		if (generateChips) {
-			generateChips.addEventListener('click', function(e){
-				const chip = e.target.closest('.ai-chip');
-				if (!chip) return;
-				const key = getPartialKeyFromChip(chip);
-				if (!key) return;
-				
-				openPanel();
-				
-				// Generate appropriate message based on partial key
-				let message = '';
-				if (key === 'course-rationale') {
-					message = 'Generate a course rationale and description for this course.';
-				} else if (key === 'tlas') {
-					message = 'Generate teaching, learning, and assessment strategies for this course.';
-				}
-				
-				if (message) {
-					handleSend(key, message);
-				}
 			});
 		}
 

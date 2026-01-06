@@ -262,6 +262,91 @@ document.addEventListener('DOMContentLoaded', () => {
     return row;
   }
 
+  // Allow AI helper to bulk-insert ILOs from a markdown table string
+  window.applyIloFromAi = function applyIloFromAi(markdown){
+    if (!list) return false;
+    let src = String(markdown || '');
+    if (!src.trim()) return false;
+
+    function splitBlocks(text){
+      return text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+    }
+    function isTableBlock(block){
+      const lines = block.split(/\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) return false;
+      if (lines[0].indexOf('|') === -1) return false;
+      const divider = lines[1];
+      return /^\|?\s*:?-{3,}/.test(divider);
+    }
+    function splitRow(line){
+      let s = line.trim();
+      if (s.startsWith('|')) s = s.slice(1);
+      if (s.endsWith('|')) s = s.slice(0, -1);
+      return s.split('|').map(c => c.trim());
+    }
+
+    // If the AI returned a compressed single-line table, expand it to one row per line
+    if (!/\n/.test(src)){
+      const rows = src.match(/\|[^|]+\|[^|]+\|/g);
+      if (rows && rows.length >= 3){
+        src = rows.join('\n');
+      }
+    }
+
+    const blocks = splitBlocks(src);
+    let tableBlock = null;
+    for (let i = 0; i < blocks.length; i++){
+      if (isTableBlock(blocks[i])){
+        tableBlock = blocks[i];
+        break;
+      }
+    }
+    if (!tableBlock) return false;
+
+    const lines = tableBlock.split(/\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length < 3) return false;
+    const headers = splitRow(lines[0]);
+    if (!headers.length) return false;
+
+    // Find Code and Description columns (or ILO/Outcome variants)
+    let codeIdx = -1;
+    let descIdx = -1;
+    headers.forEach((h, idx) => {
+      const key = h.toLowerCase();
+      if (codeIdx === -1 && (key === 'code' || key === 'ilo')) codeIdx = idx;
+      if (descIdx === -1 && (key === 'description' || key === 'outcome' || key === 'outcomes')) descIdx = idx;
+    });
+    if (descIdx === -1) return false;
+
+    const bodyLines = lines.slice(2);
+    const entries = [];
+    bodyLines.forEach(line => {
+      if (line.indexOf('|') === -1) return;
+      const cells = splitRow(line);
+      if (!cells.length) return;
+      const description = cells[descIdx] || '';
+      if (!description.trim()) return;
+      entries.push({
+        code: (codeIdx >= 0 ? (cells[codeIdx] || '') : ''),
+        description: description.trim()
+      });
+    });
+    if (!entries.length) return false;
+
+    // Append new rows for each entry (do not delete existing ILOs; instructor can prune as needed)
+    entries.forEach(entry => {
+      const row = addRow(null);
+      if (!row) return;
+      const ta = row.querySelector('textarea[name="ilos[]"]');
+      if (ta){
+        ta.value = entry.description;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        ta.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    return true;
+  };
+
   // Header buttons (optional)
   const addBtn = document.getElementById('ilo-add-header');
   if (addBtn) {
