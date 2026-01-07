@@ -274,9 +274,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function isTableBlock(block){
       const lines = block.split(/\n/).map(l => l.trim()).filter(Boolean);
       if (lines.length < 2) return false;
+      // Require a header row with pipes
       if (lines[0].indexOf('|') === -1) return false;
       const divider = lines[1];
-      return /^\|?\s*:?-{3,}/.test(divider);
+      if (/^\|?\s*:?-{3,}/.test(divider)) return true;
+      // Fallback: treat as a table if there is at least
+      // one additional line that also contains pipes.
+      const hasBodyRow = lines.slice(1).some(line => line.indexOf('|') !== -1);
+      return hasBodyRow;
     }
     function splitRow(line){
       let s = line.trim();
@@ -333,7 +338,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (!entries.length) return false;
 
-    // Append new rows for each entry (do not delete existing ILOs; instructor can prune as needed)
+    // Replace any existing ILO rows with the AI-generated ones
+    while (list.firstChild) {
+      list.removeChild(list.firstChild);
+    }
+
     entries.forEach(entry => {
       const row = addRow(null);
       if (!row) return;
@@ -344,6 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ta.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
+
     return true;
   };
 

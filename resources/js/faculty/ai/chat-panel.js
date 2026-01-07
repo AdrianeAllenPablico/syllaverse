@@ -17,16 +17,29 @@
 	function isTableBlock(block){
 		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
 		if (lines.length < 2) return false;
-		if (lines[0].indexOf('|') === -1) return false;
+		const first = lines[0];
+		if (first.indexOf('|') === -1) return false;
 		const divider = lines[1];
-		return /^\|?\s*:?-{3,}/.test(divider);
+		if (/^\|?\s*:?-{3,}/.test(divider)) return true;
+		// Fallback: treat as a table if there is at least one
+		// additional line that also contains pipes.
+		const hasBodyRow = lines.slice(1).some(function(line){ return line.indexOf('|') !== -1; });
+		return hasBodyRow;
 	}
 
 	function renderTableBlock(parent, block){
 		const lines = block.split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
 		if (lines.length < 2) return;
 		const headerLine = lines[0];
-		const bodyLines = lines.slice(2);
+		let bodyStartIndex = 2;
+		if (lines.length > 1){
+			const dividerCandidate = lines[1];
+			const hasDivider = /^\|?\s*:?-{3,}/.test(dividerCandidate);
+			if (!hasDivider) {
+				bodyStartIndex = 1;
+			}
+		}
+		const bodyLines = lines.slice(bodyStartIndex);
 		function splitRow(line){
 			let s = line.trim();
 			if (s.startsWith('|')) s = s.slice(1);
@@ -142,6 +155,42 @@
 	function renderMarkdownBlocks(parent, content){
 		const blocks = splitBlocks(content || '');
 		blocks.forEach(function(block){
+			if (!block) return;
+
+			// Handle composite blocks where a heading is immediately followed by a
+			// markdown table without a blank line (common in AI replies).
+			if (!isTableBlock(block) && block.indexOf('\n|') !== -1){
+				const lines = block.split(/\n/);
+				let tableStart = -1;
+				for (let i = 0; i < lines.length; i++){
+					const ln = lines[i].trim();
+					if (ln.indexOf('|') === -1) continue;
+					const next = (i + 1 < lines.length) ? lines[i+1].trim() : '';
+					// Either a proper divider row or another pipe row right after
+					if (/^\|?\s*:?-{3,}/.test(next) || (next && next.indexOf('|') !== -1)){
+						tableStart = i;
+						break;
+					}
+				}
+				if (tableStart > -1){
+					const before = lines.slice(0, tableStart).join('\n').trim();
+					const tablePart = lines.slice(tableStart).join('\n');
+					if (before){
+						if (isHeadingBlock(before)) {
+							renderHeadingBlock(parent, before);
+						} else {
+							const p = document.createElement('p');
+							renderInlineMarkdown(p, before);
+							parent.appendChild(p);
+						}
+					}
+					if (isTableBlock(tablePart)){
+						renderTableBlock(parent, tablePart);
+						return; // Done handling this composite block
+					}
+				}
+			}
+
 			if (isTableBlock(block)) {
 				renderTableBlock(parent, block);
 			} else if (isListBlock(block)) {
@@ -199,6 +248,42 @@
 		btn.textContent = 'Insert into Course Info';
 		btn.addEventListener('click', function(){
 			insertCourseRationale(text || '');
+		});
+		btnWrap.appendChild(btn);
+		body.appendChild(btnWrap);
+		card.appendChild(body);
+		container.appendChild(card);
+		parent.appendChild(container);
+	}
+
+	function renderIloCard(parent, markdown){
+		const container = document.createElement('div');
+		container.className = 'ai-ilo-container';
+		const card = document.createElement('div');
+		card.className = 'ai-ilo-card';
+		const header = document.createElement('div');
+		header.className = 'ai-card-header';
+		const title = document.createElement('div');
+		title.className = 'ai-card-title';
+		title.textContent = 'Proposed Intended Learning Outcomes (ILO)';
+		header.appendChild(title);
+		card.appendChild(header);
+		const body = document.createElement('div');
+		body.className = 'ai-card-body';
+		// Render the markdown table preview
+		renderMarkdownBlocks(body, markdown || '');
+		const btnWrap = document.createElement('div');
+		btnWrap.className = 'ai-card-button-wrapper';
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'ai-card-insert-btn';
+		btn.textContent = 'Insert ILO Rows';
+		btn.addEventListener('click', function(){
+			if (window.applyIloFromAi && typeof window.applyIloFromAi === 'function') {
+				window.applyIloFromAi(markdown || '');
+			} else {
+				console.warn('[AI] applyIloFromAi helper not available');
+			}
 		});
 		btnWrap.appendChild(btn);
 		body.appendChild(btnWrap);
@@ -271,12 +356,14 @@
 			return;
 		}
 
-		// Look for specially tagged generated blocks (course rationale, TLAS)
+		// Look for specially tagged generated blocks (course rationale, TLAS, ILO table)
 		let rationaleText = '';
 		let tlasText = '';
+		let iloTableText = '';
 		const tagDefs = [
 			{ start: '[GENERATED_COURSE_RATIONALE]', end: '[/GENERATED_COURSE_RATIONALE]', assign: function(inner){ rationaleText = inner; } },
 			{ start: '[GENERATED_TLAS]', end: '[/GENERATED_TLAS]', assign: function(inner){ tlasText = inner; } },
+			{ start: '[GENERATED_ILO_TABLE]', end: '[/GENERATED_ILO_TABLE]', assign: function(inner){ iloTableText = inner; } },
 		];
 		let remaining = content;
 		tagDefs.forEach(function(def){
@@ -298,6 +385,9 @@
 		}
 		if (tlasText){
 			renderTlasCard(body, tlasText);
+		}
+		if (iloTableText){
+			renderIloCard(body, iloTableText);
 		}
 		bubble.appendChild(title);
 		bubble.appendChild(body);
@@ -538,6 +628,9 @@
 				} else if (action === 'generate-tlas') {
 					const msg = 'Generate a concise Teaching, Learning, and Assessment Strategies narrative for this course based on the current syllabus context.';
 					handleSend('tlas', msg);
+				} else if (action === 'generate-ilo') {
+					const msg = 'Propose a small, coherent set of Intended Learning Outcomes (ILO) for this course based on the current syllabus context.';
+					handleSend('ilo-generate', msg);
 				} else {
 					// Other actions can be wired later; for now do nothing
 				}
