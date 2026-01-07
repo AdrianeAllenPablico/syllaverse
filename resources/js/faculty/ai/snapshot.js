@@ -638,396 +638,7 @@
     };
   }
 
-  // ---------- ILO-SO-CPA Mapping Snapshot ----------
-  function snapshotIloSoCpa(){
-    const root = document.querySelector('.ilo-so-cpa-mapping');
-    const raw = { so_columns: [], mappings: [] };
-    const md = [];
-
-    if (!root) {
-      return { key: 'ilo_so_cpa_mapping', markdown: '### ILO-SO-CPA Mapping\n\n_No ILO-SO-CPA mapping defined._', raw };
-    }
-
-    // Get SO columns from header row
-    const mappingTable = root.querySelector('.mapping');
-    if (!mappingTable) {
-      return { key: 'ilo_so_cpa_mapping', markdown: '### ILO-SO-CPA Mapping\n\n_No ILO-SO-CPA mapping defined._', raw };
-    }
-
-    const headerRow2 = mappingTable.querySelectorAll('tr')[1];
-    const allHeaders = Array.from(headerRow2.querySelectorAll('th'));
-    const iloHeaderIndex = allHeaders.findIndex(th => th.textContent.includes('ILOs'));
-    const cHeaderIndex = allHeaders.findIndex(th => th.textContent.trim() === 'C');
-
-    // SO columns are between ILOs and C
-    const soHeaders = allHeaders.slice(iloHeaderIndex + 1, cHeaderIndex);
-    soHeaders.forEach(th => {
-      const input = th.querySelector('input');
-      const label = input ? textTrim(input.value) : textTrim(th.textContent);
-      if (label && label !== 'No SO') {
-        raw.so_columns.push(label);
-      }
-    });
-
-    // Get ILO rows
-    const tbody = mappingTable.querySelector('tbody') || mappingTable;
-    const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.querySelector('td'));
-
-    dataRows.forEach((row, idx) => {
-      const cells = Array.from(row.querySelectorAll('td'));
-      const iloCell = cells[0];
-      const iloInput = iloCell.querySelector('input');
-      const iloText = iloInput ? textTrim(iloInput.value) : textTrim(iloCell.textContent);
-
-      // Skip placeholder rows
-      if (iloText === 'No ILO') return;
-
-      // Collect SO values
-      const sos = {};
-      soHeaders.forEach((header, soIdx) => {
-        const input = header.querySelector('input');
-        const soLabel = input ? textTrim(input.value) : textTrim(header.textContent);
-
-        // Skip "No SO" placeholder but collect actual SO values
-        if (soLabel === 'No SO') return;
-
-        const soCell = cells[soIdx + 1];
-        const soValue = soCell ? formatWithNewlines(soCell.querySelector('textarea')?.value ?? soCell.textContent ?? '') : '';
-        sos[soLabel] = soValue;
-      });
-
-      // Get C, P, A values (last 3 cells)
-      const cCell = cells[cells.length - 3];
-      const pCell = cells[cells.length - 2];
-      const aCell = cells[cells.length - 1];
-
-      const cValue = formatWithNewlines(cCell?.querySelector('textarea')?.value ?? cCell?.textContent ?? '');
-      const pValue = formatWithNewlines(pCell?.querySelector('textarea')?.value ?? pCell?.textContent ?? '');
-      const aValue = formatWithNewlines(aCell?.querySelector('textarea')?.value ?? aCell?.textContent ?? '');
-
-      if (iloText) {
-        raw.mappings.push({
-          ilo: iloText,
-          sos,
-          c: cValue,
-          p: pValue,
-          a: aValue
-        });
-      }
-    });
-
-    // Build markdown table
-    md.push('### ILO-SO-CPA Mapping');
-    md.push('_This is the current snapshot of the ILO-SO-CPA Mapping section from the live syllabus. Treat this as the most up-to-date authoritative data._');
-
-    if (raw.mappings.length === 0) {
-      md.push('| ILO | (No data) |');
-      md.push('|---|---|');
-    } else {
-      // Build header: ILO | SO1 | SO2 | ... | C | P | A
-      const headerCols = ['ILO', ...raw.so_columns, 'C', 'P', 'A'];
-      md.push('| ' + headerCols.join(' | ') + ' |');
-      md.push('|' + Array(headerCols.length).fill(':--').join('|') + '|');
-
-      // Build rows
-      raw.mappings.forEach(mapping => {
-        const row = [mapping.ilo];
-
-        // Add SO values in order of columns
-        raw.so_columns.forEach(soCol => {
-          row.push(mapping.sos[soCol] || '-');
-        });
-
-        // Add C, P, A
-        row.push(mapping.c || '-');
-        row.push(mapping.p || '-');
-        row.push(mapping.a || '-');
-
-        md.push('| ' + row.join(' | ') + ' |');
-      });
-
-      // After the table, add a concise summary of which SO numbers
-      // actually link to each ILO based on non-empty SO cells. This
-      // gives the AI an easy-to-read mapping it can use when filling
-      // the TLA Activities "SO" column.
-      const iloSoSummaries = [];
-      raw.mappings.forEach(mapping => {
-        const iloLabel = textTrim(mapping.ilo || '');
-        if (!iloLabel) return;
-        const soNums = [];
-        raw.so_columns.forEach(soCol => {
-          const rawVal = (mapping.sos && Object.prototype.hasOwnProperty.call(mapping.sos, soCol)) ? mapping.sos[soCol] : '';
-          const v = textTrim(rawVal || '');
-          if (!v || v === '-' || v === '0') return;
-          const m = String(soCol || '').match(/(\d+)/);
-          const num = m ? m[1] : String(soCol || '').trim();
-          if (num && soNums.indexOf(num) === -1) {
-            soNums.push(num);
-          }
-        });
-        if (soNums.length) {
-          iloSoSummaries.push({ iloLabel, soNums });
-        }
-      });
-
-      md.push('');
-      if (!iloSoSummaries.length) {
-        md.push('No non-empty SO mappings are defined in the ILO-SO-CPA Mapping table (all SO cells are blank, "-", or "0").');
-      } else {
-        md.push('SO linkage summary (derived from the ILO-SO-CPA Mapping):');
-        iloSoSummaries.forEach(function(entry){
-          md.push('- ' + entry.iloLabel + ' is linked to SO ' + entry.soNums.join(', '));
-        });
-      }
-    }
-
-    return {
-      key: 'ilo_so_cpa_mapping',
-      markdown: md.join('\n'),
-      raw,
-    };
-  }
-
-  // ---------- ILO-IGA Mapping Snapshot ----------
-  function snapshotIloIga(){
-    const root = document.querySelector('.ilo-iga-mapping');
-    const raw = { iga_columns: [], mappings: [] };
-    const md = [];
-
-    if (!root) {
-      return { key: 'ilo_iga_mapping', markdown: '### ILO-IGA Mapping\n\n_No ILO-IGA mapping defined._', raw };
-    }
-
-    // Get IGA columns from header row
-    const mappingTable = root.querySelector('.mapping');
-    if (!mappingTable) {
-      return { key: 'ilo_iga_mapping', markdown: '### ILO-IGA Mapping\n\n_No ILO-IGA mapping defined._', raw };
-    }
-
-    const headerRow2 = mappingTable.querySelectorAll('tr')[1];
-    const allHeaders = Array.from(headerRow2.querySelectorAll('th'));
-    const iloHeaderIndex = allHeaders.findIndex(th => th.textContent.includes('ILOs'));
-
-    // IGA columns are after ILOs (all remaining headers). Mirror the
-    // same selection semantics as saveIloIga so raw.iga_columns and
-    // raw.mappings match what we persist, including empty labels.
-    const igaHeaders = allHeaders.slice(iloHeaderIndex + 1);
-    igaHeaders.forEach(th => {
-      const input = th.querySelector('input');
-      const label = input ? textTrim(input.value) : textTrim(th.textContent);
-      // Skip only the "No IGA" placeholder; include empty labels so the
-      // column count and ordering match the save payload.
-      if (label === 'No IGA') return;
-      raw.iga_columns.push(label || '');
-    });
-
-    // Get ILO rows
-    const tbody = mappingTable.querySelector('tbody') || mappingTable;
-    const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(row => row.querySelector('td'));
-
-    dataRows.forEach((row, idx) => {
-      const cells = Array.from(row.querySelectorAll('td'));
-      const iloCell = cells[0];
-      const iloInput = iloCell.querySelector('input');
-      const iloText = iloInput ? textTrim(iloInput.value) : textTrim(iloCell.textContent);
-
-      // Skip placeholder rows
-      if (iloText === 'No ILO') return;
-
-      // Collect IGA values
-      const igas = {};
-      igaHeaders.forEach((header, igaIdx) => {
-        const input = header.querySelector('input');
-        const igaLabel = input ? textTrim(input.value) : textTrim(header.textContent);
-        // Skip only the "No IGA" placeholder; allow empty labels so
-        // they align with raw.iga_columns.
-        if (igaLabel === 'No IGA') return;
-        const normalizedLabel = igaLabel || '';
-        const igaCell = cells[igaIdx + 1];
-        const igaValue = igaCell ? formatWithNewlines(igaCell.querySelector('textarea')?.value ?? igaCell.textContent ?? '') : '';
-        igas[normalizedLabel] = igaValue;
-      });
-
-      if (iloText) {
-        raw.mappings.push({
-          ilo: iloText,
-          igas
-        });
-      }
-    });
-
-    // Build markdown table
-    md.push('### ILO-IGA Mapping');
-    md.push('_This is the current snapshot of the ILO-IGA Mapping section from the live syllabus. Treat this as the most up-to-date authoritative data._');
-
-    if (raw.mappings.length === 0) {
-      md.push('| ILO | (No data) |');
-      md.push('|---|---|');
-    } else {
-      // Build header: ILO | IGA1 | IGA2 | ... (blank labels render as '-')
-      const headerCols = ['ILO', ...raw.iga_columns.map(label => label || '-')];
-      md.push('| ' + headerCols.join(' | ') + ' |');
-      md.push('|' + Array(headerCols.length).fill(':--').join('|') + '|');
-
-      // Build rows
-      raw.mappings.forEach(mapping => {
-        const row = [mapping.ilo];
-
-        // Add IGA values in order of columns
-        raw.iga_columns.forEach(igaCol => {
-          row.push(mapping.igas[igaCol] || '-');
-        });
-
-        md.push('| ' + row.join(' | ') + ' |');
-      });
-    }
-
-    return {
-      key: 'ilo_iga_mapping',
-      markdown: md.join('\n'),
-      raw,
-    };
-  }
-
-  // ---------- ILO-CDIO-SDG Mapping Snapshot ----------
-  function snapshotIloCdioSdg(){
-    const root = document.querySelector('.ilo-cdio-sdg-mapping');
-    const raw = { cdio_columns: [], sdg_columns: [], mappings: [] };
-    const md = [];
-
-    if (!root) {
-      return { key: 'ilo_cdio_sdg_mapping', markdown: '### ILO-CDIO-SDG Mapping\n\n_No ILO-CDIO-SDG mapping defined._', raw };
-    }
-
-    // Get mapping table and header rows
-    const mappingTable = root.querySelector('.mapping');
-    if (!mappingTable) {
-      return { key: 'ilo_cdio_sdg_mapping', markdown: '### ILO-CDIO-SDG Mapping\n\n_No ILO-CDIO-SDG mapping defined._', raw };
-    }
-
-    const headerRow1 = mappingTable.querySelectorAll('tr')[0];
-    const headerRow2 = mappingTable.querySelectorAll('tr')[1];
-    
-    if (!headerRow1 || !headerRow2) {
-      return { key: 'ilo_cdio_sdg_mapping', markdown: '### ILO-CDIO-SDG Mapping\n\n_No ILO-CDIO-SDG mapping defined._', raw };
-    }
-
-    // Get CDIO and SDG column headers from row 2
-    const allHeaders = Array.from(headerRow2.querySelectorAll('th'));
-    const cdioHeaders = allHeaders.filter(th => th.classList.contains('cdio-label-cell'));
-    const sdgHeaders = allHeaders.filter(th => th.classList.contains('sdg-label-cell'));
-
-    // Extract CDIO column labels
-    cdioHeaders.forEach(th => {
-      const input = th.querySelector('input');
-      const label = input ? textTrim(input.value) : textTrim(th.textContent);
-      if (label && label !== 'No CDIO') {
-        raw.cdio_columns.push(label);
-      }
-    });
-
-    // Extract SDG column labels
-    sdgHeaders.forEach(th => {
-      const input = th.querySelector('input');
-      const label = input ? textTrim(input.value) : textTrim(th.textContent);
-      if (label && label !== 'No SDG') {
-        raw.sdg_columns.push(label);
-      }
-    });
-
-    // Get ILO rows (skip header rows 0, 1 and "No ILO" row at index 2)
-    const allRows = mappingTable.querySelectorAll('tr');
-    const dataRows = Array.from(allRows).slice(3); // Skip header rows and "No ILO" placeholder
-
-    dataRows.forEach((row, idx) => {
-      const cells = Array.from(row.querySelectorAll('td'));
-      if (cells.length === 0) return;
-
-      const iloCell = cells[0];
-      const iloInput = iloCell.querySelector('input');
-      const iloText = iloInput ? textTrim(iloInput.value) : textTrim(iloCell.textContent);
-
-      // Skip placeholder or empty ILO
-      if (!iloText || iloText === 'No ILO') return;
-
-      // Collect CDIO values (cells after ILO, count matches cdioHeaders)
-      const cdios = {};
-      cdioHeaders.forEach((header, cdioIdx) => {
-        const input = header.querySelector('input');
-        const cdioLabel = input ? textTrim(input.value) : textTrim(header.textContent);
-
-        // Skip "No CDIO" placeholder but collect actual CDIO values
-        if (cdioLabel === 'No CDIO') return;
-
-        const cdioCell = cells[1 + cdioIdx];
-        const cdioValue = cdioCell ? formatWithNewlines(cdioCell.querySelector('textarea')?.value ?? cdioCell.textContent ?? '') : '';
-        cdios[cdioLabel] = cdioValue;
-      });
-
-      // Collect SDG values (cells after CDIO columns)
-      const sdgs = {};
-      sdgHeaders.forEach((header, sdgIdx) => {
-        const input = header.querySelector('input');
-        const sdgLabel = input ? textTrim(input.value) : textTrim(header.textContent);
-
-        // Skip "No SDG" placeholder but collect actual SDG values
-        if (sdgLabel === 'No SDG') return;
-
-        const sdgCell = cells[1 + cdioHeaders.length + sdgIdx];
-        const sdgValue = sdgCell ? formatWithNewlines(sdgCell.querySelector('textarea')?.value ?? sdgCell.textContent ?? '') : '';
-        sdgs[sdgLabel] = sdgValue;
-      });
-
-      if (iloText) {
-        raw.mappings.push({
-          ilo: iloText,
-          cdios,
-          sdgs
-        });
-      }
-    });
-
-    // Build markdown table
-    md.push('### ILO-CDIO-SDG Mapping');
-    md.push('_This is the current snapshot of the ILO-CDIO-SDG Mapping section from the live syllabus. Treat this as the most up-to-date authoritative data._');
-
-    if (raw.mappings.length === 0) {
-      md.push('| ILO | (No data) |');
-      md.push('|---|---|');
-    } else {
-      // Build header with CDIO and SDG prefixes: ILO | CDIO: CDIO1 | CDIO: CDIO2 | ... | SDG: SDG1 | SDG: SDG2 | ...
-      const headerCols = [
-        'ILO',
-        ...raw.cdio_columns.map(col => `CDIO: ${col}`),
-        ...raw.sdg_columns.map(col => `SDG: ${col}`)
-      ];
-      md.push('| ' + headerCols.join(' | ') + ' |');
-      md.push('|' + Array(headerCols.length).fill(':--').join('|') + '|');
-
-      // Build rows
-      raw.mappings.forEach(mapping => {
-        const row = [mapping.ilo];
-
-        // Add CDIO values in order of columns
-        raw.cdio_columns.forEach(cdioCol => {
-          row.push(mapping.cdios[cdioCol] || '-');
-        });
-
-        // Add SDG values in order of columns
-        raw.sdg_columns.forEach(sdgCol => {
-          row.push(mapping.sdgs[sdgCol] || '-');
-        });
-
-        md.push('| ' + row.join(' | ') + ' |');
-      });
-    }
-
-    return {
-      key: 'ilo_cdio_sdg_mapping',
-      markdown: md.join('\n'),
-      raw,
-    };
-  }
+  // (ILO-SO-CPA, ILO-IGA, and ILO-CDIO-SDG mapping snapshots have been removed from the AI snapshot pipeline.)
 
   // ---------- Textbook Upload Snapshot ----------
   function snapshotTextbook(){
@@ -1099,21 +710,7 @@
     const tbody = document.getElementById('at-tbody');
     let sections = [];
     let iloCount = 0;
-    const iloSummaryByNumber = {};
-
-    function recordIloUsage(taskLabel, iloColumns) {
-      const label = textTrim(taskLabel || '');
-      if (!label || !Array.isArray(iloColumns)) return;
-      iloColumns.forEach((rawVal, idx) => {
-        const v = textTrim(rawVal || '');
-        if (!v || v === '-' || v === '0') return;
-        const iloNumber = String(idx + 1); // ILO1 -> "1", ILO2 -> "2", etc.
-        if (!iloSummaryByNumber[iloNumber]) {
-          iloSummaryByNumber[iloNumber] = [];
-        }
-        iloSummaryByNumber[iloNumber].push({ task: label, value: v });
-      });
-    }
+    const flatRows = [];
     
     if (tbody) {
       // Get ILO column count from table header
@@ -1124,6 +721,7 @@
       }
       
       const mainRows = Array.from(tbody.querySelectorAll('.at-main-row'));
+      let rowCounter = 0;
       mainRows.forEach((mainRow, sectionIdx) => {
         const sectionNum = mainRow.dataset.section || (sectionIdx + 1);
         const cells = Array.from(mainRow.children);
@@ -1174,6 +772,54 @@
         });
         
         sections.push(section);
+
+        // Build flattened row list with a stable row number that will be
+        // reused across the Code/Task, ILO, and C/P/A tables in the
+        // markdown snapshot.
+        if (section.subRows.length === 0) {
+          rowCounter += 1;
+          flatRows.push({
+            rowNo: rowCounter,
+            code: section.code || '-',
+            task: section.task || '-',
+            ird: '-',
+            percent: section.percent || '',
+            iloColumns: section.iloColumns ? section.iloColumns.slice() : [],
+            c: '',
+            p: '',
+            a: ''
+          });
+        } else {
+          // Main category row
+          rowCounter += 1;
+          flatRows.push({
+            rowNo: rowCounter,
+            code: section.code || '-',
+            task: section.task || '-',
+            ird: '-',
+            percent: section.percent || '',
+            iloColumns: section.iloColumns ? section.iloColumns.slice() : [],
+            c: '',
+            p: '',
+            a: ''
+          });
+
+          // Sub-rows (individual tasks)
+          section.subRows.forEach(subRow => {
+            rowCounter += 1;
+            flatRows.push({
+              rowNo: rowCounter,
+              code: subRow.code || '-',
+              task: `- ${subRow.task || '-'}`,
+              ird: subRow.ird || '-',
+              percent: '',
+              iloColumns: subRow.iloColumns ? subRow.iloColumns.slice() : [],
+              c: subRow.cpa.c || '',
+              p: subRow.cpa.p || '',
+              a: subRow.cpa.a || ''
+            });
+          });
+        }
       });
     }
 
@@ -1181,78 +827,51 @@
       md.push('### Assessment Method and Distribution Map');
       md.push('_This is the current snapshot of the Assessment Method and Distribution Map section from the live syllabus. Treat this as the most up-to-date authoritative data for assessment tasks and their ILO distributions._');
     
-    // Build header with ILO numbers and CPA
-    let headerCols = ['Code', 'Task', 'I/R/D', '%'];
-    for (let i = 1; i <= iloCount; i++) {
-      headerCols.push(`ILO${i}`);
-    }
-    headerCols.push('C', 'P', 'A');
-    
-    md.push('| ' + headerCols.join(' | ') + ' |');
-    md.push('|' + Array(headerCols.length).fill(':--').join('|') + '|');
-    
     const raw = { sections: [], iloCount };
     
-    if (sections.length === 0) {
-      md.push('| - | No assessment tasks defined | - | - |' + '| - |'.repeat(iloCount + 3));
+    if (sections.length === 0 || flatRows.length === 0) {
+      md.push('| Row | Code | Task | I/R/D | % |');
+      md.push('|:--:|:--|:--|:--:|:--:|');
+      md.push('| - | No assessment tasks defined | - | - | - |');
     } else {
-      sections.forEach(section => {
-        raw.sections.push(section);
-        // Record main task/category ILO usage, if any
-        recordIloUsage(section.task || section.code, section.iloColumns || []);
-        
-        if (section.subRows.length === 0) {
-          const row = [section.code || '-', section.task || '-', '-', section.percent || ''];
-          row.push(...section.iloColumns.map(v => v || '-'));
-          row.push('-', '-', '-');
-          md.push('| ' + row.join(' | ') + ' |');
-        } else {
-          // First, show main category row
-          const mainRow = [section.code || '-', section.task || '-', '-', section.percent || ''];
-          mainRow.push(...section.iloColumns.map(v => v || '-'));
-          mainRow.push('-', '-', '-');
-          md.push('| ' + mainRow.join(' | ') + ' |');
-          
-          // Then show each sub-row with subtask in same Task column
-          section.subRows.forEach((subRow) => {
-            // Record sub-task ILO usage for summary
-            recordIloUsage(subRow.task || subRow.code, subRow.iloColumns || []);
-            const subRowArray = [];
-            // Sub-task code in Code column
-            subRowArray.push(subRow.code || '-');
-            // Sub-task name in Task column (indented with dash for clarity)
-            subRowArray.push(`- ${subRow.task || '-'}`);
-            // Sub-task I/R/D type
-            subRowArray.push(subRow.ird || '-');
-            // Empty % column
-            subRowArray.push('');
-            // Sub-row ILO distribution
-            subRowArray.push(...subRow.iloColumns.map(v => v || '-'));
-            // CPA values
-            subRowArray.push(subRow.cpa.c || '-', subRow.cpa.p || '-', subRow.cpa.a || '-');
-            md.push('| ' + subRowArray.join(' | ') + ' |');
-          });
-        }
+      // Table 1: Code / Task / I/R/D / % with a Row number on the left
+      md.push('| Row | Code | Task | I/R/D | % |');
+      md.push('|:--:|:--|:--|:--:|:--:|');
+      flatRows.forEach(row => {
+        md.push(`| ${row.rowNo} | ${row.code || '-'} | ${row.task || '-'} | ${row.ird || '-'} | ${row.percent || ''} |`);
       });
-    }
 
-    // Add a concise textual summary of which assessment tasks actually
-    // carry non-zero / non-placeholder item counts for each ILO. This
-    // makes it easier for the AI to reliably detect and use the ILO
-    // distribution information when generating TLA Activities.
-    const iloNumbers = Object.keys(iloSummaryByNumber);
-    if (iloNumbers.length === 0) {
+      // Blank line between tables
       md.push('');
-      md.push('No non-zero ILO item distributions are defined in the Assessment Method and Distribution Map (all ILO cells are blank, "-", or "0").');
-    } else {
-      md.push('');
-      md.push('ILO distribution summary (derived from the Assessment Method and Distribution Map):');
-      iloNumbers.sort(function(a, b){ return Number(a) - Number(b); });
-      iloNumbers.forEach(function(iloNum){
-        const entries = iloSummaryByNumber[iloNum] || [];
-        if (!entries.length) return;
-        const parts = entries.map(function(e){ return (e.task || '-') + ' (' + e.value + ')'; });
-        md.push('- ILO ' + iloNum + ': ' + parts.join('; '));
+
+      // Table 2: ILO item distributions only, with Row number on the left
+      if (iloCount > 0) {
+        const iloHeaders = [];
+        for (let i = 1; i <= iloCount; i++) {
+          iloHeaders.push(`ILO${i}`);
+        }
+        md.push('| Row | ' + iloHeaders.join(' | ') + ' |');
+        md.push('|' + [':--:'].concat(Array(iloCount).fill(':--')).join('|') + '|');
+        flatRows.forEach(row => {
+          const cells = [];
+          for (let i = 0; i < iloCount; i++) {
+            cells.push(row.iloColumns && row.iloColumns[i] ? row.iloColumns[i] : '-');
+          }
+          md.push(`| ${row.rowNo} | ${cells.join(' | ')} |`);
+        });
+
+        // Blank line between tables
+        md.push('');
+      }
+
+      // Table 3: C/P/A domain distributions only, with Row number on the left
+      md.push('| Row | C | P | A |');
+      md.push('|:--:|:--:|:--:|:--:|');
+      flatRows.forEach(row => {
+        const cVal = row.c ? row.c : '-';
+        const pVal = row.p ? row.p : '-';
+        const aVal = row.a ? row.a : '-';
+        md.push(`| ${row.rowNo} | ${cVal} | ${pVal} | ${aVal} |`);
       });
     }
 
@@ -1294,12 +913,6 @@
     try { out.push(snapshotTLA()); } catch(e){ console.warn('[snapshot] tla_activities failed', e); }
     // Assessment Schedule
     try { out.push(snapshotAssessmentSchedule()); } catch(e){ console.warn('[snapshot] assessment_schedule failed', e); }
-    // ILO-SO-CPA Mapping
-    try { out.push(snapshotIloSoCpa()); } catch(e){ console.warn('[snapshot] ilo_so_cpa_mapping failed', e); }
-    // ILO-IGA Mapping
-    try { out.push(snapshotIloIga()); } catch(e){ console.warn('[snapshot] ilo_iga_mapping failed', e); }
-    // ILO-CDIO-SDG Mapping
-    try { out.push(snapshotIloCdioSdg()); } catch(e){ console.warn('[snapshot] ilo_cdio_sdg_mapping failed', e); }
     return out;
   }
 
@@ -1374,9 +987,6 @@
     snapshotILO,
     snapshotAssessmentTasks,
     snapshotAssessmentSchedule,
-    snapshotIloSoCpa,
-    snapshotIloIga,
-    snapshotIloCdioSdg,
     snapshotCoursePolicies,
     snapshotSO,
     snapshotCDIO,

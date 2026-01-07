@@ -476,18 +476,20 @@
 			return;
 		}
 
-		// Look for specially tagged generated blocks (course rationale, TLAS, ILO table, TLA Activities)
+		// Look for specially tagged generated blocks (course rationale, TLAS, ILO table, TLA Activities, mappings)
 		let rationaleText = '';
 		let tlasText = '';
 		let iloTableText = '';
 		let tlaActivitiesTableText = '';
 		let assessmentScheduleTableText = '';
+		let iloSoCpaJsonText = '';
 		const tagDefs = [
 			{ start: '[GENERATED_COURSE_RATIONALE]', end: '[/GENERATED_COURSE_RATIONALE]', assign: function(inner){ rationaleText = inner; } },
 			{ start: '[GENERATED_TLAS]', end: '[/GENERATED_TLAS]', assign: function(inner){ tlasText = inner; } },
 			{ start: '[GENERATED_ILO_TABLE]', end: '[/GENERATED_ILO_TABLE]', assign: function(inner){ iloTableText = inner; } },
 			{ start: '[GENERATED_TLA_TABLE]', end: '[/GENERATED_TLA_TABLE]', assign: function(inner){ tlaActivitiesTableText = inner; } },
 			{ start: '[GENERATED_ASSESSMENT_SCHEDULE]', end: '[/GENERATED_ASSESSMENT_SCHEDULE]', assign: function(inner){ assessmentScheduleTableText = inner; } },
+			{ start: '[GENERATED_ILO_SO_CPA_MAPPING]', end: '[/GENERATED_ILO_SO_CPA_MAPPING]', assign: function(inner){ iloSoCpaJsonText = inner; } },
 		];
 		let remaining = content;
 		tagDefs.forEach(function(def){
@@ -529,6 +531,28 @@
 				}
 			} else {
 				console.warn('[AI] applyAssessmentScheduleFromAi helper not available');
+			}
+		}
+		if (iloSoCpaJsonText){
+			try {
+				const parsed = JSON.parse(iloSoCpaJsonText.trim());
+				if (parsed && Array.isArray(parsed.so_columns) && Array.isArray(parsed.mappings)) {
+					if (window.refreshIloSoCpaPartial && typeof window.refreshIloSoCpaPartial === 'function') {
+						const ok = window.refreshIloSoCpaPartial(parsed.so_columns, parsed.mappings);
+						if (ok) {
+							showInsertToast('ILO-SO-CPA mapping updated from AI.');
+						} else {
+							showInsertToast('Could not apply AI ILO-SO-CPA mapping.');
+						}
+					} else {
+						console.warn('[AI] refreshIloSoCpaPartial helper not available');
+					}
+				} else {
+					console.warn('[AI] GENERATED_ILO_SO_CPA_MAPPING payload missing so_columns or mappings array');
+				}
+			} catch (e) {
+				console.error('[AI] Failed to parse GENERATED_ILO_SO_CPA_MAPPING JSON from AI:', e);
+				showInsertToast('AI ILO-SO-CPA mapping was not valid JSON.');
 			}
 		}
 		bubble.appendChild(title);
@@ -726,7 +750,7 @@
 			// prompt, not on prior chat turns. For those, skip history entirely.
 			// For regular chat, keep the rolling history.
 			let history = [];
-			if (partialKey !== 'assessment_schedule') {
+			if (partialKey !== 'assessment_schedule' && partialKey !== 'ilo_so_cpa_mapping') {
 				history = getHistory();
 			}
 			appendMessage('user', message);
@@ -786,6 +810,9 @@
 				} else if (action === 'map-assessment-schedule') {
 					const msg = 'Map Assessment Schedule';
 					handleSend('assessment_schedule', msg);
+				} else if (action === 'map-ilo-so-cpa') {
+					const msg = 'Map ILO-SO and ILO-CPA';
+					handleSend('ilo_so_cpa_mapping', msg);
 				} else {
 					// Other actions can be wired later; for now do nothing
 				}
