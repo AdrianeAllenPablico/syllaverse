@@ -483,6 +483,7 @@
 		let tlaActivitiesTableText = '';
 		let assessmentScheduleTableText = '';
 		let iloSoCpaJsonText = '';
+		let iloIgaJsonText = '';
 		const tagDefs = [
 			{ start: '[GENERATED_COURSE_RATIONALE]', end: '[/GENERATED_COURSE_RATIONALE]', assign: function(inner){ rationaleText = inner; } },
 			{ start: '[GENERATED_TLAS]', end: '[/GENERATED_TLAS]', assign: function(inner){ tlasText = inner; } },
@@ -490,6 +491,7 @@
 			{ start: '[GENERATED_TLA_TABLE]', end: '[/GENERATED_TLA_TABLE]', assign: function(inner){ tlaActivitiesTableText = inner; } },
 			{ start: '[GENERATED_ASSESSMENT_SCHEDULE]', end: '[/GENERATED_ASSESSMENT_SCHEDULE]', assign: function(inner){ assessmentScheduleTableText = inner; } },
 			{ start: '[GENERATED_ILO_SO_CPA_MAPPING]', end: '[/GENERATED_ILO_SO_CPA_MAPPING]', assign: function(inner){ iloSoCpaJsonText = inner; } },
+			{ start: '[GENERATED_ILO_IGA_MAPPING]', end: '[/GENERATED_ILO_IGA_MAPPING]', assign: function(inner){ iloIgaJsonText = inner; } },
 		];
 		let remaining = content;
 		tagDefs.forEach(function(def){
@@ -553,6 +555,28 @@
 			} catch (e) {
 				console.error('[AI] Failed to parse GENERATED_ILO_SO_CPA_MAPPING JSON from AI:', e);
 				showInsertToast('AI ILO-SO-CPA mapping was not valid JSON.');
+			}
+		}
+		if (iloIgaJsonText){
+			try {
+				const parsed = JSON.parse(iloIgaJsonText.trim());
+				if (parsed && Array.isArray(parsed.iga_labels) && Array.isArray(parsed.mappings)) {
+					if (window.refreshIloIgaPartial && typeof window.refreshIloIgaPartial === 'function') {
+						const ok = window.refreshIloIgaPartial(parsed.iga_labels, parsed.mappings);
+						if (ok) {
+							showInsertToast('ILO-IGA mapping updated from AI.');
+						} else {
+							showInsertToast('Could not apply AI ILO-IGA mapping.');
+						}
+					} else {
+						console.warn('[AI] refreshIloIgaPartial helper not available');
+					}
+				} else {
+					console.warn('[AI] GENERATED_ILO_IGA_MAPPING payload missing iga_labels or mappings array');
+				}
+			} catch (e) {
+				console.error('[AI] Failed to parse GENERATED_ILO_IGA_MAPPING JSON from AI:', e);
+				showInsertToast('AI ILO-IGA mapping was not valid JSON.');
 			}
 		}
 		bubble.appendChild(title);
@@ -813,6 +837,9 @@
 				} else if (action === 'map-ilo-so-cpa') {
 					const msg = 'Map ILO-SO and ILO-CPA';
 					handleSend('ilo_so_cpa_mapping', msg);
+				} else if (action === 'map-ilo-iga') {
+					const msg = 'Map ILO-IGA';
+					handleSend('ilo_iga_mapping', msg);
 				} else {
 					// Other actions can be wired later; for now do nothing
 				}

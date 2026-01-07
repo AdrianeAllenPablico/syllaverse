@@ -1175,6 +1175,10 @@ document.addEventListener('DOMContentLoaded', function() {
 			updateInputStates();
 			// Keep non-ILO columns evenly distributed
 			equalizeNonIloColumns();
+			// Record this AI-applied change in the history/undo stack
+			if (typeof pushIloSoCpaSnapshot === 'function') {
+				pushIloSoCpaSnapshot(true);
+			}
 			// Re-render feather icons for control buttons after DOM changes
 			if (window.feather && typeof window.feather.replace === 'function') { try { window.feather.replace(); } catch(_){} }
 			// Restore focus if possible
