@@ -87,6 +87,16 @@
 			if (s.endsWith('|')) s = s.slice(0, -1);
 			return s.split('|').map(function(c){ return c.trim(); });
 		}
+		function renderCellText(el, text){
+			let v = String(text || '');
+			// Normalize HTML <br> tags from AI output into real line breaks
+			v = v.replace(/<br\s*\/?>(?!\n)/gi, '\n');
+			const parts = v.split(/\n/);
+			parts.forEach(function(part, idx){
+				if (idx > 0) el.appendChild(document.createElement('br'));
+				if (part) el.appendChild(document.createTextNode(part));
+			});
+		}
 		const headers = splitRow(headerLine);
 		if (!headers.length) return;
 		const wrap = document.createElement('div');
@@ -97,7 +107,7 @@
 		const htr = document.createElement('tr');
 		headers.forEach(function(h){
 			const th = document.createElement('th');
-			th.textContent = h;
+			renderCellText(th, h);
 			htr.appendChild(th);
 		});
 		thead.appendChild(htr);
@@ -111,7 +121,7 @@
 				const tr = document.createElement('tr');
 				cells.forEach(function(c){
 					const td = document.createElement('td');
-					td.textContent = c;
+					renderCellText(td, c);
 					tr.appendChild(td);
 				});
 				tbody.appendChild(tr);
@@ -390,6 +400,47 @@
 		parent.appendChild(container);
 	}
 
+	function renderTlaActivitiesCard(parent, markdown){
+		const container = document.createElement('div');
+		container.className = 'ai-tla-activities-container';
+		const card = document.createElement('div');
+		card.className = 'ai-tla-activities-card';
+		const header = document.createElement('div');
+		header.className = 'ai-card-header';
+		const title = document.createElement('div');
+		title.className = 'ai-card-title';
+		title.textContent = 'Teaching, Learning, and Assessment (TLA) Activities';
+		header.appendChild(title);
+		card.appendChild(header);
+		const body = document.createElement('div');
+		body.className = 'ai-card-body';
+		// Render the markdown table preview
+		renderMarkdownBlocks(body, markdown || '');
+		const btnWrap = document.createElement('div');
+		btnWrap.className = 'ai-card-button-wrapper';
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'ai-card-insert-btn';
+		btn.textContent = 'Insert';
+		btn.addEventListener('click', function(){
+			if (window.applyTlaFromAi && typeof window.applyTlaFromAi === 'function') {
+				const ok = window.applyTlaFromAi(markdown || '');
+				if (ok) {
+					showInsertToast('Inserted AI-generated TLA Activities.');
+				} else {
+					showInsertToast('Could not insert TLA Activities from this AI output.');
+				}
+			} else {
+				console.warn('[AI] applyTlaFromAi helper not available');
+			}
+		});
+		btnWrap.appendChild(btn);
+		body.appendChild(btnWrap);
+		card.appendChild(body);
+		container.appendChild(card);
+		parent.appendChild(container);
+	}
+
 	function renderAiMessage(bubble, text){
 		if (!bubble) return;
 		bubble.innerHTML = '';
@@ -404,14 +455,16 @@
 			return;
 		}
 
-		// Look for specially tagged generated blocks (course rationale, TLAS, ILO table)
+		// Look for specially tagged generated blocks (course rationale, TLAS, ILO table, TLA Activities)
 		let rationaleText = '';
 		let tlasText = '';
 		let iloTableText = '';
+		let tlaActivitiesTableText = '';
 		const tagDefs = [
 			{ start: '[GENERATED_COURSE_RATIONALE]', end: '[/GENERATED_COURSE_RATIONALE]', assign: function(inner){ rationaleText = inner; } },
 			{ start: '[GENERATED_TLAS]', end: '[/GENERATED_TLAS]', assign: function(inner){ tlasText = inner; } },
 			{ start: '[GENERATED_ILO_TABLE]', end: '[/GENERATED_ILO_TABLE]', assign: function(inner){ iloTableText = inner; } },
+			{ start: '[GENERATED_TLA_TABLE]', end: '[/GENERATED_TLA_TABLE]', assign: function(inner){ tlaActivitiesTableText = inner; } },
 		];
 		let remaining = content;
 		tagDefs.forEach(function(def){
@@ -436,6 +489,9 @@
 		}
 		if (iloTableText){
 			renderIloCard(body, iloTableText);
+		}
+		if (tlaActivitiesTableText){
+			renderTlaActivitiesCard(body, tlaActivitiesTableText);
 		}
 		bubble.appendChild(title);
 		bubble.appendChild(body);
@@ -679,6 +735,9 @@
 				} else if (action === 'generate-ilo') {
 					const msg = 'Propose a small, coherent set of Intended Learning Outcomes (ILO) for this course based on the current syllabus context.';
 					handleSend('ilo-generate', msg);
+				} else if (action === 'generate-tla-activities') {
+					const msg = 'Propose a structured week-by-week Teaching, Learning, and Assessment (TLA) Activities plan for this course based on the current syllabus context.';
+					handleSend('tla-activities-generate', msg);
 				} else {
 					// Other actions can be wired later; for now do nothing
 				}

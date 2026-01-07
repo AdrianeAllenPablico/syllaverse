@@ -725,6 +725,40 @@
 
         md.push('| ' + row.join(' | ') + ' |');
       });
+
+      // After the table, add a concise summary of which SO numbers
+      // actually link to each ILO based on non-empty SO cells. This
+      // gives the AI an easy-to-read mapping it can use when filling
+      // the TLA Activities "SO" column.
+      const iloSoSummaries = [];
+      raw.mappings.forEach(mapping => {
+        const iloLabel = textTrim(mapping.ilo || '');
+        if (!iloLabel) return;
+        const soNums = [];
+        raw.so_columns.forEach(soCol => {
+          const rawVal = (mapping.sos && Object.prototype.hasOwnProperty.call(mapping.sos, soCol)) ? mapping.sos[soCol] : '';
+          const v = textTrim(rawVal || '');
+          if (!v || v === '-' || v === '0') return;
+          const m = String(soCol || '').match(/(\d+)/);
+          const num = m ? m[1] : String(soCol || '').trim();
+          if (num && soNums.indexOf(num) === -1) {
+            soNums.push(num);
+          }
+        });
+        if (soNums.length) {
+          iloSoSummaries.push({ iloLabel, soNums });
+        }
+      });
+
+      md.push('');
+      if (!iloSoSummaries.length) {
+        md.push('No non-empty SO mappings are defined in the ILO-SO-CPA Mapping table (all SO cells are blank, "-", or "0").');
+      } else {
+        md.push('SO linkage summary (derived from the ILO-SO-CPA Mapping):');
+        iloSoSummaries.forEach(function(entry){
+          md.push('- ' + entry.iloLabel + ' is linked to SO ' + entry.soNums.join(', '));
+        });
+      }
     }
 
     return {
@@ -1042,6 +1076,21 @@
     const tbody = document.getElementById('at-tbody');
     let sections = [];
     let iloCount = 0;
+    const iloSummaryByNumber = {};
+
+    function recordIloUsage(taskLabel, iloColumns) {
+      const label = textTrim(taskLabel || '');
+      if (!label || !Array.isArray(iloColumns)) return;
+      iloColumns.forEach((rawVal, idx) => {
+        const v = textTrim(rawVal || '');
+        if (!v || v === '-' || v === '0') return;
+        const iloNumber = String(idx + 1); // ILO1 -> "1", ILO2 -> "2", etc.
+        if (!iloSummaryByNumber[iloNumber]) {
+          iloSummaryByNumber[iloNumber] = [];
+        }
+        iloSummaryByNumber[iloNumber].push({ task: label, value: v });
+      });
+    }
     
     if (tbody) {
       // Get ILO column count from table header
@@ -1125,6 +1174,8 @@
     } else {
       sections.forEach(section => {
         raw.sections.push(section);
+        // Record main task/category ILO usage, if any
+        recordIloUsage(section.task || section.code, section.iloColumns || []);
         
         if (section.subRows.length === 0) {
           const row = [section.code || '-', section.task || '-', '-', section.percent || ''];
@@ -1140,6 +1191,8 @@
           
           // Then show each sub-row with subtask in same Task column
           section.subRows.forEach((subRow) => {
+            // Record sub-task ILO usage for summary
+            recordIloUsage(subRow.task || subRow.code, subRow.iloColumns || []);
             const subRowArray = [];
             // Sub-task code in Code column
             subRowArray.push(subRow.code || '-');
@@ -1156,6 +1209,26 @@
             md.push('| ' + subRowArray.join(' | ') + ' |');
           });
         }
+      });
+    }
+
+    // Add a concise textual summary of which assessment tasks actually
+    // carry non-zero / non-placeholder item counts for each ILO. This
+    // makes it easier for the AI to reliably detect and use the ILO
+    // distribution information when generating TLA Activities.
+    const iloNumbers = Object.keys(iloSummaryByNumber);
+    if (iloNumbers.length === 0) {
+      md.push('');
+      md.push('No non-zero ILO item distributions are defined in the Assessment Method and Distribution Map (all ILO cells are blank, "-", or "0").');
+    } else {
+      md.push('');
+      md.push('ILO distribution summary (derived from the Assessment Method and Distribution Map):');
+      iloNumbers.sort(function(a, b){ return Number(a) - Number(b); });
+      iloNumbers.forEach(function(iloNum){
+        const entries = iloSummaryByNumber[iloNum] || [];
+        if (!entries.length) return;
+        const parts = entries.map(function(e){ return (e.task || '-') + ' (' + e.value + ')'; });
+        md.push('- ILO ' + iloNum + ': ' + parts.join('; '));
       });
     }
 
