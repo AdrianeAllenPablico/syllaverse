@@ -10,6 +10,47 @@
 
 	function $(id){ return document.getElementById(id); }
 
+	function showInsertToast(message){
+		try {
+			const msg = message || 'Inserted.';
+			let toast = document.querySelector('.sv-ai-insert-toast');
+			if (!toast){
+				toast = document.createElement('div');
+				toast.className = 'sv-ai-insert-toast';
+				toast.style.position = 'fixed';
+				toast.style.left = '50%';
+				toast.style.bottom = '24px';
+				toast.style.transform = 'translateX(-50%)';
+				toast.style.zIndex = '9999';
+				toast.style.padding = '0.6rem 1.1rem';
+				toast.style.borderRadius = '999px';
+				toast.style.background = 'rgba(0,0,0,0.78)';
+				toast.style.color = '#fff';
+				toast.style.fontSize = '0.875rem';
+				toast.style.boxShadow = '0 6px 18px rgba(0,0,0,0.25)';
+				toast.style.pointerEvents = 'none';
+				toast.style.maxWidth = '80%';
+				toast.style.textAlign = 'center';
+				toast.style.opacity = '0';
+				toast.style.transition = 'opacity 0.18s ease-out, transform 0.18s ease-out';
+				document.body.appendChild(toast);
+			}
+			toast.textContent = msg;
+			// Restart animation
+			toast.style.opacity = '0';
+			toast.style.transform = 'translateX(-50%) translateY(6px)';
+			requestAnimationFrame(function(){
+				toast.style.opacity = '1';
+				toast.style.transform = 'translateX(-50%) translateY(0)';
+			});
+			clearTimeout(toast._svHideTimer);
+			toast._svHideTimer = setTimeout(function(){
+				toast.style.opacity = '0';
+				toast.style.transform = 'translateX(-50%) translateY(6px)';
+			}, 2200);
+		} catch(e) { /* noop */ }
+	}
+
 	function splitBlocks(text){
 		return (text || '').split(/\n{2,}/).map(function(b){ return b.trim(); }).filter(Boolean);
 	}
@@ -220,6 +261,7 @@
 		} catch (e) {
 			// Best-effort; swallowing to avoid breaking UI
 		}
+		showInsertToast('Inserted into Course Rationale and Description.');
 	}
 
 	function renderCourseRationaleCard(parent, text){
@@ -245,7 +287,7 @@
 		const btn = document.createElement('button');
 		btn.type = 'button';
 		btn.className = 'ai-card-insert-btn';
-		btn.textContent = 'Insert into Course Info';
+		btn.textContent = 'Insert';
 		btn.addEventListener('click', function(){
 			insertCourseRationale(text || '');
 		});
@@ -277,10 +319,15 @@
 		const btn = document.createElement('button');
 		btn.type = 'button';
 		btn.className = 'ai-card-insert-btn';
-		btn.textContent = 'Insert ILO Rows';
+		btn.textContent = 'Insert';
 		btn.addEventListener('click', function(){
 			if (window.applyIloFromAi && typeof window.applyIloFromAi === 'function') {
-				window.applyIloFromAi(markdown || '');
+				const ok = window.applyIloFromAi(markdown || '');
+				if (ok) {
+					showInsertToast('Inserted AI-generated Intended Learning Outcomes.');
+				} else {
+					showInsertToast('Could not insert ILOs from this AI output.');
+				}
 			} else {
 				console.warn('[AI] applyIloFromAi helper not available');
 			}
@@ -307,6 +354,7 @@
 		} catch (e) {
 			// Best-effort; swallowing to avoid breaking UI
 		}
+		showInsertToast('Inserted into Teaching, Learning, and Assessment Strategies.');
 	}
 
 	function renderTlasCard(parent, text){
@@ -331,7 +379,7 @@
 		const btn = document.createElement('button');
 		btn.type = 'button';
 		btn.className = 'ai-card-insert-btn';
-		btn.textContent = 'Insert into TLAS Field';
+		btn.textContent = 'Insert';
 		btn.addEventListener('click', function(){
 			insertTlaStrategies(text || '');
 		});
