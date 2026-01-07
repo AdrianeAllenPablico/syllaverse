@@ -207,6 +207,56 @@
 		parent.appendChild(container);
 	}
 
+	function insertTlaStrategies(text){
+		const target = document.querySelector('[name="tla_strategies"]');
+		if (!target) {
+			console.warn('[AI] tla_strategies field not found for insert');
+			return;
+		}
+		target.value = text || '';
+		try {
+			const evtInput = new Event('input', { bubbles: true });
+			target.dispatchEvent(evtInput);
+			const evtChange = new Event('change', { bubbles: true });
+			target.dispatchEvent(evtChange);
+		} catch (e) {
+			// Best-effort; swallowing to avoid breaking UI
+		}
+	}
+
+	function renderTlasCard(parent, text){
+		const container = document.createElement('div');
+		container.className = 'ai-tlas-container';
+		const card = document.createElement('div');
+		card.className = 'ai-tlas-card';
+		const header = document.createElement('div');
+		header.className = 'ai-card-header';
+		const title = document.createElement('div');
+		title.className = 'ai-card-title';
+		title.textContent = 'Teaching, Learning, and Assessment Strategies';
+		header.appendChild(title);
+		card.appendChild(header);
+		const body = document.createElement('div');
+		body.className = 'ai-card-body';
+		const p = document.createElement('p');
+		renderInlineMarkdown(p, text || '');
+		body.appendChild(p);
+		const btnWrap = document.createElement('div');
+		btnWrap.className = 'ai-card-button-wrapper';
+		const btn = document.createElement('button');
+		btn.type = 'button';
+		btn.className = 'ai-card-insert-btn';
+		btn.textContent = 'Insert into TLAS Field';
+		btn.addEventListener('click', function(){
+			insertTlaStrategies(text || '');
+		});
+		btnWrap.appendChild(btn);
+		body.appendChild(btnWrap);
+		card.appendChild(body);
+		container.appendChild(card);
+		parent.appendChild(container);
+	}
+
 	function renderAiMessage(bubble, text){
 		if (!bubble) return;
 		bubble.innerHTML = '';
@@ -221,25 +271,33 @@
 			return;
 		}
 
-		// Look for specially tagged generated course rationale block
-		let insertBlockText = '';
-		const tagStart = '[GENERATED_COURSE_RATIONALE]';
-		const tagEnd = '[/GENERATED_COURSE_RATIONALE]';
-		const startIdx = content.indexOf(tagStart);
-		const endIdx = content.indexOf(tagEnd);
-		if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx){
-			const inner = content.slice(startIdx + tagStart.length, endIdx).trim();
-			insertBlockText = inner;
-			// Remove the tagged block from the rest of the content
-			content = (content.slice(0, startIdx) + content.slice(endIdx + tagEnd.length)).trim();
+		// Look for specially tagged generated blocks (course rationale, TLAS)
+		let rationaleText = '';
+		let tlasText = '';
+		const tagDefs = [
+			{ start: '[GENERATED_COURSE_RATIONALE]', end: '[/GENERATED_COURSE_RATIONALE]', assign: function(inner){ rationaleText = inner; } },
+			{ start: '[GENERATED_TLAS]', end: '[/GENERATED_TLAS]', assign: function(inner){ tlasText = inner; } },
+		];
+		let remaining = content;
+		tagDefs.forEach(function(def){
+			const sIdx = remaining.indexOf(def.start);
+			const eIdx = remaining.indexOf(def.end);
+			if (sIdx !== -1 && eIdx !== -1 && eIdx > sIdx){
+				const inner = remaining.slice(sIdx + def.start.length, eIdx).trim();
+				def.assign(inner);
+				remaining = (remaining.slice(0, sIdx) + remaining.slice(eIdx + def.end.length)).trim();
+			}
+		});
+
+		if (remaining){
+			renderMarkdownBlocks(body, remaining);
 		}
 
-		if (content){
-			renderMarkdownBlocks(body, content);
+		if (rationaleText){
+			renderCourseRationaleCard(body, rationaleText);
 		}
-
-		if (insertBlockText){
-			renderCourseRationaleCard(body, insertBlockText);
+		if (tlasText){
+			renderTlasCard(body, tlasText);
 		}
 		bubble.appendChild(title);
 		bubble.appendChild(body);
@@ -477,6 +535,9 @@
 				if (action === 'generate-course-rationale') {
 					const msg = 'Generate a concise Course Rationale and Description for this course based on the current syllabus context.';
 					handleSend('course-rationale', msg);
+				} else if (action === 'generate-tlas') {
+					const msg = 'Generate a concise Teaching, Learning, and Assessment Strategies narrative for this course based on the current syllabus context.';
+					handleSend('tlas', msg);
 				} else {
 					// Other actions can be wired later; for now do nothing
 				}
