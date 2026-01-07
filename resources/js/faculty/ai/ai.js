@@ -89,7 +89,8 @@
     if (promptsInfo) {
       formData.append('prompts', promptsInfo);
     }
-    formData.append('history', JSON.stringify(Array.isArray(history) ? history.slice(-10) : []));
+    // Always send an empty history so all AI calls are stateless.
+    formData.append('history', JSON.stringify([]));
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 

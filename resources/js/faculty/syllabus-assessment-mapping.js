@@ -74,8 +74,10 @@ document.addEventListener('DOMContentLoaded', function() {
 		//  - ["1", "1-2"] → ["1-2"]
 		//  - ["2", "3-4"] → ["2", "3-4"] (no merging to 2-4)
 		function parseInterval(label){
-			const t = String(label || '').trim();
-			if (!t) return null;
+			const raw = String(label || '').trim();
+			if (!raw) return null;
+			// Normalize different dash characters (en dash, em dash, etc.) to a plain hyphen
+			const t = raw.replace(/[\u2012-\u2015]/g, '-');
 			const mRange = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(t);
 			if (mRange){
 				const a = parseInt(mRange[1], 10);
@@ -118,20 +120,32 @@ document.addEventListener('DOMContentLoaded', function() {
 			});
 		});
 
-		// Build final labels: include ranges, then any singles not covered by a range, then non-numeric
+		// Build final labels in ascending numeric order:
+		//  - keep ranges as-is
+		//  - drop single weeks that are contained inside any range
+		//  - sort the remaining numeric tokens by their start week
+		//  - then append any non-numeric tokens, in the order first seen
 		const weekLabels = [];
 		const pushLabel = (lbl) => { if (!weekLabels.includes(lbl)) weekLabels.push(lbl); };
-		// Ranges first, preserving encounter order
-		for (const r of ranges) {
-			pushLabel(r.start === r.end ? String(r.start) : (r.start + '-' + r.end));
-		}
-		// Singles next, only if not contained in any existing range
-		for (const s of singles) {
-			const n = s.start;
-			const contained = ranges.some(r => n >= r.start && n <= r.end);
-			if (!contained) pushLabel(String(n));
-		}
-		// Finally non-numeric tokens
+		// Filter out singles that are covered by any numeric range
+		const singlesNotCovered = singles.filter(function(s) {
+			return !ranges.some(function(r) {
+				return s.start >= r.start && s.start <= r.end;
+			});
+		});
+
+		// Combine ranges and uncovered singles, then sort by start (and end as tie-breaker)
+		const numericIntervals = ranges.concat(singlesNotCovered).sort(function(a, b) {
+			if (a.start !== b.start) return a.start - b.start;
+			return a.end - b.end;
+		});
+
+		numericIntervals.forEach(function(iv) {
+			const lbl = iv.start === iv.end ? String(iv.start) : (iv.start + '-' + iv.end);
+			pushLabel(lbl);
+		});
+
+		// Finally non-numeric tokens (keep original encounter order)
 		for (const nn of nonNumericOrdered) pushLabel(nn);
 		
 		const headerRow = weekTable.querySelector('tr:first-child');
@@ -959,4 +973,165 @@ if (saveBtn) {
 		originalSyncDistribution();
 		setTimeout(checkAssessmentMethodOverflow, 300);
 	};
+
+	// Apply an AI-generated Assessment Schedule markdown table directly to the
+	// Assessment Schedule Mapping UI. The markdown is expected to contain a
+	// single table whose first column is "Assessment Method" or
+	// "Assessment Task" and remaining columns are "Week X" labels, with
+	// "x" marks indicating scheduled weeks.
+	window.applyAssessmentScheduleFromAi = function(markdown){
+		try {
+			const text = String(markdown || '').trim();
+			if (!text) return false;
+
+			const distributionTable = document.querySelector('.assessment-mapping table.distribution');
+			const weekTable = document.querySelector('.assessment-mapping table.week');
+			if (!distributionTable || !weekTable) {
+				console.warn('[AI] Assessment mapping tables not found');
+				return false;
+			}
+
+			// If the week header is still in the initial "No weeks" placeholder
+			// state, sync week columns once from the TLA weeks. Otherwise, keep the
+			// existing column order exactly as-is.
+			let headerRow = weekTable.querySelector('tr:first-child');
+			let headerThs = headerRow ? Array.from(headerRow.querySelectorAll('th.week-number')) : [];
+			const hasOnlyPlaceholder = headerThs.length === 1 && (headerThs[0].textContent || '').trim() === 'No weeks';
+			if (hasOnlyPlaceholder && window.syncWeekColumnsWithTLA && typeof window.syncWeekColumnsWithTLA === 'function') {
+				try { window.syncWeekColumnsWithTLA(true); } catch(e) { /* noop */ }
+				// Re-read headers after sync, since the DOM has changed
+				headerRow = weekTable.querySelector('tr:first-child');
+				headerThs = headerRow ? Array.from(headerRow.querySelectorAll('th.week-number')) : [];
+			}
+
+			// Very small markdown table parser
+			const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+			if (lines.length < 2) return false;
+
+			function parseRow(line){
+				let s = String(line || '').trim();
+				if (!s.includes('|')) return [];
+				if (s.startsWith('|')) s = s.slice(1);
+				if (s.endsWith('|')) s = s.slice(0, -1);
+				return s.split('|').map(c => c.trim());
+			}
+
+			const headerCells = parseRow(lines[0]);
+			if (headerCells.length < 2) return false;
+			// First column must clearly be an assessment label column
+			if (!/assessment\s+(method|task)/i.test(headerCells[0] || '')) return false;
+
+			// Skip optional divider row if present
+			let dataStart = 1;
+			if (lines.length > 1 && /^\|?\s*:?-{3,}/.test(lines[1])) {
+				dataStart = 2;
+			}
+
+			// Map week headers (strip "Week" prefix)
+			const weekHeadersFromAi = headerCells.slice(1).map(h => {
+				const m = h.match(/week\s*(.+)/i);
+				return m ? m[1].trim() : h.trim();
+			});
+
+			// Parse data rows into a simple map: name -> { weekLabel -> true }
+			const aiRows = [];
+			for (let i = dataStart; i < lines.length; i++) {
+				const cells = parseRow(lines[i]);
+				if (!cells.length) continue;
+				const name = (cells[0] || '').trim();
+				if (!name) continue;
+				const marks = {};
+				for (let j = 1; j < cells.length && j - 1 < weekHeadersFromAi.length; j++) {
+					const v = (cells[j] || '').trim();
+					if (/^x$/i.test(v)) {
+						const lbl = weekHeadersFromAi[j - 1];
+						if (lbl) marks[lbl] = true;
+					}
+				}
+				aiRows.push({ name, marks });
+			}
+			if (!aiRows.length) return false;
+
+			const aiByName = new Map();
+			aiRows.forEach(r => {
+				aiByName.set(r.name.toLowerCase(), r);
+			});
+
+			// Current week labels from the UI (skip placeholder)
+			const uiWeekLabels = [];
+			headerThs.forEach(th => {
+				const lbl = (th.textContent || '').trim();
+				if (lbl && lbl !== 'No weeks') uiWeekLabels.push(lbl);
+			});
+			if (!uiWeekLabels.length) {
+				// Nothing to map against
+				return false;
+			}
+			const uiWeekIndex = new Map();
+			uiWeekLabels.forEach((lbl, idx) => uiWeekIndex.set(lbl, idx));
+
+			// Apply marks row-by-row, matching by assessment name. Before
+			// applying the new mapping, clear ALL existing "x" marks so the
+			// schedule always reflects only the latest AI output.
+			const distRows = Array.from(distributionTable.querySelectorAll('tr:not(:first-child)'));
+			const weekRows = Array.from(weekTable.querySelectorAll('tr:not(:first-child)'));
+			// Clear all marks first (full overwrite semantics)
+			weekRows.forEach(function(weekRow){
+				Array.from(weekRow.querySelectorAll('td.week-mapping')).forEach(function(cell){
+					if (!cell) return;
+					if (cell.textContent.trim() || cell.classList.contains('marked')) {
+						cell.textContent = '';
+						cell.classList.remove('marked');
+						cell.style.color = '';
+						try {
+							cell.dispatchEvent(new Event('change', { bubbles: true }));
+						} catch(e) { /* noop */ }
+					}
+				});
+			});
+			let anyChange = false;
+
+			distRows.forEach((distRow, rowIdx) => {
+				const input = distRow.querySelector('input.distribution-input');
+				const name = (input && input.value ? input.value.trim() : '');
+				if (!name) return;
+				const aiRow = aiByName.get(name.toLowerCase()) || null;
+				const weekRow = weekRows[rowIdx];
+				if (!weekRow) return;
+				const cells = Array.from(weekRow.querySelectorAll('td.week-mapping'));
+
+				uiWeekLabels.forEach((lbl, colIdx) => {
+					const cell = cells[colIdx];
+					if (!cell) return;
+					const shouldMark = !!(aiRow && aiRow.marks && aiRow.marks[lbl]);
+					const currentlyMarked = cell.textContent.trim() === 'x';
+					if (shouldMark === currentlyMarked) return;
+					anyChange = true;
+					if (shouldMark) {
+						cell.textContent = 'x';
+						cell.classList.add('marked');
+						cell.style.color = '#000';
+					} else {
+						cell.textContent = '';
+						cell.classList.remove('marked');
+						cell.style.color = '';
+					}
+					// Fire change event so undo/redo and progress tracking can capture
+					try {
+						cell.dispatchEvent(new Event('change', { bubbles: true }));
+					} catch(e) { /* noop */ }
+				});
+			});
+
+			// At this point the AI schedule was parsed successfully and applied
+			// against the existing grid. Even if no individual cell changed,
+			// consider this a successful application so the caller does not
+			// treat a "no-op" as a failure.
+			return true;
+		} catch (e) {
+			console.warn('[AI] Failed to apply Assessment Schedule from AI', e);
+			return false;
+		}
+	};
+
 });

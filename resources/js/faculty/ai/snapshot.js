@@ -116,7 +116,8 @@
 
     // Build concise markdown table for consistency
     const md = [];
-    md.push('### Mission & Vision');
+      md.push('### Mission & Vision');
+      md.push('_This is the current snapshot of the Mission & Vision section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('| Label | Text |');
     md.push('|:--|:--|');
     md.push(`| Vision | ${vision || '-'} |`);
@@ -153,7 +154,8 @@
     ];
 
     const md = [];
-    md.push('### Course Information');
+      md.push('### Course Information');
+      md.push('_This is the current snapshot of the Course Information section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('| Field | Value |');
     md.push('|:--|:--|');
     const raw = {};
@@ -207,7 +209,8 @@
     }
 
     const md = [];
-    md.push('### Criteria for Assessment');
+      md.push('### Criteria for Assessment');
+      md.push('_This is the current snapshot of the Criteria for Assessment section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('| Category | Assessment | Percent |');
     md.push('|:--|:--|:--|');
     
@@ -248,7 +251,8 @@
     const tlas = tlasEl ? textTrim(tlasEl.value ?? tlasEl.textContent ?? '') : '';
 
     const md = [];
-    md.push('### Teaching, Learning, and Assessment Strategies');
+      md.push('### Teaching, Learning, and Assessment Strategies');
+      md.push('_This is the current snapshot of the Teaching, Learning, and Assessment Strategies section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('');
     md.push(tlas || '-');
 
@@ -307,6 +311,7 @@
     });
 
     md.push('### Teaching, Learning, and Assessment (TLA) Activities');
+    md.push('_This is the current snapshot of the Teaching, Learning, and Assessment (TLA) Activities table from the live syllabus. Treat this as the most up-to-date authoritative data for weeks and activities._');
     md.push('| Ch. | Topics / Reading List | Wks. | Topic Outcomes | ILO | SO | Delivery Method |');
     md.push('|:---:|:---|:---:|:---|:---:|:---:|:---|');
 
@@ -344,7 +349,8 @@
     }
 
     const md = [];
-    md.push('### Intended Learning Outcomes (ILO)');
+      md.push('### Intended Learning Outcomes (ILO)');
+      md.push('_This is the current snapshot of the Intended Learning Outcomes (ILO) section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('| Code | Description |');
     md.push('|:--|:--|');
     
@@ -387,7 +393,8 @@
     }
 
     const md = [];
-    md.push('### Student Outcomes (SO)');
+      md.push('### Student Outcomes (SO)');
+      md.push('_This is the current snapshot of the Student Outcomes (SO) section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('| Code | Title | Description |');
     md.push('|:--|:--|:--|');
     
@@ -430,7 +437,8 @@
     }
 
     const md = [];
-    md.push('### CDIO Framework Skills (CDIO)');
+      md.push('### CDIO Framework Skills (CDIO)');
+      md.push('_This is the current snapshot of the CDIO Framework Skills section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('| Code | Title | Description |');
     md.push('|:--|:--|:--|');
     
@@ -473,7 +481,8 @@
     }
 
     const md = [];
-    md.push('### Sustainable Development Goals (SDG)');
+      md.push('### Sustainable Development Goals (SDG)');
+      md.push('_This is the current snapshot of the Sustainable Development Goals (SDG) section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('| Code | Title | Description |');
     md.push('|:--|:--|:--|');
     
@@ -516,7 +525,8 @@
     }
 
     const md = [];
-    md.push('### Institutional Graduate Attributes (IGA)');
+      md.push('### Institutional Graduate Attributes (IGA)');
+      md.push('_This is the current snapshot of the Institutional Graduate Attributes (IGA) section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     md.push('| Code | Title | Description |');
     md.push('|:--|:--|:--|');
     
@@ -569,13 +579,18 @@
       const input = distRow.querySelector('input.distribution-input');
       const name = textTrim(input?.value ?? '');
 
-      // Get week marks from corresponding week row
+      // Get week marks from corresponding week row, but DO NOT expose
+      // the actual "x" marks in the markdown snapshot. This ensures the
+      // AI cannot treat existing marks as evidence and must recompute
+      // the mapping solely from TLA Activities and assessment tasks.
       const weekRow = weekRows[idx];
       const weekCells = weekRow ? Array.from(weekRow.querySelectorAll('td.week-mapping')) : [];
       const weekMarks = {};
 
       weekCells.forEach((cell, cellIdx) => {
         if (cellIdx < weekLabels.length) {
+          // Still record raw marks for internal use, but the markdown
+          // we expose to the AI will not include them.
           const mark = textTrim(cell.textContent ?? '');
           weekMarks[weekLabels[cellIdx]] = mark;
         }
@@ -587,6 +602,7 @@
     });
 
     md.push('### Assessment Schedule');
+    md.push('_This is the current snapshot of the Assessment Schedule Mapping from the live syllabus. Treat this as the most up-to-date authoritative data for how assessments are currently scheduled._');
     
     if (raw.assessments.length === 0) {
       md.push('| Assessment Method | (No weeks scheduled) |');
@@ -606,7 +622,10 @@
       raw.assessments.forEach(a => {
         const row = [a.name];
         weekLabels.forEach(wk => {
-          row.push(a.marks[wk] || '-');
+          // Do NOT show existing marks here; leave cells empty so the
+          // AI sees only the task names and week columns, never the
+          // current mapping pattern.
+          row.push('');
         });
         md.push('| ' + row.join(' | ') + ' |');
       });
@@ -699,6 +718,7 @@
 
     // Build markdown table
     md.push('### ILO-SO-CPA Mapping');
+    md.push('_This is the current snapshot of the ILO-SO-CPA Mapping section from the live syllabus. Treat this as the most up-to-date authoritative data._');
 
     if (raw.mappings.length === 0) {
       md.push('| ILO | (No data) |');
@@ -838,6 +858,7 @@
 
     // Build markdown table
     md.push('### ILO-IGA Mapping');
+    md.push('_This is the current snapshot of the ILO-IGA Mapping section from the live syllabus. Treat this as the most up-to-date authoritative data._');
 
     if (raw.mappings.length === 0) {
       md.push('| ILO | (No data) |');
@@ -968,6 +989,7 @@
 
     // Build markdown table
     md.push('### ILO-CDIO-SDG Mapping');
+    md.push('_This is the current snapshot of the ILO-CDIO-SDG Mapping section from the live syllabus. Treat this as the most up-to-date authoritative data._');
 
     if (raw.mappings.length === 0) {
       md.push('| ILO | (No data) |');
@@ -1037,7 +1059,8 @@
     });
 
     const md = [];
-    md.push('### Textbook and References');
+      md.push('### Textbook and References');
+      md.push('_This is the current snapshot of the Textbook and References section from the live syllabus. Treat this as the most up-to-date authoritative data._');
     
     const typeLabels = {
       main: 'Textbook',
@@ -1155,7 +1178,8 @@
     }
 
     const md = [];
-    md.push('### Assessment Method and Distribution Map');
+      md.push('### Assessment Method and Distribution Map');
+      md.push('_This is the current snapshot of the Assessment Method and Distribution Map section from the live syllabus. Treat this as the most up-to-date authoritative data for assessment tasks and their ILO distributions._');
     
     // Build header with ILO numbers and CPA
     let headerCols = ['Code', 'Task', 'I/R/D', '%'];

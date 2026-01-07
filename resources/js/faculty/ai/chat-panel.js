@@ -441,6 +441,27 @@
 		parent.appendChild(container);
 	}
 
+	function renderAssessmentScheduleCard(parent, markdown){
+		const container = document.createElement('div');
+		container.className = 'ai-assessment-schedule-container';
+		const card = document.createElement('div');
+		card.className = 'ai-assessment-schedule-card';
+		const header = document.createElement('div');
+		header.className = 'ai-card-header';
+		const title = document.createElement('div');
+		title.className = 'ai-card-title';
+		title.textContent = 'Assessment Schedule Mapping';
+		header.appendChild(title);
+		card.appendChild(header);
+		const body = document.createElement('div');
+		body.className = 'ai-card-body';
+		// Render the markdown table preview
+		renderMarkdownBlocks(body, markdown || '');
+		card.appendChild(body);
+		container.appendChild(card);
+		parent.appendChild(container);
+	}
+
 	function renderAiMessage(bubble, text){
 		if (!bubble) return;
 		bubble.innerHTML = '';
@@ -460,11 +481,13 @@
 		let tlasText = '';
 		let iloTableText = '';
 		let tlaActivitiesTableText = '';
+		let assessmentScheduleTableText = '';
 		const tagDefs = [
 			{ start: '[GENERATED_COURSE_RATIONALE]', end: '[/GENERATED_COURSE_RATIONALE]', assign: function(inner){ rationaleText = inner; } },
 			{ start: '[GENERATED_TLAS]', end: '[/GENERATED_TLAS]', assign: function(inner){ tlasText = inner; } },
 			{ start: '[GENERATED_ILO_TABLE]', end: '[/GENERATED_ILO_TABLE]', assign: function(inner){ iloTableText = inner; } },
 			{ start: '[GENERATED_TLA_TABLE]', end: '[/GENERATED_TLA_TABLE]', assign: function(inner){ tlaActivitiesTableText = inner; } },
+			{ start: '[GENERATED_ASSESSMENT_SCHEDULE]', end: '[/GENERATED_ASSESSMENT_SCHEDULE]', assign: function(inner){ assessmentScheduleTableText = inner; } },
 		];
 		let remaining = content;
 		tagDefs.forEach(function(def){
@@ -492,6 +515,21 @@
 		}
 		if (tlaActivitiesTableText){
 			renderTlaActivitiesCard(body, tlaActivitiesTableText);
+		}
+		if (assessmentScheduleTableText){
+			// Show a preview of the generated Assessment Schedule mapping
+			// and also auto-apply it to the Assessment Schedule Mapping UI.
+			renderAssessmentScheduleCard(body, assessmentScheduleTableText);
+			if (window.applyAssessmentScheduleFromAi && typeof window.applyAssessmentScheduleFromAi === 'function') {
+				const ok = window.applyAssessmentScheduleFromAi(assessmentScheduleTableText);
+				if (ok) {
+					showInsertToast('Assessment Schedule mapping updated from AI.');
+				} else {
+					showInsertToast('Could not apply AI Assessment Schedule mapping.');
+				}
+			} else {
+				console.warn('[AI] applyAssessmentScheduleFromAi helper not available');
+			}
 		}
 		bubble.appendChild(title);
 		bubble.appendChild(body);
@@ -683,7 +721,14 @@
 				: (input && input.value || '').trim();
 			if (!message) return;
 
-			const history = getHistory();
+			// For some structured actions (like Assessment Schedule mapping), we want
+			// a fresh, stateless call that relies ONLY on the current snapshots and
+			// prompt, not on prior chat turns. For those, skip history entirely.
+			// For regular chat, keep the rolling history.
+			let history = [];
+			if (partialKey !== 'assessment_schedule') {
+				history = getHistory();
+			}
 			appendMessage('user', message);
 			if (input) input.value = '';
 			const loadingMsg = appendMessage('ai', 'Thinking…', { loading:true });
@@ -738,6 +783,9 @@
 				} else if (action === 'generate-tla-activities') {
 					const msg = 'Propose a structured week-by-week Teaching, Learning, and Assessment (TLA) Activities plan for this course based on the current syllabus context.';
 					handleSend('tla-activities-generate', msg);
+				} else if (action === 'map-assessment-schedule') {
+					const msg = 'Map Assessment Schedule';
+					handleSend('assessment_schedule', msg);
 				} else {
 					// Other actions can be wired later; for now do nothing
 				}

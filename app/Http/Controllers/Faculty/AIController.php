@@ -219,26 +219,9 @@ class AIController extends Controller
             ];
         }
 
-        // Add conversation history (last 10 messages) so the AI can see
-        // prior turns. Accept either a `text` or `content` field for
-        // compatibility with different frontend payload shapes.
-        $recentHistory = array_slice($history, -10);
-        foreach ($recentHistory as $msg) {
-            if (!isset($msg['role'])) {
-                continue;
-            }
-
-            $content = $msg['text'] ?? ($msg['content'] ?? null);
-            if ($content === null || $content === '') {
-                continue;
-            }
-
-            $role = $msg['role'] === 'user' ? 'user' : 'assistant';
-            $messages[] = [
-                'role' => $role,
-                'content' => $content,
-            ];
-        }
+        // Do NOT replay any prior conversation history; all syllabus
+        // helper calls are treated as stateless and must rely only on
+        // the current snapshots, prompts, and user message.
 
         // Add current user message
         $messages[] = [
