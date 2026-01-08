@@ -484,6 +484,7 @@
 		let assessmentScheduleTableText = '';
 		let iloSoCpaJsonText = '';
 		let iloIgaJsonText = '';
+		let iloCdioSdgJsonText = '';
 		const tagDefs = [
 			{ start: '[GENERATED_COURSE_RATIONALE]', end: '[/GENERATED_COURSE_RATIONALE]', assign: function(inner){ rationaleText = inner; } },
 			{ start: '[GENERATED_TLAS]', end: '[/GENERATED_TLAS]', assign: function(inner){ tlasText = inner; } },
@@ -492,6 +493,7 @@
 			{ start: '[GENERATED_ASSESSMENT_SCHEDULE]', end: '[/GENERATED_ASSESSMENT_SCHEDULE]', assign: function(inner){ assessmentScheduleTableText = inner; } },
 			{ start: '[GENERATED_ILO_SO_CPA_MAPPING]', end: '[/GENERATED_ILO_SO_CPA_MAPPING]', assign: function(inner){ iloSoCpaJsonText = inner; } },
 			{ start: '[GENERATED_ILO_IGA_MAPPING]', end: '[/GENERATED_ILO_IGA_MAPPING]', assign: function(inner){ iloIgaJsonText = inner; } },
+			{ start: '[GENERATED_ILO_CDIO_SDG_MAPPING]', end: '[/GENERATED_ILO_CDIO_SDG_MAPPING]', assign: function(inner){ iloCdioSdgJsonText = inner; } },
 		];
 		let remaining = content;
 		tagDefs.forEach(function(def){
@@ -577,6 +579,36 @@
 			} catch (e) {
 				console.error('[AI] Failed to parse GENERATED_ILO_IGA_MAPPING JSON from AI:', e);
 				showInsertToast('AI ILO-IGA mapping was not valid JSON.');
+			}
+		}
+		if (iloCdioSdgJsonText){
+			try {
+				const parsed = JSON.parse(iloCdioSdgJsonText.trim());
+				if (parsed && Array.isArray(parsed.mappings)) {
+					const mappingEl = document.querySelector('.ilo-cdio-sdg-mapping');
+					if (mappingEl && typeof window.refreshIloCdioSdgPartial === 'function') {
+						// Persist column label arrays on the root element if provided
+						if (Array.isArray(parsed.cdio_columns)) {
+							try { mappingEl.setAttribute('data-cdio-columns', JSON.stringify(parsed.cdio_columns)); } catch(_) {}
+						}
+						if (Array.isArray(parsed.sdg_columns)) {
+							try { mappingEl.setAttribute('data-sdg-columns', JSON.stringify(parsed.sdg_columns)); } catch(_) {}
+						}
+						const ok = window.refreshIloCdioSdgPartial(parsed.mappings);
+						if (ok) {
+							showInsertToast('ILO-CDIO-SDG mapping updated from AI.');
+						} else {
+							showInsertToast('Could not apply AI ILO-CDIO-SDG mapping.');
+						}
+					} else {
+						console.warn('[AI] refreshIloCdioSdgPartial helper or mapping container not available');
+					}
+				} else {
+					console.warn('[AI] GENERATED_ILO_CDIO_SDG_MAPPING payload missing mappings array');
+				}
+			} catch (e) {
+				console.error('[AI] Failed to parse GENERATED_ILO_CDIO_SDG_MAPPING JSON from AI:', e);
+				showInsertToast('AI ILO-CDIO-SDG mapping was not valid JSON.');
 			}
 		}
 		bubble.appendChild(title);
@@ -840,6 +872,9 @@
 				} else if (action === 'map-ilo-iga') {
 					const msg = 'Map ILO-IGA';
 					handleSend('ilo_iga_mapping', msg);
+				} else if (action === 'map-ilo-cdio-sdg') {
+					const msg = 'Map ILO-CDIO and ILO-SDG linkages for this course based on the current syllabus context.';
+					handleSend('ilo_cdio_sdg_mapping', msg);
 				} else {
 					// Other actions can be wired later; for now do nothing
 				}

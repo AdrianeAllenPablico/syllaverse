@@ -78,33 +78,31 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const mappings = JSON.parse(mappingsData);
 
-            if (!mappings || mappings.length === 0) return;
-
-            // Prefer explicit column label arrays from normalized tables, if provided
+            // Prefer explicit column label arrays from normalized tables or AI output, if provided.
+            // Supports both [{ label: "CDIO 1" }, ...] and ["1", "2", ...] formats.
             let cdioLabels = [];
             let sdgLabels = [];
 
-            if (cdioColumnsData) {
+            const extractLabels = (raw) => {
+                if (!raw) return [];
                 try {
-                    const cols = JSON.parse(cdioColumnsData);
-                    if (Array.isArray(cols)) {
-                        cdioLabels = cols.map(col => (col && typeof col.label === 'string') ? col.label : '').filter(() => true);
-                    }
+                    const cols = JSON.parse(raw);
+                    if (!Array.isArray(cols)) return [];
+                    return cols
+                        .map(col => {
+                            if (col && typeof col === 'object' && typeof col.label === 'string') return col.label;
+                            if (typeof col === 'string') return col;
+                            return '';
+                        })
+                        .filter(label => label !== '');
                 } catch (e) {
-                    console.warn('Failed to parse data-cdio-columns, falling back to mapping-derived labels', e);
+                    console.warn('Failed to parse column labels JSON', e);
+                    return [];
                 }
-            }
+            };
 
-            if (sdgColumnsData) {
-                try {
-                    const cols = JSON.parse(sdgColumnsData);
-                    if (Array.isArray(cols)) {
-                        sdgLabels = cols.map(col => (col && typeof col.label === 'string') ? col.label : '').filter(() => true);
-                    }
-                } catch (e) {
-                    console.warn('Failed to parse data-sdg-columns, falling back to mapping-derived labels', e);
-                }
-            }
+            cdioLabels = extractLabels(cdioColumnsData);
+            sdgLabels = extractLabels(sdgColumnsData);
 
             // Fallback for legacy data: derive labels from mapping keys if no column arrays exist
             if (cdioLabels.length === 0 || sdgLabels.length === 0) {
@@ -220,6 +218,63 @@ document.addEventListener('DOMContentLoaded', function() {
                     while (currentSdg < desiredSdgCount) { addSdgColumn(); currentSdg = countSdgCols(); }
                     while (currentSdg > desiredSdgCount) { removeSdgColumn(); currentSdg = countSdgCols(); }
                     const sdgHeaders = Array.from(headerRow2.querySelectorAll('th.sdg-label-cell')).filter(th => !th.textContent.includes('No SDG'));
+
+                    // Normalize and apply header labels so CDIO/SDG show only the numeric code (e.g., "1" instead of "CDIO1").
+                    const extractLabelsForHeaders = (raw) => {
+                        if (!raw) return [];
+                        try {
+                            const cols = JSON.parse(raw);
+                            if (!Array.isArray(cols)) return [];
+                            return cols.map(col => {
+                                if (col && typeof col === 'object' && typeof col.label === 'string') return col.label;
+                                if (typeof col === 'string') return col;
+                                return '';
+                            });
+                        } catch (_) {
+                            return [];
+                        }
+                    };
+
+                    const normalizeCodeLabel = (label, prefix) => {
+                        if (!label) return '';
+                        const str = String(label).trim();
+                        if (!str) return '';
+                        // Match patterns like "CDIO1", "CDIO 1", "CDIO-1", case-insensitive
+                        const rePrefix = new RegExp('^' + prefix + '\\s*[-:]?\\s*(\\d+)', 'i');
+                        const mPrefix = str.match(rePrefix);
+                        if (mPrefix) return mPrefix[1];
+                        // Match leading number like "1.", "1. Something", or just "1"
+                        const mNum = str.match(/^(\d+)/);
+                        if (mNum) return mNum[1];
+                        return str;
+                    };
+
+                    const cdioLabelsRaw = mapping.getAttribute('data-cdio-columns') || '[]';
+                    const sdgLabelsRaw = mapping.getAttribute('data-sdg-columns') || '[]';
+                    const cdioLabelValues = extractLabelsForHeaders(cdioLabelsRaw);
+                    const sdgLabelValues = extractLabelsForHeaders(sdgLabelsRaw);
+
+                    cdioHeaders.forEach((th, idx) => {
+                        const rawLabel = cdioLabelValues[idx] || '';
+                        const code = normalizeCodeLabel(rawLabel, 'CDIO');
+                        const input = th.querySelector('input');
+                        if (input) {
+                            input.value = code;
+                        } else {
+                            th.textContent = code || 'CDIO';
+                        }
+                    });
+
+                    sdgHeaders.forEach((th, idx) => {
+                        const rawLabel = sdgLabelValues[idx] || '';
+                        const code = normalizeCodeLabel(rawLabel, 'SDG');
+                        const input = th.querySelector('input');
+                        if (input) {
+                            input.value = code;
+                        } else {
+                            th.textContent = code || 'SDG';
+                        }
+                    });
 
                     // Ensure ILO rows count
                     const dataRowsAll = Array.from(innerTable.querySelectorAll('tr')).slice(3); // rows after headers
