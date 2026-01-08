@@ -117,7 +117,7 @@
                     }
                   }
                 @endphp
-                <span class="text-muted">{{ $departmentName }}</span>
+                <span class="text-muted sv-dept-truncate" title="{{ $departmentName }}">{{ $departmentName }}</span>
               </td>
 
               <td class="text-end">

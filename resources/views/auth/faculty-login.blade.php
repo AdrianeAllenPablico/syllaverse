@@ -204,8 +204,8 @@
             : ($sessionPending !== ''
                 ? $sessionPending
                 : ($sessionApproval !== ''
-                    ? $sessionApproval
-                    : 'Your account is pending approval. You will be notified once approved.')))
+          ? $sessionApproval
+          : 'Your account is pending for approval.')))
     )
     @if($pendingMsg !== '' || $approvalMsg !== '' || $sessionPending !== '' || $sessionApproval !== '')
       <div class="alert alert-warning" style="background-color: #fef8e7; border-color: #f4e5a9; color: #6b5d00; border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; font-size: 14px;">

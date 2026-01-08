@@ -87,7 +87,7 @@ class ProfileController extends Controller
 		if ($hasPending) {
 			return Redirect::route('faculty.login.form')
 				->with('status', 'Your profile was updated. You already have a pending role request awaiting decision.')
-				->with('pending', 'Your account is pending approval. You will be notified once approved.');
+				->with('pending', 'Your account is pending for approval.');
 		}
 
 		// UI: request_dean => Department Head; request_dept_head => Chairperson
@@ -129,7 +129,7 @@ class ProfileController extends Controller
 
 		return Redirect::route('faculty.login.form')
 			->with('status', 'Your profile was updated and your role request(s) were submitted for approval. You will be notified once a decision is made.')
-			->with('pending', 'Your account is pending approval. You will be notified once approved.');
+			->with('pending', 'Your account is pending for approval.');
 	}
 }
 

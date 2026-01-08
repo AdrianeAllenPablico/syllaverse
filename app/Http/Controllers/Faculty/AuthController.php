@@ -118,7 +118,7 @@ class AuthController extends Controller
 
             // Pending but profile already complete -> do not login; inform user awaiting approval
             return redirect()->route('faculty.login.form')->withErrors([
-                'pending' => 'Your account is pending approval. You will be notified once approved.',
+                'pending' => 'Your account is pending for approval.',
             ]);
         } catch (\Throwable $e) {
             return redirect()->route('faculty.login.form')->withErrors([

@@ -98,6 +98,15 @@
 }
 /* ░░░ END: Base Table Layout ░░░ */
 
+/* Truncate long department names in desktop table so they don't push actions */
+.sv-dept-truncate {
+  display: inline-block;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ░░░ START: Zebra Striping (Soft) ░░░ */
 .table tbody tr:nth-child(odd),
 .superadmin-manage-department-table tbody tr:nth-child(odd) {

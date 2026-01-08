@@ -38,7 +38,7 @@ class FacultyAuth
         if ($user->status !== 'active') {
             Auth::guard('faculty')->logout();
             return redirect()->route('faculty.login.form')
-                ->with('error', 'Your account is pending approval by the Superadmin.');
+                ->with('error', 'Your account is pending for approval by the Superadmin.');
         }
 
         // Note: Appointments are now managed through superadmin interface

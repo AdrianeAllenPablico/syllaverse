@@ -65,7 +65,9 @@
         </td>
 
         <td class="d-none d-md-table-cell">{{ $department->code }}</td>
-        <td class="d-none d-md-table-cell">{{ $department->name }}</td>
+        <td class="d-none d-md-table-cell">
+            <span class="sv-dept-truncate" title="{{ $department->name }}">{{ $department->name }}</span>
+        </td>
         <td class="d-none d-md-table-cell">
             {{ $department->programs->count() }} {{ Str::plural('program', $department->programs->count()) }}
         </td>
