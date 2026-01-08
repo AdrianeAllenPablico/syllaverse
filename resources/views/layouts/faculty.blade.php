@@ -100,10 +100,18 @@
   @vite('resources/js/faculty/ai/ai.js')
   @vite('resources/js/faculty/ai/prompts.js')
   @vite('resources/js/faculty/ai/snapshot.js')
-  @vite('resources/js/faculty/ai/ilo-so-cpa-mapping.js')
-  @vite('resources/js/faculty/ai/assessment-schedule.js')
-  @vite('resources/js/faculty/ai/ilo-iga-mapping.js')
-  @vite('resources/js/faculty/ai/ilo-cdio-sdg-mapping.js')
+  @if (isset($manifest) && is_array($manifest) && array_key_exists('resources/js/faculty/ai/ilo-so-cpa-mapping.js', $manifest))
+    @vite('resources/js/faculty/ai/ilo-so-cpa-mapping.js')
+  @endif
+  @if (isset($manifest) && is_array($manifest) && array_key_exists('resources/js/faculty/ai/assessment-schedule.js', $manifest))
+    @vite('resources/js/faculty/ai/assessment-schedule.js')
+  @endif
+  @if (isset($manifest) && is_array($manifest) && array_key_exists('resources/js/faculty/ai/ilo-iga-mapping.js', $manifest))
+    @vite('resources/js/faculty/ai/ilo-iga-mapping.js')
+  @endif
+  @if (isset($manifest) && is_array($manifest) && array_key_exists('resources/js/faculty/ai/ilo-cdio-sdg-mapping.js', $manifest))
+    @vite('resources/js/faculty/ai/ilo-cdio-sdg-mapping.js')
+  @endif
   @vite('resources/js/faculty/ai/chat-panel.js')
   {{-- ░░░ END: Vite JS ░░░ --}}
   @if(isset($fullscreen) && $fullscreen)
