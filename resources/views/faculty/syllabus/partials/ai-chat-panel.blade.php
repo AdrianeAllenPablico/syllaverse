@@ -547,6 +547,14 @@
   box-shadow: 0 2px 6px rgba(220, 38, 38, 0.15);
 }
 
+.ai-chip.disabled,
+.ai-chip[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: default;
+  pointer-events: none;
+  box-shadow: none;
+}
+
 /* Loading indicator */
 .ai-chat-msg.loading .ai-chat-bubble {
   display: flex;

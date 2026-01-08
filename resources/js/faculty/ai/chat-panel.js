@@ -8,6 +8,9 @@
 (function(){
 	'use strict';
 
+	// Global flag within this module to prevent concurrent AI requests
+	let aiSending = false;
+
 	function $(id){ return document.getElementById(id); }
 
 	function showInsertToast(message){
@@ -664,12 +667,23 @@
 	}
 
 	function setSendingState(isSending){
+		aiSending = !!isSending;
 		const input = $('aiChatInput');
 		const sendBtn = $('aiChatSend');
 		if (input) input.disabled = isSending;
 		if (sendBtn) {
 			sendBtn.disabled = isSending;
 			sendBtn.classList.toggle('disabled', !!isSending);
+		}
+		// Also restrict Generate / Map chips while a request is in-flight
+		try {
+			const chips = document.querySelectorAll('.ai-chip');
+			chips.forEach(function(chip){
+				chip.classList.toggle('disabled', !!isSending);
+				chip.setAttribute('aria-disabled', isSending ? 'true' : 'false');
+			});
+		} catch(e) {
+			// best-effort; don't break sending state if this fails
 		}
 	}
 
@@ -792,6 +806,10 @@
 
 		// Basic send handler
 		async function handleSend(partialKey, overrideMessage){
+			// Hard block re-entrancy while a request is in-flight
+			if (aiSending) {
+				return;
+			}
 			if (!window.SVAI || typeof window.SVAI.send !== 'function') {
 				console.warn('[AI] SVAI.send not available');
 				return;
@@ -848,6 +866,8 @@
 			container.addEventListener('click', function(e){
 				const chip = e.target.closest('.ai-chip');
 				if (!chip) return;
+				// Ignore clicks while disabled or while a request is in-flight
+				if (aiSending || chip.classList.contains('disabled') || chip.getAttribute('aria-disabled') === 'true') return;
 				const action = chip.getAttribute('data-ai-action') || '';
 				if (!action) return;
 				openPanel();
