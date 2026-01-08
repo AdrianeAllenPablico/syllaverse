@@ -135,8 +135,10 @@
   @include('faculty.syllabus.partials.toolbar-syllabus')
 @endif
 
-{{-- AI Chat Panel (FAB + Slide-in) --}}
-@include('faculty.syllabus.partials.ai-chat-panel')
+{{-- AI Chat Panel (FAB + Slide-in). Hidden in review mode. --}}
+@if(!$reviewMode)
+  @include('faculty.syllabus.partials.ai-chat-panel')
+@endif
 @if($reviewMode)
   <!-- Approve Confirmation Modal (sidebar context) -->
   <div class="modal fade" id="approveConfirmModal" tabindex="-1" aria-labelledby="approveConfirmLabel" aria-hidden="true" data-bs-backdrop="static">

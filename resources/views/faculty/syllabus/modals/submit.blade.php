@@ -296,9 +296,9 @@
         <input type="hidden" name="action_type" id="actionTypeInput">
         
         <div class="modal-body">
-          {{-- Review stage: Select reviewer (Chairperson) --}}
+          {{-- Review stage: Select reviewer --}}
           <div id="reviewStageSection">
-            <label class="form-label">Select Reviewer (Chairperson) <span class="text-danger">*</span></label>
+            <label class="form-label">Select Reviewer <span class="text-danger">*</span></label>
             <input type="text" id="reviewerSearchInput" class="form-control mb-3" placeholder="Search by name or email...">
             
             <div id="reviewerCardsContainer" class="reviewer-cards-container">
@@ -308,7 +308,7 @@
               </div>
             </div>
             
-            <small class="text-muted d-block mt-2">Select one Chairperson to submit this syllabus</small>
+            <small class="text-muted d-block mt-2">Select one reviewer to submit this syllabus</small>
           </div>
 
           {{-- Approval stage: Select approver (Department Head / Associate Dean) --}}

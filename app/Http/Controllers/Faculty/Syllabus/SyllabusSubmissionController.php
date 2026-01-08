@@ -38,7 +38,67 @@ class SyllabusSubmissionController extends Controller
                 ], 400);
             }
 
-            // Reviewers: canonical CHAIR only, department-scoped
+            // If the current user is a CHAIR for this department, then their
+            // "review" submission should go UP one level (Dean / Associate Dean),
+            // not to another Chair. Reuse the same targeting as final approvers.
+            $currentUser = auth()->user();
+            $isChairInDept = false;
+            if ($currentUser) {
+                $isChairInDept = $currentUser->appointments()
+                    ->where('status', 'active')
+                    ->where('scope_id', $departmentId)
+                    ->where('role', Appointment::ROLE_CHAIR)
+                    ->exists();
+            }
+
+            if ($isChairInDept) {
+                // For CHAIR users: reviewers are DEPT_HEAD (Dean) and ASSOC_DEAN in this department
+                $approvers = User::whereHas('appointments', function($query) use ($departmentId) {
+                        $query->where('status', 'active')
+                              ->where('scope_id', $departmentId)
+                              ->whereIn('role', [Appointment::ROLE_DEPT_HEAD, Appointment::ROLE_ASSOC_DEAN]);
+                    })
+                    ->with(['appointments' => function($query) use ($departmentId) {
+                        $query->where('status', 'active')
+                              ->where('scope_id', $departmentId)
+                              ->whereIn('role', [Appointment::ROLE_DEPT_HEAD, Appointment::ROLE_ASSOC_DEAN]);
+                    }])
+                    ->get()
+                    ->map(function($user) use ($departmentId) {
+                        $appointment = $user->appointments->first();
+                        // Determine Department Head label based on department classification
+                        $dept = DB::table('departments')->where('id', $departmentId)->first();
+                        $deptName = $dept->name ?? '';
+                        $deptHeadLabel = 'Dean';
+                        if (is_string($deptName)) {
+                            $lower = strtolower($deptName);
+                            if (str_contains($lower, 'lab') || str_contains($lower, 'school')) {
+                                $deptHeadLabel = 'Principal';
+                            } elseif (str_contains($lower, 'general education')) {
+                                $deptHeadLabel = 'Head';
+                            } else {
+                                $deptHeadLabel = 'Dean';
+                            }
+                        }
+                        $roleLabel = ($appointment && $appointment->role === Appointment::ROLE_DEPT_HEAD)
+                            ? $deptHeadLabel
+                            : 'Associate Dean';
+                        return [
+                            'id' => $user->id,
+                            'name' => $user->name,
+                            'email' => $user->email,
+                            'role' => $appointment->role ?? null,
+                            'role_label' => $roleLabel,
+                        ];
+                    });
+
+                return response()->json([
+                    'success' => true,
+                    'reviewers' => $approvers,
+                ]);
+            }
+
+            // Default path: reviewers are canonical CHAIR only, department-scoped
             $reviewersQuery = User::whereHas('appointments', function($query) use ($departmentId) {
                 $query->where('status', 'active')
                       ->where('scope_id', $departmentId)
@@ -62,20 +122,18 @@ class SyllabusSubmissionController extends Controller
             $labelForDept = ($programCount >= 2) ? 'Department Chairperson' : 'Program Chairperson';
 
             $reviewers = $reviewersQuery
-            ->map(function($user) use ($labelForDept) {
-                $appointment = $user->appointments->first();
-                $roleLabel = $labelForDept;
-                $roleValue = $appointment->role ?? Appointment::ROLE_CHAIR;
-                return [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $roleValue,
-                    'role_label' => $roleLabel,
-                ];
-            });
-
-            // No fallback: reviewers must be canonical CHAIR
+                ->map(function($user) use ($labelForDept) {
+                    $appointment = $user->appointments->first();
+                    $roleLabel = $labelForDept;
+                    $roleValue = $appointment->role ?? Appointment::ROLE_CHAIR;
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'role' => $roleValue,
+                        'role_label' => $roleLabel,
+                    ];
+                });
 
             return response()->json([
                 'success' => true,
