@@ -104,6 +104,7 @@
 		btn.addEventListener('click', async function(){
 			const prevDisabled = btn.disabled;
 			try {
+				btn.dataset.forceDisabled = '1';
 				btn.disabled = true;
 				setState('saving');
 				try { if (window.SVHistory && window.SVHistory.setRestricted) window.SVHistory.setRestricted(true); } catch(e){}
@@ -140,7 +141,13 @@
 				setState('error');
 			} finally {
 				// Return to idle after a short delay for visual feedback
-				setTimeout(() => { setState('idle'); btn.disabled = prevDisabled; try { if (window.SVHistory && window.SVHistory.setRestricted) window.SVHistory.setRestricted(false); } catch(e){} }, 800);
+				setTimeout(() => {
+					setState('idle');
+					try { delete btn.dataset.forceDisabled; } catch(e) {}
+					// Re-evaluate unsaved-count and Save enabled/disabled state after all module saves
+					try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+					try { if (window.SVHistory && window.SVHistory.setRestricted) window.SVHistory.setRestricted(false); } catch(e){}
+				}, 800);
 			}
 		});
 	});

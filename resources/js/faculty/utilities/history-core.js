@@ -11,6 +11,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
   const globalRedo = [];    // Array<{ key, prev, next, ts }>
   const currentSnap = {};   // key -> latest applied snapshot
   const lastHashes = {};    // key -> last applied hash
+  const baselineHashes = {}; // key -> hash at last full save (or initial load)
   let globalApplying = false; // prevent cross-module watcher reactions during programmatic apply
   let restricted = false;     // when true, disable undo/redo regardless of stacks
   let suppressAtWatcherUntil = 0; // temporarily pause AT watcher after ILO structural events
@@ -59,9 +60,20 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
   }
 
   function safeInitialize(key, snap){
-    // Set baseline snapshot for a module without adding to global history
+    // Set current snapshot for a module without adding to global history.
+    // This does NOT change the saved baseline hash used for unsaved detection.
     currentSnap[key] = snap;
     lastHashes[key] = String(snap && snap.hash ? snap.hash : '');
+  }
+
+  function setBaseline(key, snap){
+    // Establish a new "saved" baseline for a module. Used on initial load
+    // and after successful saves so we can detect when the user returns
+    // exactly to this state (no unsaved changes).
+    currentSnap[key] = snap;
+    const h = String(snap && snap.hash ? snap.hash : '');
+    lastHashes[key] = h;
+    baselineHashes[key] = h;
   }
 
   function safePush(key, snap){
@@ -76,6 +88,31 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     currentSnap[key] = snap;
     lastHashes[key] = h;
     updateButtons();
+    // Any new snapshot means there are unsaved changes; refresh Save button state
+    try {
+      if (window.updateUnsavedCount) window.updateUnsavedCount();
+    } catch (e) { /* noop */ }
+  }
+
+  function hasUnsavedChanges(){
+    try {
+      // 1) Any module whose current hash differs from its saved baseline
+      for (const key in baselineHashes){
+        const baselineHash = baselineHashes[key] || '';
+        const currentHash = String(currentSnap[key] && currentSnap[key].hash ? currentSnap[key].hash : '');
+        if (baselineHash !== currentHash) return true;
+      }
+      // 2) Any module with a current snapshot but no recorded baseline yet
+      for (const key in currentSnap){
+        if (!Object.prototype.hasOwnProperty.call(baselineHashes, key)){
+          const h = String(currentSnap[key] && currentSnap[key].hash ? currentSnap[key].hash : '');
+          if (h) return true;
+        }
+      }
+      return false;
+    } catch(e){
+      return false;
+    }
   }
 
   function applyMissionVision(snap){
@@ -1381,6 +1418,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     setTimeout(() => {
       setGlobalApplying(false);
       updateButtons();
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
     }, 150);
     return true;
   }
@@ -1449,6 +1487,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     setTimeout(() => {
       setGlobalApplying(false);
       updateButtons();
+      try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
     }, 150);
     return true;
   }
@@ -1465,29 +1504,29 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       globalHistory.length = 0;
       globalRedo.length = 0;
       // Recompute baselines for known modules
-      try { const mv = snapshotMissionVision(); safeInitialize('missionVision', mv); } catch(e) {}
-      try { const ci = snapshotCourseInfo(); safeInitialize('courseInfo', ci); } catch(e) {}
-      try { const cr = snapshotCriteria(); safeInitialize('criteria', cr); } catch(e) {}
-      try { const ilo = snapshotIlo(); safeInitialize('ilo', ilo); } catch(e) {}
-      try { const at = snapshotAssessmentTasks(); safeInitialize('assessmentTasks', at); } catch(e) {}
-      try { const iga = snapshotIga(); safeInitialize('iga', iga); } catch(e) {}
-      try { const so = snapshotSo(); safeInitialize('so', so); } catch(e) {}
-      try { const cdio = snapshotCdio(); safeInitialize('cdio', cdio); } catch(e) {}
-      try { const sdg = snapshotSdg(); safeInitialize('sdg', sdg); } catch(e) {}
-      try { const cp = snapshotCoursePolicies(); safeInitialize('coursePolicies', cp); } catch(e) {}
-      try { const tla = snapshotTla(); safeInitialize('tla', tla); } catch(e) {}
+      try { const mv = snapshotMissionVision(); setBaseline('missionVision', mv); } catch(e) {}
+      try { const ci = snapshotCourseInfo(); setBaseline('courseInfo', ci); } catch(e) {}
+      try { const cr = snapshotCriteria(); setBaseline('criteria', cr); } catch(e) {}
+      try { const ilo = snapshotIlo(); setBaseline('ilo', ilo); } catch(e) {}
+      try { const at = snapshotAssessmentTasks(); setBaseline('assessmentTasks', at); } catch(e) {}
+      try { const iga = snapshotIga(); setBaseline('iga', iga); } catch(e) {}
+      try { const so = snapshotSo(); setBaseline('so', so); } catch(e) {}
+      try { const cdio = snapshotCdio(); setBaseline('cdio', cdio); } catch(e) {}
+      try { const sdg = snapshotSdg(); setBaseline('sdg', sdg); } catch(e) {}
+      try { const cp = snapshotCoursePolicies(); setBaseline('coursePolicies', cp); } catch(e) {}
+      try { const tla = snapshotTla(); setBaseline('tla', tla); } catch(e) {}
       try {
         const am = snapshotAssessmentMapping();
-        safeInitialize('assessment_mapping', am);
+        setBaseline('assessment_mapping', am);
         // Refresh cached marks post-save to ensure undo restores marks even if a subsequent snapshot had "No weeks"
         if (am && Array.isArray(am.marks)) {
           lastValidAssessmentMarks = am.marks;
           console.log('[RESET AFTER SAVE] Cached AM marks baseline:', lastValidAssessmentMarks.length);
         }
       } catch(e) {}
-      try { const isc = snapshotIloSoCpaMapping(); safeInitialize('iloSoCpa', isc); } catch(e) {}
-      try { const iigm = snapshotIloIgaMapping(); safeInitialize('iloIgaMapping', iigm); } catch(e) {}
-      try { const ics = snapshotIloCdioSdgMapping(); safeInitialize('iloCdioSdg', ics); } catch(e) {}
+      try { const isc = snapshotIloSoCpaMapping(); setBaseline('iloSoCpa', isc); } catch(e) {}
+      try { const iigm = snapshotIloIgaMapping(); setBaseline('iloIgaMapping', iigm); } catch(e) {}
+      try { const ics = snapshotIloCdioSdgMapping(); setBaseline('iloCdioSdg', ics); } catch(e) {}
     } finally {
       globalApplying = false;
       updateButtons();
@@ -1515,7 +1554,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       // Re-baseline the module to the current DOM snapshot
       try {
         const snap = snapshotIloIgaMapping();
-        safeInitialize('iloIgaMapping', snap);
+        setBaseline('iloIgaMapping', snap);
       } catch(e) {}
     } finally {
       globalApplying = false;
@@ -1535,8 +1574,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     const mEl = document.getElementById('mission-text') || document.querySelector('[name="mission"]');
     if (vEl) { vEl.addEventListener('input', takeDebounced, { capture: true }); vEl.addEventListener('change', take, { capture: true }); }
     if (mEl) { mEl.addEventListener('input', takeDebounced, { capture: true }); mEl.addEventListener('change', take, { capture: true }); }
-    // baseline snapshot (do not add to global history)
-    try { safeInitialize('missionVision', snapshotMissionVision()); } catch(e) {}
+    // baseline snapshot (do not add to global history, but mark as saved baseline)
+    try { setBaseline('missionVision', snapshotMissionVision()); } catch(e) {}
     updateButtons();
   }
 
@@ -1555,8 +1594,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       const el = document.querySelector('[name="'+n+'"]');
       if (el){ el.addEventListener('input', takeDebounced, { capture: true }); el.addEventListener('change', take, { capture: true }); }
     });
-    // baseline snapshot (do not add to global history)
-    try { safeInitialize('courseInfo', snapshotCourseInfo()); } catch(e) {}
+    // baseline snapshot (do not add to global history, but mark as saved baseline)
+    try { setBaseline('courseInfo', snapshotCourseInfo()); } catch(e) {}
     updateButtons();
   }
 
@@ -1576,8 +1615,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       container.addEventListener('focusin', () => { window.SVActiveModuleName = 'criteria'; }, true);
       container.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'criteria'; }, true);
     }
-    // baseline snapshot (do not add to global history)
-    try { safeInitialize('criteria', snapshotCriteria()); } catch(e) {}
+    // baseline snapshot (do not add to global history, but mark as saved baseline)
+    try { setBaseline('criteria', snapshotCriteria()); } catch(e) {}
     updateButtons();
   }
 
@@ -1653,8 +1692,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       list.addEventListener('focusin', () => { window.SVActiveModuleName = 'ilo'; }, true);
       list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'ilo'; }, true);
     }
-    // baseline snapshot (do not add to global history)
-    try { safeInitialize('ilo', snapshotIlo()); } catch(e) {}
+    // baseline snapshot (do not add to global history, but mark as saved baseline)
+    try { setBaseline('ilo', snapshotIlo()); } catch(e) {}
     updateButtons();
   }
 
@@ -1667,9 +1706,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       if (Date.now() < initialLoadUntil) {
         try {
           const baseline = snapshotAssessmentTasks();
-          currentSnap['assessmentTasks'] = baseline;
+          setBaseline('assessmentTasks', baseline);
           lastAtHash = baseline.hash;
-          lastHashes['assessmentTasks'] = baseline.hash;
           console.log('[AT WATCHER] Initial load baseline set, hash:', baseline.hash.substring(0, 8));
         } catch(e) {}
         return;
@@ -1746,8 +1784,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     }
     // Listen for Assessment Tasks changes (AT columns sync with ILO changes)
     document.addEventListener('assessmentTasksChanged', take, { capture: true });
-    // baseline snapshot (do not add to global history)
-    try { safeInitialize('assessmentTasks', snapshotAssessmentTasks()); } catch(e) {}
+    // baseline snapshot (do not add to global history, but mark as saved baseline)
+    try { setBaseline('assessmentTasks', snapshotAssessmentTasks()); } catch(e) {}
     updateButtons();
   }
 
@@ -1804,7 +1842,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       list.addEventListener('focusin', () => { window.SVActiveModuleName = 'cdio'; }, true);
       list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'cdio'; }, true);
     }
-    try { safeInitialize('cdio', snapshotCdio()); } catch(e) {}
+    try { setBaseline('cdio', snapshotCdio()); } catch(e) {}
     updateButtons();
   }
 
@@ -1861,7 +1899,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       list.addEventListener('focusin', () => { window.SVActiveModuleName = 'so'; }, true);
       list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'so'; }, true);
     }
-    try { safeInitialize('so', snapshotSo()); } catch(e) {}
+    try { setBaseline('so', snapshotSo()); } catch(e) {}
     updateButtons();
   }
 
@@ -1918,7 +1956,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       list.addEventListener('focusin', () => { window.SVActiveModuleName = 'sdg'; }, true);
       list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'sdg'; }, true);
     }
-    try { safeInitialize('sdg', snapshotSdg()); } catch(e) {}
+    try { setBaseline('sdg', snapshotSdg()); } catch(e) {}
     updateButtons();
   }
 
@@ -1960,7 +1998,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
     const confirmLoad = document.getElementById('confirmLoadPredefinedPolicy');
     if (confirmLoad) confirmLoad.addEventListener('click', () => setTimeout(take, 300));
 
-    try { safeInitialize('coursePolicies', snapshotCoursePolicies()); } catch(e) {}
+    try { setBaseline('coursePolicies', snapshotCoursePolicies()); } catch(e) {}
     updateButtons();
   }
 
@@ -2108,7 +2146,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       tbody.addEventListener('focusin', () => { window.SVActiveModuleName = 'tla'; }, true);
       tbody.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'tla'; }, true);
     }
-    try { safeInitialize('tla', snapshotTla()); } catch(e) {}
+    try { setBaseline('tla', snapshotTla()); } catch(e) {}
     updateButtons();
   }
 
@@ -2157,8 +2195,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       weekTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'assessment_mapping'; }, true);
     }
 
-    // Set initial baseline without creating history
-    try { safeInitialize('assessment_mapping', snapshotAssessmentMapping()); } catch(e) {}
+    // Set initial baseline without creating history, and mark as saved baseline
+    try { setBaseline('assessment_mapping', snapshotAssessmentMapping()); } catch(e) {}
     updateButtons();
   }
 
@@ -2292,8 +2330,8 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       mappingTable.addEventListener('focusin', () => { window.SVActiveModuleName = 'iloSoCpa'; }, true);
       mappingTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'iloSoCpa'; }, true);
     }
-    // baseline snapshot (do not add to global history)
-    try { safeInitialize('iloSoCpa', snapshotIloSoCpaMapping()); } catch(e) {}
+    // baseline snapshot (do not add to global history, but mark as saved baseline)
+    try { setBaseline('iloSoCpa', snapshotIloSoCpaMapping()); } catch(e) {}
     updateButtons();
   }
 
@@ -2349,7 +2387,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       list.addEventListener('focusin', () => { window.SVActiveModuleName = 'iga'; }, true);
       list.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'iga'; }, true);
     }
-    try { safeInitialize('iga', snapshotIga()); } catch(e) {}
+    try { setBaseline('iga', snapshotIga()); } catch(e) {}
     updateButtons();
   }
 
@@ -2406,7 +2444,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       mappingTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'iloIgaMapping'; }, true);
     }
 
-    try { safeInitialize('iloIgaMapping', snapshotIloIgaMapping()); } catch(e) {}
+    try { setBaseline('iloIgaMapping', snapshotIloIgaMapping()); } catch(e) {}
     updateButtons();
   }
 
@@ -2464,7 +2502,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       mappingTable.addEventListener('mouseenter', () => { window.SVActiveModuleName = 'iloCdioSdg'; }, true);
     }
 
-    try { safeInitialize('iloCdioSdg', snapshotIloCdioSdgMapping()); } catch(e) {}
+    try { setBaseline('iloCdioSdg', snapshotIloCdioSdgMapping()); } catch(e) {}
     updateButtons();
   }
 
@@ -2515,6 +2553,7 @@ import { snapshotMissionVision, snapshotCourseInfo, snapshotCriteria, snapshotIl
       setRestricted,
       resetAfterSave,
       resetIloIgaAfterSave,
+      hasUnsavedChanges,
       // Allow modules to explicitly update their current baseline
       // snapshot without creating a history entry. This is used by
       // ILO–IGA structural actions so that undo restores the exact

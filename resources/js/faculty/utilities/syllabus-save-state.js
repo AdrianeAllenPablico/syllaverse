@@ -24,8 +24,6 @@
     const iconSaved = '<i class="bi bi-check-lg fs-5"></i>';
     const iconError = '<i class="bi bi-exclamation-triangle fs-5"></i>';
     const label = '<span class="small">Save</span>';
-    const badge = document.getElementById('unsaved-count-badge');
-    if (badge) badge.style.display = 'none';
 
     let iconHtml = iconIdle; let aria = 'Save';
     switch(state){
@@ -51,6 +49,45 @@
   // Public API
   window.SVSaveState = { set, get, onChange };
 
-  // Initialize after DOM ready
-  document.addEventListener('DOMContentLoaded', function(){ renderState(getSaveButton(), _state); });
+  // Global unsaved-count helper: count visible unsaved pills and
+  // update the toolbar badge and Save button enabled state.
+  window.updateUnsavedCount = function(){
+    try {
+      // 1) Count explicit unsaved pills in partials that still expose them
+      const pills = document.querySelectorAll('.unsaved-pill:not(.d-none)');
+      let count = pills.length;
+
+      // 2) Also treat any available Undo history as an unsaved-change signal.
+      //    When all changes are undone and the Undo button becomes
+      //    disabled again, Save will be restricted.
+      const undoBtn = document.getElementById('syllabusUndoBtn');
+      const hasUndo = undoBtn && !undoBtn.disabled;
+      if (hasUndo) {
+        count = Math.max(count, 1);
+      }
+      const badge = document.getElementById('unsaved-count-badge');
+      if (badge) {
+        if (count > 0) {
+          badge.textContent = String(count);
+          badge.style.display = 'block';
+        } else {
+          badge.textContent = '0';
+          badge.style.display = 'none';
+        }
+      }
+
+      const btn = getSaveButton();
+      if (btn && !btn.dataset.forceDisabled) {
+        btn.disabled = (count === 0);
+      }
+    } catch (e) {
+      // noop
+    }
+  };
+
+  // Initialize after DOM ready: render idle state and set initial Save enabled/disabled
+  document.addEventListener('DOMContentLoaded', function(){
+    renderState(getSaveButton(), _state);
+    try { if (window.updateUnsavedCount) window.updateUnsavedCount(); } catch(e){}
+  });
 })();

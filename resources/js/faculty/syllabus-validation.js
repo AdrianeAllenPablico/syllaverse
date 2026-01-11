@@ -327,6 +327,78 @@
   }
 
   /**
+   * Check if a field has any data at all (looser than completeness).
+   * Used to decide if the global Save button should be enabled.
+   */
+  function hasAnyDataForField(fieldName) {
+    // Array-style fields: any non-empty entry counts as data
+    if (fieldName === 'ilos[]' || fieldName === 'igas[]' || fieldName === 'sos[]' || fieldName === 'cdios[]' || fieldName === 'sdgs[]') {
+      const elements = document.querySelectorAll(`[name="${fieldName}"]`);
+      if (elements.length === 0) return false;
+      return Array.from(elements).some(el => (el.value?.trim() || '').length > 0);
+    }
+
+    if (fieldName === 'tla[]') {
+      const tlaRows = document.querySelectorAll('#tlaTable tbody tr:not(#tla-placeholder)');
+      if (tlaRows.length === 0) return false;
+      return Array.from(tlaRows).some(row => {
+        const topic = row.querySelector('[name*="[topic]"]')?.value?.trim() || '';
+        const outcomes = row.querySelector('[name*="[outcomes]"]')?.value?.trim() || '';
+        return topic.length > 0 || outcomes.length > 0;
+      });
+    }
+
+    // Assessment Mapping: any task or any mark counts as data
+    if (fieldName === 'assessment-mapping-data') {
+      const distTable = document.querySelector('.assessment-mapping table.distribution');
+      const weekTable = document.querySelector('.assessment-mapping table.week');
+      if (!distTable || !weekTable) return false;
+
+      const distInputs = distTable.querySelectorAll('input.distribution-input');
+      const hasDistribution = Array.from(distInputs).some(input => (input.value?.trim() || '').length > 0);
+
+      const weekCells = weekTable.querySelectorAll('td.week-mapping');
+      const hasWeekMarks = Array.from(weekCells).some(cell => {
+        const text = (cell.textContent?.trim() || '');
+        return text === 'x' || cell.classList.contains('marked');
+      });
+
+      return hasDistribution || hasWeekMarks;
+    }
+
+    // Mapping tables: reuse completeness checks as a proxy for "has data"
+    if (fieldName === 'ilo-so-cpa-data' || fieldName === 'ilo-iga-data' || fieldName === 'ilo-cdio-sdg-data') {
+      return isFieldComplete(fieldName);
+    }
+
+    const el = document.querySelector(`[name="${fieldName}"]`);
+    if (!el) return false;
+
+    const raw = el.value ?? '';
+    const trimmed = String(raw).trim();
+
+    // For JSON-backed fields, treat any non-empty raw value as data,
+    // even if it might not satisfy structural completeness yet.
+    if (fieldName === 'criteria_data' || fieldName === 'assessment_tasks_data') {
+      return trimmed.length > 0;
+    }
+
+    return trimmed.length > 0;
+  }
+
+  /** Determine if the syllabus has any data at all across required fields. */
+  function hasAnySyllabusData() {
+    try {
+      return Object.keys(REQUIRED_FIELDS).some((partial) => {
+        const fields = REQUIRED_FIELDS[partial];
+        return Object.keys(fields).some((fieldName) => hasAnyDataForField(fieldName));
+      });
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
    * Update the progress bar UI
    */
   function updateProgressBar() {
