@@ -101,44 +101,9 @@
                 </div>
                 <div class="svx-card-footer d-flex justify-content-between align-items-center gap-2">
                   @php
-                    // Determine button text and behavior based on status
-                    $canSubmit = in_array($submissionStatus, ['draft', 'revision']);
-                    $canSubmitApproval = $submissionStatus === 'approved';
+                    // Flags used for delete button state
                     $isPending = $submissionStatus === 'pending_review';
-                    $isFinalApproval = $submissionStatus === 'final_approval';
-
-                    // Default to "Submit" icon/text
-                    $buttonText = 'Submit';
-                    $buttonIcon = 'bi-send';
-                    $buttonDisabled = false;
-
-                    if ($canSubmitApproval) {
-                      // After review approved, allow final approval submission
-                      $buttonText = 'Submit for Approval';
-                      $buttonIcon = 'bi-check-circle';
-                    } elseif ($isPending) {
-                      // Keep text as "Submit" but disable interaction while pending review
-                      $buttonDisabled = true;
-                    } elseif ($isFinalApproval) {
-                      // Final approval state: keep text as "Submit" but disabled
-                      $buttonDisabled = true;
-                    }
                   @endphp
-                  
-                  @php($isFinalApproved = $submissionStatus === 'final_approved')
-                  @if(!$isFinalApproved)
-                  <button type="button" 
-                          class="btn btn-sm btn-outline-primary submission-action-btn"
-                          data-bs-toggle="modal" 
-                          data-bs-target="#submitSyllabusModal"
-                          data-syllabus-id="{{ $syllabus->id }}"
-                          data-status="{{ $submissionStatus }}"
-                          data-department-id="{{ $syllabus->program->department_id ?? '' }}"
-                          data-program-id="{{ $syllabus->program->id ?? '' }}"
-                          {{ $buttonDisabled ? 'disabled' : '' }}>
-                    <i class="bi {{ $buttonIcon }}"></i> {{ $buttonText }}
-                  </button>
-                  @endif
                   
                   @if($submissionStatus === 'pending_review')
                     <button type="button" class="btn btn-outline-danger btn-sm" disabled title="Cannot delete while pending review" aria-label="Delete disabled (pending review)">
