@@ -244,25 +244,19 @@
 @push('scripts')
 <script>
   (function(){
-    // Register criteria validation field
-    function registerValidationField(){
-      if (typeof window.addRequiredField === 'function') {
-        window.addRequiredField('criteria_assessment', 'criteria_data', 'Criteria for Assessment');
-        console.log('Criteria Assessment validation field registered');
-      } else {
-        setTimeout(registerValidationField, 500);
-      }
-    }
-    
     // Also re-validate when criteria changes
     document.addEventListener('criteriaChanged', function(){
       if (typeof window.updateProgressBar === 'function') {
-        // Force re-calculation by calling internal update
-        try { window.getSyllabusValidationStatus(); } catch (e) { /* noop */ }
+        try { window.updateProgressBar(); } catch (e) { /* noop */ }
       }
     });
-    
-    registerValidationField();
+
+    // After criteria is successfully saved, ensure progress reflects saved JSON
+    document.addEventListener('criteriaSaved', function(){
+      if (typeof window.updateProgressBar === 'function') {
+        try { window.updateProgressBar(); } catch (e) { /* noop */ }
+      }
+    });
   })();
 </script>
 @endpush

@@ -644,6 +644,14 @@ if (saveBtn) {
 		.then(data => {
 			if (data.success && data.mappings && data.mappings.length > 0) {
 				renderMappings(data.mappings);
+				// After mappings are rendered, ensure syllabus progress is recalculated
+				try {
+					if (typeof window.updateProgressBar === 'function') {
+						window.updateProgressBar();
+					}
+				} catch (e) {
+					console.warn('Failed to update syllabus progress after loading assessment mappings', e);
+				}
 			}
 		})
 		.catch(error => {

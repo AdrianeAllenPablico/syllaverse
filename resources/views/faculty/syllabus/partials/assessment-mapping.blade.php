@@ -39,12 +39,9 @@
 
 <script>
 	function registerValidationField() {
-		if (typeof window.addRequiredField === 'function') {
-			window.addRequiredField('assessment_mapping', 'assessment-mapping-data', 'Assessment Schedule Mapping');
-			setupTableMutationObserver();
-		} else {
-			setTimeout(registerValidationField, 500);
-		}
+		// No longer register Assessment Mapping as a required field for progress;
+		// just hook mutation observers so other validations can refresh if needed.
+		setupTableMutationObserver();
 	}
 
 	function setupTableMutationObserver() {

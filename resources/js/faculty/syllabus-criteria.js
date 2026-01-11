@@ -603,6 +603,13 @@ import { snapshotCriteria } from './utilities/snapshot.js';
 			if (!syllabusId) throw new Error('Missing syllabus id');
 			const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 			const sections = collectCriteriaSections();
+			// Keep hidden criteria_data_input in sync so validators see latest JSON
+			try {
+				const hidden = document.getElementById('criteria_data_input');
+				if (hidden) hidden.value = JSON.stringify(sections);
+			} catch(e) {
+				console.warn('Failed to sync criteria_data_input', e);
+			}
 			const res = await fetch(`/faculty/syllabi/${syllabusId}/criteria`, {
 				method: 'POST',
 				headers: {

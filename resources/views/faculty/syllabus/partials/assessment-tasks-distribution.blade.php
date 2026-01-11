@@ -1175,13 +1175,9 @@ document.addEventListener('DOMContentLoaded', function() {
    * Register assessment tasks with validation system
    */
   function registerValidationField() {
-    if (typeof window.addRequiredField === 'function') {
-      window.addRequiredField('assessment_tasks', 'assessment_tasks_data', 'Assessment Tasks Distribution');
-      setupTableMutationObserver();
-    } else {
-      // Retry if validation system not ready
-      setTimeout(registerValidationField, 500);
-    }
+    // No longer register Assessment Tasks as a required validation field;
+    // just wire the mutation observer so other logic can refresh if needed.
+    setupTableMutationObserver();
   }
 
   /**

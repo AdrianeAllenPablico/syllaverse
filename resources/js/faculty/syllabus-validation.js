@@ -15,14 +15,18 @@
     },
     criteria_assessment: {
       criteria_data: 'Criteria for Assessment',
-      // Add more fields here as needed
-    },
-    ilo: {
-      'ilos[]': 'Intended Learning Outcomes',
-      // Add more fields here as needed
+      // Criteria is now required but evaluated from saved JSON
     },
     assessment_tasks: {
       assessment_tasks_data: 'Assessment Tasks Distribution',
+      // Assessment Tasks Distribution is required, evaluated from saved JSON
+    },
+    assessment_mapping: {
+      'assessment-mapping-data': 'Assessment Schedule',
+      // Assessment Mapping is required, evaluated from the mapping table DOM
+    },
+    ilo: {
+      'ilos[]': 'Intended Learning Outcomes',
       // Add more fields here as needed
     },
     iga: {
@@ -43,10 +47,6 @@
     },
     tla: {
       'tla[]': 'Teaching, Learning, and Assessment Activities',
-      // Add more fields here as needed
-    },
-    assessment_mapping: {
-      'assessment-mapping-data': 'Assessment Schedule Mapping',
       // Add more fields here as needed
     },
     ilo_so_cpa: {
@@ -130,23 +130,29 @@
       const weekTable = document.querySelector('.assessment-mapping table.week');
       if (!distTable || !weekTable) return false;
 
-      const distInputs = distTable.querySelectorAll('input.distribution-input');
-      const weekRows = distTable.querySelectorAll('tr:not(:first-child)');
+      const distRows = distTable.querySelectorAll('tr:not(:first-child)');
+      const weekRows = weekTable.querySelectorAll('tr:not(:first-child)');
 
-      // Check if any distribution has a task name
-      const hasDistribution = Array.from(distInputs).some(input => 
-        (input.value?.trim() || '').length > 0
-      );
+      // Consider Assessment Mapping complete only if at least one row
+      // has a non-empty task AND at least one marked week cell in that row.
+      const hasValidRow = Array.from(distRows).some((distRow, index) => {
+        const input = distRow.querySelector('input.distribution-input');
+        const taskName = (input && input.value ? input.value.trim() : '');
+        if (!taskName) return false;
 
-      // Check if any week cell has an 'x' mark
-      const hasWeekMarks = Array.from(weekRows).some(row => {
-        const cells = row.querySelectorAll('td.week-mapping');
-        return Array.from(cells).some(cell => 
-          (cell.textContent?.trim() || '') === 'x'
-        );
+        const weekRow = weekRows[index];
+        if (!weekRow) return false;
+
+        const cells = weekRow.querySelectorAll('td.week-mapping');
+        const hasMark = Array.from(cells).some(cell => {
+          const text = (cell.textContent?.trim() || '');
+          return text === 'x' || cell.classList.contains('marked');
+        });
+
+        return hasMark;
       });
 
-      return hasDistribution || hasWeekMarks;
+      return hasValidRow;
     }
 
     // Special handling for ILO-SO-CPA mapping (check if table has any real data)
@@ -273,13 +279,16 @@
       try {
         const parsed = JSON.parse(value);
         if (!Array.isArray(parsed) || parsed.length === 0) return false;
-        // Check if any section has content
+        // Check if any section has a heading or at least one non-empty item
         return parsed.some(section => {
           const heading = (section.heading || '').trim();
-          const hasValues = Array.isArray(section.value) && section.value.some(v => 
-            (v.description || '').trim() !== '' || (v.percent || '').trim() !== ''
-          );
-          return heading !== '' || hasValues;
+          const items = Array.isArray(section.value) ? section.value : [];
+          const hasItems = items.some(item => {
+            const desc = (item.description || '').trim();
+            const pct = (item.percent != null ? String(item.percent) : '').trim();
+            return desc.length > 0 || pct.length > 0;
+          });
+          return heading.length > 0 || hasItems;
         });
       } catch (e) {
         return false;
@@ -290,15 +299,24 @@
     if (fieldName === 'assessment_tasks_data') {
       try {
         const parsed = JSON.parse(value);
-        if (!parsed || !Array.isArray(parsed.sections) || parsed.sections.length === 0) return false;
-        // Check if any section has sub rows with content
-        return parsed.sections.some(section => {
-          if (!Array.isArray(section.sub_rows) || section.sub_rows.length === 0) return false;
-          return section.sub_rows.some(subRow => 
-            (subRow.code || '').trim() !== '' || 
-            (subRow.task || '').trim() !== '' ||
-            (subRow.ird || '').trim() !== ''
-          );
+        if (!parsed || typeof parsed !== 'object') return false;
+        const sections = Array.isArray(parsed.sections) ? parsed.sections : [];
+        if (sections.length === 0) return false;
+
+        // Consider complete if at least one section has a task and/or any percent
+        return sections.some(section => {
+          const main = section.main_row || {};
+          const mainTask = (main.task || '').trim();
+          const mainPercent = main.percent != null && main.percent !== '';
+
+          const subRows = Array.isArray(section.sub_rows) ? section.sub_rows : [];
+          const hasSubContent = subRows.some(row => {
+            const task = (row.task || '').trim();
+            const pct = row.percent != null && row.percent !== '';
+            return task.length > 0 || pct;
+          });
+
+          return mainTask.length > 0 || mainPercent || hasSubContent;
         });
       } catch (e) {
         return false;
@@ -386,7 +404,9 @@
       const fields = REQUIRED_FIELDS[partial];
       Object.keys(fields).forEach((fieldName) => {
         const el = document.querySelector(`[name="${fieldName}"]`);
-        if (el) {
+        // For course_description, tla_strategies, and criteria_data, defer validation to explicit save
+        const isDeferredCourseField = (fieldName === 'course_description' || fieldName === 'tla_strategies' || fieldName === 'criteria_data');
+        if (el && !isDeferredCourseField) {
           ['input', 'change'].forEach((evt) => {
             el.addEventListener(evt, function() {
               // Debounce the update
@@ -399,6 +419,17 @@
         }
       });
     });
+
+    // Recalculate validation when the main Save button is clicked
+    const saveBtn = document.getElementById('syllabusSaveBtn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function() {
+        // Slight delay to allow any pending DOM updates to apply
+        setTimeout(() => {
+          updateProgressBar();
+        }, 300);
+      });
+    }
 
     console.log('Validation system initialized. Required fields:', REQUIRED_FIELDS);
   };
@@ -414,7 +445,9 @@
 
     // Re-initialize listener for this field
     const el = document.querySelector(`[name="${fieldName}"]`);
-    if (el) {
+    // For course_description, tla_strategies, and criteria_data, defer validation to explicit save
+    const isDeferredCourseField = (fieldName === 'course_description' || fieldName === 'tla_strategies' || fieldName === 'criteria_data');
+    if (el && !isDeferredCourseField) {
       ['input', 'change'].forEach((evt) => {
         el.addEventListener(evt, function() {
           clearTimeout(el._validationTimeout);
