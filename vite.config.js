@@ -93,6 +93,7 @@ export default defineConfig({
                 'resources/js/faculty/syllabus-create.js',
                 'resources/js/faculty/syllabus-status.js',
                 'resources/js/faculty/syllabus-criteria.js',
+                'resources/js/faculty/syllabus-validation.js',
                 'resources/js/faculty/syllabus-iga.js',
                 'resources/js/faculty/syllabus-ilo-iga.js',
                 'resources/js/faculty/syllabus-ilo-so-cpa.js',
