@@ -1441,10 +1441,6 @@
 
 @push('scripts')
   @vite('resources/js/faculty/syllabus-validation.js')
-  @vite('resources/js/faculty/ai/assessment-schedule.js')
-  @vite('resources/js/faculty/ai/ilo-so-cpa-mapping.js')
-  @vite('resources/js/faculty/ai/ilo-iga-mapping.js')
-  @vite('resources/js/faculty/ai/ilo-cdio-sdg-mapping.js')
   @vite('resources/js/faculty/ai/snapshot.js')
   @vite('resources/js/faculty/ai/chat-panel.js')
   @vite('resources/js/faculty/utilities/snapshot.js')
