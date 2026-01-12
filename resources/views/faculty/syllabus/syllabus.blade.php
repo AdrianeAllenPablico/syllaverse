@@ -137,8 +137,8 @@
   @include('faculty.syllabus.partials.toolbar-syllabus')
 @endif
 
-{{-- AI Chat Panel (FAB + Slide-in). Hidden in review mode. --}}
-@if(!$reviewMode)
+{{-- AI Chat Panel (FAB + Slide-in). Hidden in review mode and when syllabus is under review. --}}
+@if(!$reviewMode && !$isPendingReview)
   @include('faculty.syllabus.partials.ai-chat-panel')
 @endif
 @if($reviewMode)
