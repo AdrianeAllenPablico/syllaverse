@@ -163,9 +163,8 @@ class ManageProfileController extends Controller
                                     'program_id'     => null,
                                 ]);
                                 $hasPending  = (clone $baseQuery)->where('status', ChairRequest::STATUS_PENDING)->exists();
-                                $hasApproved = (clone $baseQuery)->where('status', ChairRequest::STATUS_APPROVED)->exists();
-                                // Allow new submission if none pending and none approved (i.e., new or previously rejected)
-                                if (!$hasPending && !$hasApproved) {
+                                // Allow new submission if there is no pending request for this exact role + department
+                                if (!$hasPending) {
                                     ChairRequest::create([
                                         'user_id'        => $user->id,
                                         'requested_role' => $crRole,

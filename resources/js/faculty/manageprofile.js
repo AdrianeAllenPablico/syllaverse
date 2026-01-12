@@ -46,9 +46,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // skip attaching interactive behavior for new requests.
       return;
     }
+    const allRoles = ['dean','assoc_dean','dept_chair','faculty'];
+    const initialDeptByRole = {};
+    allRoles.forEach(r => {
+      const sel = document.getElementById(`mpDept_${r}`);
+      if (sel) initialDeptByRole[r] = sel.value || '';
+    });
     // Toggle department selects enabled state based on checkbox
-    const rid = ['dean','assoc_dean','dept_chair','faculty'];
-    rid.forEach(r => {
+    allRoles.forEach(r => {
       const cb = document.getElementById(`mpRole_${r}`);
       const sel = document.getElementById(`mpDept_${r}`);
       if (cb && sel) {
@@ -149,8 +154,50 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize on load
     updateDeanAssocRestriction();
 
+    // Enable/disable Request button based on selection vs current assignments
+    function updateSubmitAvailability() {
+      const submitBtn = document.getElementById('mpSubmitRoleBtn');
+      if (!submitBtn) return;
+      submitBtn.dataset.disableReason = '';
+
+      const checkedRoles = allRoles.filter(r => {
+        const cb = document.getElementById(`mpRole_${r}`);
+        return cb && cb.checked;
+      });
+
+      if (!checkedRoles.length) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.disableReason = 'no-selection';
+        submitBtn.title = 'Select a role and department to request';
+        return;
+      }
+
+      const role = checkedRoles[0];
+      const cb = document.getElementById(`mpRole_${role}`);
+      const sel = document.getElementById(`mpDept_${role}`);
+      const isCurrent = cb && cb.dataset && cb.dataset.current === '1';
+      const initialDept = (initialDeptByRole[role] ?? '').toString();
+      const currentVal = (sel && sel.value) ? sel.value.toString() : '';
+
+      if (!currentVal) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.disableReason = 'missing-dept';
+        submitBtn.title = 'Please select a department for the selected role';
+        return;
+      }
+
+      if (isCurrent && initialDept && currentVal === initialDept) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.disableReason = 'no-change';
+        submitBtn.title = 'You already hold this role in this department';
+        return;
+      }
+
+      submitBtn.disabled = false;
+      submitBtn.title = 'Submit role request';
+    }
+
     // Global single-select restriction across all roles
-    const allRoles = ['dean','assoc_dean','dept_chair','faculty'];
     function updateGlobalRoleRestriction() {
       const checked = allRoles.filter(r => {
         const cb = document.getElementById(`mpRole_${r}`);
@@ -204,17 +251,34 @@ document.addEventListener('DOMContentLoaded', () => {
     // Bind global handler to all role checkbox changes
     allRoles.forEach(r => {
       const cb = document.getElementById(`mpRole_${r}`);
-      if (cb) cb.addEventListener('change', updateGlobalRoleRestriction);
+      if (cb) {
+        cb.addEventListener('change', updateGlobalRoleRestriction);
+        cb.addEventListener('change', updateSubmitAvailability);
+      }
+    });
+    // Also watch department dropdown changes
+    allRoles.forEach(r => {
+      const sel = document.getElementById(`mpDept_${r}`);
+      if (sel) sel.addEventListener('change', updateSubmitAvailability);
     });
     // Initialize global restriction after initial syncs
     updateGlobalRoleRestriction();
+    updateSubmitAvailability();
     // Intercept submit to show confirmation modal
     roleForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const submitBtn = document.getElementById('mpSubmitRoleBtn');
       if (submitBtn && submitBtn.disabled) {
-        if (window.showAlertOverlay) window.showAlertOverlay('error', 'You have a pending request. Please wait for a decision.');
-        else alert('You have a pending request. Please wait for a decision.');
+        const reason = submitBtn.dataset.disableReason || '';
+        let msg = 'You cannot submit this request yet.';
+        if (reason === 'no-selection') {
+          msg = 'Please select a role and department before submitting.';
+        } else if (reason === 'missing-dept') {
+          msg = 'Please select a department for the selected role.';
+        } else if (reason === 'no-change') {
+          msg = 'You already hold this role in this department. Change the department or role to submit a new request.';
+        }
+        if (window.showAlertOverlay) window.showAlertOverlay('error', msg); else alert(msg);
         return;
       }
       const checked = Array.from(document.querySelectorAll('input[name="roles[]"]:checked'));
