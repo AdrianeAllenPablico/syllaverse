@@ -311,9 +311,9 @@
             <small class="text-muted d-block mt-2">Select one reviewer to submit this syllabus</small>
           </div>
 
-          {{-- Approval stage: Select approver (Department Head / Associate Dean) --}}
+          {{-- Approval stage: Select approver (Associate Dean / Chairperson) --}}
           <div id="approvalStageSection" style="display: none;">
-            <label class="form-label">Select Final Approver (Department Head/Associate Dean) <span class="text-danger">*</span></label>
+            <label class="form-label">Select Final Approver (Associate Dean/Chairperson) <span class="text-danger">*</span></label>
             <input type="text" id="finalApproverSearchInput" class="form-control mb-3" placeholder="Search by name or email...">
 
             <div id="finalApproverCardsContainer" class="reviewer-cards-container">
@@ -322,7 +322,7 @@
               </div>
             </div>
 
-            <small class="text-muted d-block mt-2">Select one approver (Dept Head or Associate Dean) for final approval</small>
+            <small class="text-muted d-block mt-2">Select one approver (Associate Dean or Chairperson) for final approval</small>
           </div>
         </div>
         
@@ -423,7 +423,7 @@ document.addEventListener('DOMContentLoaded', function() {
       reviewStageSection.style.display = 'none';
       approvalStageSection.style.display = 'block';
 
-      // Fetch Dean / Associate Dean final approvers
+      // Fetch Associate Dean / Chair final approvers
       if (departmentId) {
         try {
           const url = new URL(`/faculty/syllabus/${syllabusId}/final-approvers`, window.location.origin);

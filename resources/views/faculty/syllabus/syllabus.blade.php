@@ -42,7 +42,8 @@
         <span class="small">Save</span>
         <span id="unsaved-count-badge" class="badge bg-warning text-dark mt-1 w-100 text-center" style="display:none;">0</span>
       </button>
-      <!-- Undo / Redo buttons -->
+      @if(!$reviewMode)
+      <!-- Undo / Redo buttons (hidden in review mode) -->
       <button id="syllabusUndoBtn" type="button" class="btn btn-outline-secondary d-flex flex-column align-items-center gap-1 toolbar-btn mt-3" title="Undo" disabled>
         <i class="bi bi-arrow-counterclockwise fs-5"></i>
         <span class="small">Undo</span>
@@ -51,6 +52,7 @@
         <i class="bi bi-arrow-clockwise fs-5"></i>
         <span class="small">Redo</span>
       </button>
+      @endif
       @endif
       @if((($reviewMode && !$fromApprovals) || $isApproved || (!$reviewMode && !$isDraft && !$isLockedSubmitted)))
       <button id="syllabusCommentsToggleBtn" type="button" class="btn btn-outline-secondary d-flex flex-column align-items-center gap-1 toolbar-btn mt-3" title="Toggle Reviewer Comments" data-disable-comments="0">

@@ -154,7 +154,7 @@ class SyllabusSubmissionController extends Controller
     }
 
     /**
-     * Get available final approvers (Dean / Associate Dean)
+     * Get available final approvers (Associate Dean / Chair)
      */
     public function getFinalApprovers(Request $request, $syllabusId)
     {
@@ -169,36 +169,28 @@ class SyllabusSubmissionController extends Controller
                 ], 400);
             }
 
-            // Final approvers: canonical DEPT_HEAD and ASSOC_DEAN, both department-scoped
+            // Final approvers: Associate Dean and Chairperson, both department-scoped
             $approvers = User::whereHas('appointments', function($query) use ($departmentId) {
                     $query->where('status', 'active')
                           ->where('scope_id', $departmentId)
-                          ->whereIn('role', [Appointment::ROLE_DEPT_HEAD, Appointment::ROLE_ASSOC_DEAN]);
+                          ->whereIn('role', [Appointment::ROLE_ASSOC_DEAN, Appointment::ROLE_CHAIR]);
                 })
                 ->with(['appointments' => function($query) use ($departmentId) {
                     $query->where('status', 'active')
                           ->where('scope_id', $departmentId)
-                          ->whereIn('role', [Appointment::ROLE_DEPT_HEAD, Appointment::ROLE_ASSOC_DEAN]);
+                          ->whereIn('role', [Appointment::ROLE_ASSOC_DEAN, Appointment::ROLE_CHAIR]);
                 }])
                 ->get()
-                ->map(function($user) use ($departmentId) {
+                ->map(function($user) {
                     $appointment = $user->appointments->first();
-                    // Determine Department Head label based on department classification
-                    $dept = DB::table('departments')->where('id', $departmentId)->first();
-                    $deptName = $dept->name ?? '';
-                    $deptHeadLabel = 'Dean';
-                    // Heuristics: Lab School → Principal; General Education → Head; else Dean
-                    if (is_string($deptName)) {
-                        $lower = strtolower($deptName);
-                        if (str_contains($lower, 'lab') || str_contains($lower, 'school')) {
-                            $deptHeadLabel = 'Principal';
-                        } elseif (str_contains($lower, 'general education')) {
-                            $deptHeadLabel = 'Head';
-                        } else {
-                            $deptHeadLabel = 'Dean';
+                    $roleLabel = 'Approver';
+                    if ($appointment) {
+                        if ($appointment->role === Appointment::ROLE_ASSOC_DEAN) {
+                            $roleLabel = 'Associate Dean';
+                        } elseif ($appointment->role === Appointment::ROLE_CHAIR) {
+                            $roleLabel = 'Chairperson';
                         }
                     }
-                    $roleLabel = ($appointment && $appointment->role === Appointment::ROLE_DEPT_HEAD) ? $deptHeadLabel : 'Associate Dean';
                     return [
                         'id' => $user->id,
                         'name' => $user->name,
@@ -287,7 +279,7 @@ class SyllabusSubmissionController extends Controller
                 
                 $fromStatus = $syllabus->submission_status;
 
-                // Optional approver selection (Dean / Associate Dean)
+                // Optional approver selection (Associate Dean / Chair)
                 $approverId = $request->input('approver_id');
                 if ($approverId) {
                     $approver = User::find($approverId);
@@ -307,21 +299,20 @@ class SyllabusSubmissionController extends Controller
                         // ignore schema check issues
                     }
                     $syllabus->approved_by_name = $approver->name;
-                    // Derive approver title (Dean / Associate Dean) when possible
+                    // Derive approver title (Associate Dean / Chairperson) when possible
                     try {
                         $deptId = optional($syllabus->program)->department_id;
                         $appt = $approver->appointments()
                             ->where('status', 'active')
+                            ->where('scope_type', Appointment::SCOPE_DEPT)
                             ->where(function($q) use ($deptId) {
-                                $q->where('role', Appointment::ROLE_DEAN)
-                                  ->orWhere(function($qq) use ($deptId) {
-                                      $qq->where('role', Appointment::ROLE_ASSOC_DEAN);
-                                      if ($deptId) { $qq->where('scope_id', $deptId); }
-                                  });
+                                $q->where('role', Appointment::ROLE_ASSOC_DEAN)
+                                  ->orWhere('role', Appointment::ROLE_CHAIR);
+                                if ($deptId) { $q->where('scope_id', $deptId); }
                             })
                             ->first();
                         if ($appt) {
-                            $syllabus->approved_by_title = $appt->role === Appointment::ROLE_DEAN ? 'Dean' : 'Associate Dean';
+                            $syllabus->approved_by_title = $appt->role === Appointment::ROLE_ASSOC_DEAN ? 'Associate Dean' : 'Chairperson';
                         }
                     } catch (\Throwable $t) {
                         // non-fatal if we cannot infer title
@@ -446,7 +437,7 @@ class SyllabusSubmissionController extends Controller
             }
 
             if ($syllabus->submission_status === 'final_approval') {
-                // Only the assigned final approver (Dean / Associate Dean) can finalize
+                // Only the assigned final approver (Associate Dean / Chair) can finalize
                 if ((int)$syllabus->reviewed_by !== (int)$user->id) {
                     return response()->json([
                         'success' => false,
@@ -465,21 +456,20 @@ class SyllabusSubmissionController extends Controller
                     }
                 } catch (\Throwable $t) { /* ignore schema check errors */ }
                 $syllabus->approved_by_name = $user->name;
-                // Infer approver title from appointments
+                // Infer approver title from appointments (Associate Dean / Chairperson)
                 try {
                     $deptId = optional($syllabus->program)->department_id;
                     $appt = $user->appointments()
                         ->where('status', 'active')
+                        ->where('scope_type', Appointment::SCOPE_DEPT)
                         ->where(function($q) use ($deptId) {
-                            $q->where('role', Appointment::ROLE_DEAN)
-                              ->orWhere(function($qq) use ($deptId) {
-                                  $qq->where('role', Appointment::ROLE_ASSOC_DEAN);
-                                  if ($deptId) { $qq->where('scope_id', $deptId); }
-                              });
+                            $q->where('role', Appointment::ROLE_ASSOC_DEAN)
+                              ->orWhere('role', Appointment::ROLE_CHAIR);
+                            if ($deptId) { $q->where('scope_id', $deptId); }
                         })
                         ->first();
                     if ($appt) {
-                        $syllabus->approved_by_title = $appt->role === Appointment::ROLE_DEAN ? 'Dean' : 'Associate Dean';
+                        $syllabus->approved_by_title = $appt->role === Appointment::ROLE_ASSOC_DEAN ? 'Associate Dean' : 'Chairperson';
                     }
                 } catch (\Throwable $t) { /* ignore */ }
                 try { $syllabus->approved_by_date = now()->format('Y-m-d'); }

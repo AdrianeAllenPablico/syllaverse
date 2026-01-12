@@ -61,7 +61,7 @@ class SyllabusController extends Controller
         }
         // Get syllabi awaiting this user's action:
         // - pending_review assigned to this user
-        // - final_approval assigned to this user (Dean/Associate Dean)
+        // - final_approval assigned to this user (Associate Dean / Chair)
         $syllabi = Syllabus::with('course', 'program', 'faculty')
             ->whereIn('submission_status', ['pending_review', 'final_approval'])
             ->where('reviewed_by', auth()->id())
