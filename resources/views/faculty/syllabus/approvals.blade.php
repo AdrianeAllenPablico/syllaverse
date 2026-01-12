@@ -32,7 +32,7 @@
               <article class="svx-card shadow-sm h-100 d-flex flex-column syllabus-card" tabindex="0" role="button"
                        data-syllabus-id="{{ $syllabus->id }}"
                        data-open-url="{{ route('faculty.syllabi.show',$syllabus->id) }}?from=approvals&review=1"
-                       aria-label="Review syllabus {{ $syllabus->title }}">
+                       aria-label="Review syllabus {{ $syllabus->course->title ?? $syllabus->title }}">
                 <div class="svx-card-body flex-grow-1">
                   <div class="d-flex align-items-center justify-content-between mb-1 small text-muted">
                     <span class="svx-course-pill"><i class="bi bi-book"></i> {{ $syllabus->course->code ?? '-' }}</span>
@@ -49,7 +49,7 @@
                       </span>
                     @endif
                   </div>
-                  <h6 class="fw-semibold mb-0 syllabus-title">{{ $syllabus->title }}</h6>
+                  <h6 class="fw-semibold mb-0 syllabus-title">{{ $syllabus->course->title ?? $syllabus->title }}</h6>
                   @if(!empty($syllabus->course?->title))
                     <div class="text-muted small syllabus-course-title">{{ $syllabus->course->title }}</div>
                   @endif

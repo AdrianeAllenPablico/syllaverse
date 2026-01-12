@@ -103,6 +103,11 @@
         </a>
       </li>
 
+      {{-- Separator between Courses and Master Data --}}
+      <li class="nav-item">
+        <div class="sidebar-separator"></div>
+      </li>
+
       {{-- Master Data --}}
       @php $isActive = request()->routeIs('faculty.master-data*'); @endphp
       <li class="nav-item">
