@@ -31,34 +31,62 @@ class CourseController extends Controller
     {
         // Get all active appointments for the user
         $userAppointments = $user->appointments()->active()->get();
-        
+
         // Log for debugging
-        \Log::info('User appointments for ' . $user->id, $userAppointments->toArray());
-        
-        // Check if user has any administrative roles
-        $hasAdministrativeRole = $userAppointments->contains(function($appointment) {
-            // Treat DEPT_HEAD as equivalent to legacy DEPT_CHAIR
-            return in_array($appointment->role, ['VCAA', 'ASSOC_VCAA', 'DEAN', 'DEPT_CHAIR', 'DEPT_HEAD', 'PROG_CHAIR']);
+        \Log::info('[CourseController] User appointments for ' . $user->id, $userAppointments->toArray());
+
+        // 1) Institution-wide roles (VCAA / ASSOC_VCAA / DEAN scoped to Institution)
+        $hasInstitutionWideRole = $userAppointments->contains(function ($appointment) {
+            return in_array($appointment->role, ['VCAA', 'ASSOC_VCAA'])
+                || ($appointment->role === 'DEAN' && $appointment->scope_type === 'Institution');
         });
-        
-        \Log::info('Has administrative role: ' . ($hasAdministrativeRole ? 'true' : 'false'));
-        
-        // If user has administrative role, allow them to choose department
-        if ($hasAdministrativeRole) {
+
+        \Log::info('[CourseController] hasInstitutionWideRole: ' . ($hasInstitutionWideRole ? 'true' : 'false'));
+
+        // Institution-wide users can freely choose department via dropdown
+        if ($hasInstitutionWideRole) {
             return null;
         }
-        
-        // For basic faculty users, get their department from faculty appointment
-        $facultyAppointment = $userAppointments->filter(function($appointment) {
-            return $appointment->role === 'FACULTY' &&
-                   $appointment->scope_type === 'Department' &&
-                   !empty($appointment->scope_id);
-        })->first();
-        
-        $departmentId = $facultyAppointment ? $facultyAppointment->scope_id : null;
-        \Log::info('Faculty department ID: ' . $departmentId);
-        
-        return $departmentId;
+
+        // 2) Department leadership (DEPT_HEAD / DEPT_CHAIR / CHAIR / DEAN scoped to a Department)
+        $deptLeadership = $userAppointments->first(function ($appointment) {
+            return in_array($appointment->role, ['DEPT_HEAD', 'DEPT_CHAIR', 'CHAIR', 'DEAN'])
+                && $appointment->scope_type === 'Department'
+                && !empty($appointment->scope_id);
+        });
+        if ($deptLeadership) {
+            \Log::info('[CourseController] Department leadership appointment found, scope_id=' . $deptLeadership->scope_id);
+            return (int) $deptLeadership->scope_id;
+        }
+
+        // 3) Program Chair – derive department from the scoped Program
+        $progChairAppt = $userAppointments->first(function ($appointment) {
+            return $appointment->role === 'PROG_CHAIR'
+                && $appointment->scope_type === 'Program'
+                && !empty($appointment->scope_id);
+        });
+        if ($progChairAppt) {
+            $progDeptId = Program::where('id', $progChairAppt->scope_id)->value('department_id');
+            \Log::info('[CourseController] Program Chair appointment found, program_id=' . $progChairAppt->scope_id . ', mapped department_id=' . $progDeptId);
+            if ($progDeptId) {
+                return (int) $progDeptId;
+            }
+        }
+
+        // 4) Faculty department appointment fallback
+        $facultyAppointment = $userAppointments->first(function ($appointment) {
+            return $appointment->role === 'FACULTY'
+                && $appointment->scope_type === 'Department'
+                && !empty($appointment->scope_id);
+        });
+        if ($facultyAppointment) {
+            \Log::info('[CourseController] Faculty department appointment found, scope_id=' . $facultyAppointment->scope_id);
+            return (int) $facultyAppointment->scope_id;
+        }
+
+        // If nothing matched, no implicit department – require explicit selection
+        \Log::warning('[CourseController] No scoped department resolved for user ' . $user->id);
+        return null;
     }
 
     /** Decide if current request expects JSON (fetch/XHR). */
@@ -72,7 +100,7 @@ class CourseController extends Controller
     {
         return $user->appointments()
             ->active()
-            ->whereIn('role', ['VCAA', 'ASSOC_VCAA', 'DEAN', 'DEPT_CHAIR', 'PROG_CHAIR', 'FACULTY'])
+            ->whereIn('role', ['VCAA', 'ASSOC_VCAA', 'DEAN', 'DEPT_CHAIR', 'DEPT_HEAD', 'CHAIR', 'PROG_CHAIR', 'FACULTY'])
             ->exists();
     }
 
@@ -90,7 +118,7 @@ class CourseController extends Controller
         $programIds = [];
 
         foreach ($appts as $a) {
-            if (in_array($a->role, ['DEPT_CHAIR', 'DEPT_HEAD'])) {
+            if (in_array($a->role, ['DEPT_CHAIR', 'DEPT_HEAD', 'CHAIR'])) {
                 $deptIds[] = (int) $a->scope_id;
             } elseif ($a->role === 'FACULTY') {
                 $deptIds[] = (int) $a->scope_id;
@@ -165,9 +193,9 @@ class CourseController extends Controller
         $scopedDepartmentId = null;
 
         if (!$hasInstitutionWideRole) {
-            // 1. Department-scoped leadership roles (DEPT_HEAD/DEPT_CHAIR, DEAN with Department scope)
+            // 1. Department-scoped leadership roles (DEPT_HEAD/DEPT_CHAIR/CHAIR, DEAN with Department scope)
             $deptRoleAppt = $userAppointments->first(function($a) {
-                return in_array($a->role, ['DEPT_HEAD', 'DEPT_CHAIR', 'DEAN']) &&
+                return in_array($a->role, ['DEPT_HEAD', 'DEPT_CHAIR', 'CHAIR', 'DEAN']) &&
                        $a->scope_type === 'Department' && !empty($a->scope_id);
             });
             if ($deptRoleAppt) {
@@ -559,7 +587,7 @@ class CourseController extends Controller
         $scopedDeptId = null;
         if (!$hasInstitutionWideRole) {
             $deptAppt = $userAppointments->first(function($a) {
-                return in_array($a->role, ['DEPT_HEAD', 'DEPT_CHAIR', 'DEAN']) && $a->scope_type === 'Department' && !empty($a->scope_id);
+                return in_array($a->role, ['DEPT_HEAD', 'DEPT_CHAIR', 'CHAIR', 'DEAN']) && $a->scope_type === 'Department' && !empty($a->scope_id);
             });
             if ($deptAppt) { $scopedDeptId = (int) $deptAppt->scope_id; }
             if (!$scopedDeptId) {
