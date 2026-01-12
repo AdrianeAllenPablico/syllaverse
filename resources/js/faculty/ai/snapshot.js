@@ -737,6 +737,7 @@
         }
         
         const section = {
+          section: String(sectionNum),
           code: textTrim(cells[0]?.querySelector('textarea')?.value ?? ''),
           task: textTrim(cells[1]?.querySelector('textarea')?.value ?? ''),
           percent: textTrim(cells[3]?.querySelector('textarea')?.value ?? ''),
@@ -827,51 +828,51 @@
       md.push('### Assessment Method and Distribution Map');
       md.push('_This is the current snapshot of the Assessment Method and Distribution Map section from the live syllabus. Treat this as the most up-to-date authoritative data for assessment tasks and their ILO distributions._');
     
-    const raw = { sections: [], iloCount };
+    // Raw snapshot structure mirrors the UI layout: sections with
+    // a main row plus sub-rows, and a flat list for convenience.
+    const raw = {
+      iloCount,
+      sections,
+      flatRows,
+    };
     
     if (sections.length === 0 || flatRows.length === 0) {
-      md.push('| Row | Code | Task | I/R/D | % |');
-      md.push('|:--:|:--|:--|:--:|:--:|');
-      md.push('| - | No assessment tasks defined | - | - | - |');
+      md.push('| Code | Assessment Tasks | I/R/D | % | C | P | A |');
+      md.push('|:--|:--|:--:|:--:|:--:|:--:|:--:|');
+      md.push('| - | No assessment tasks defined | - | - | - | - | - |');
     } else {
-      // Table 1: Code / Task / I/R/D / % with a Row number on the left
-      md.push('| Row | Code | Task | I/R/D | % |');
-      md.push('|:--:|:--|:--|:--:|:--:|');
-      flatRows.forEach(row => {
-        md.push(`| ${row.rowNo} | ${row.code || '-'} | ${row.task || '-'} | ${row.ird || '-'} | ${row.percent || ''} |`);
-      });
-
-      // Blank line between tables
-      md.push('');
-
-      // Table 2: ILO item distributions only, with Row number on the left
-      if (iloCount > 0) {
-        const iloHeaders = [];
-        for (let i = 1; i <= iloCount; i++) {
-          iloHeaders.push(`ILO${i}`);
-        }
-        md.push('| Row | ' + iloHeaders.join(' | ') + ' |');
-        md.push('|' + [':--:'].concat(Array(iloCount).fill(':--')).join('|') + '|');
-        flatRows.forEach(row => {
-          const cells = [];
-          for (let i = 0; i < iloCount; i++) {
-            cells.push(row.iloColumns && row.iloColumns[i] ? row.iloColumns[i] : '-');
-          }
-          md.push(`| ${row.rowNo} | ${cells.join(' | ')} |`);
-        });
-
-        // Blank line between tables
-        md.push('');
+      // Build a single table shaped like the UI: Code, Task, I/R/D, %, ILO columns, C, P, A
+      const iloHeaders = [];
+      for (let i = 1; i <= iloCount; i++) {
+        iloHeaders.push(`ILO${i}`);
       }
 
-      // Table 3: C/P/A domain distributions only, with Row number on the left
-      md.push('| Row | C | P | A |');
-      md.push('|:--:|:--:|:--:|:--:|');
+      const headerCols = ['Code', 'Assessment Tasks', 'I/R/D', '%'].concat(iloHeaders).concat(['C', 'P', 'A']);
+      md.push('| ' + headerCols.join(' | ') + ' |');
+
+      const alignCols = [':--', ':--', ':--:', ':--:']
+        .concat(Array(iloCount).fill(':--:'))
+        .concat([':--:', ':--:', ':--:']);
+      md.push('|' + alignCols.join('|') + '|');
+
       flatRows.forEach(row => {
+        const iloCells = [];
+        for (let i = 0; i < iloCount; i++) {
+          iloCells.push(row.iloColumns && row.iloColumns[i] ? row.iloColumns[i] : '-');
+        }
         const cVal = row.c ? row.c : '-';
         const pVal = row.p ? row.p : '-';
         const aVal = row.a ? row.a : '-';
-        md.push(`| ${row.rowNo} | ${cVal} | ${pVal} | ${aVal} |`);
+
+        const baseCols = [
+          row.code || '-',
+          row.task || '-',
+          row.ird || '-',
+          row.percent || '',
+        ];
+
+        const allCols = baseCols.concat(iloCells).concat([cVal, pVal, aVal]);
+        md.push('| ' + allCols.join(' | ') + ' |');
       });
     }
 
