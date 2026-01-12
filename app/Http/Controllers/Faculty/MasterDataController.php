@@ -38,18 +38,23 @@ class MasterDataController extends Controller
         });
         $departmentId = $deptAppt?->scope_id;
 
-        // Departments list (all if institution-wide, else just scoped department)
-        if ($hasInstitutionWideOnly || !$departmentId) {
-            $departments = Department::orderBy('name')->get();
+        // Departments list (all if no scoped department, else just scoped department)
+        if ($departmentId) {
+            $departments = Department::where('id', (int) $departmentId)->get();
         } else {
-            $departments = Department::where('id', (int)$departmentId)->get();
+            $departments = Department::orderBy('name')->get();
         }
 
-        // Courses filtered by department unless institution-wide
-        if ($hasInstitutionWideOnly || !$departmentId) {
-            $courses = Course::active()->orderBy('code')->get();
+        // Courses filtered by user's department when available; otherwise all courses
+        if ($departmentId) {
+            $courses = Course::active()
+                ->where('department_id', (int) $departmentId)
+                ->orderBy('title')
+                ->get();
         } else {
-            $courses = Course::active()->where('department_id', (int)$departmentId)->orderBy('code')->get();
+            $courses = Course::active()
+                ->orderBy('title')
+                ->get();
         }
 
         // Show department filter only if institution-wide (can switch among departments)
