@@ -95,13 +95,13 @@
             $hasPending = in_array(true, $pendingRole, true);
           @endphp
           <h6 class="fw-bold mb-3 sv-card-title">Request Role</h6>
-          <form id="mpRoleRequestForm" class="sv-form-flat">
+          <form id="mpRoleRequestForm" class="sv-form-flat" data-has-pending="{{ $hasPending ? '1' : '0' }}">
             @csrf
             <div class="mb-2">
               <div class="row g-2 align-items-center mb-2">
                 <div class="col-md-6">
                   <div class="form-check">
-                    <input class="form-check-input sv-check" type="checkbox" id="mpRole_dean" name="roles[]" value="dean" data-pending="{{ $pendingRole['dean'] ? '1' : '0' }}" data-current="{{ $activeRolePresent['dean'] ? '1' : '0' }}" {{ $activeRolePresent['dean'] ? 'checked' : '' }} {{ $pendingRole['assoc_dean'] ? 'disabled' : '' }} title="{{ $pendingRole['assoc_dean'] ? 'Disabled: pending Associate Dean request exists' : '' }}">
+                    <input class="form-check-input sv-check" type="checkbox" id="mpRole_dean" name="roles[]" value="dean" data-pending="{{ $pendingRole['dean'] ? '1' : '0' }}" data-current="{{ $activeRolePresent['dean'] ? '1' : '0' }}" {{ $activeRolePresent['dean'] ? 'checked' : '' }} {{ ($pendingRole['assoc_dean'] || $hasPending) ? 'disabled' : '' }} title="{{ $hasPending ? 'Disabled: pending role request exists' : ($pendingRole['assoc_dean'] ? 'Disabled: pending Associate Dean request exists' : '') }}">
                     <label class="form-check-label fw-semibold" for="mpRole_dean">Department Head (Dean/Head/Principal) @if($activeRolePresent['dean']) <span class="text-success small ms-1">(Current)</span>@endif</label>
                   </div>
                 </div>
@@ -118,7 +118,7 @@
               <div class="row g-2 align-items-center mb-2">
                 <div class="col-md-6">
                   <div class="form-check">
-                    <input class="form-check-input sv-check" type="checkbox" id="mpRole_assoc_dean" name="roles[]" value="assoc_dean" data-pending="{{ $pendingRole['assoc_dean'] ? '1' : '0' }}" data-current="{{ $activeRolePresent['assoc_dean'] ? '1' : '0' }}" {{ $activeRolePresent['assoc_dean'] ? 'checked' : '' }} {{ $pendingRole['dean'] ? 'disabled' : '' }} title="{{ $pendingRole['dean'] ? 'Disabled: pending Dean request exists' : '' }}">
+                    <input class="form-check-input sv-check" type="checkbox" id="mpRole_assoc_dean" name="roles[]" value="assoc_dean" data-pending="{{ $pendingRole['assoc_dean'] ? '1' : '0' }}" data-current="{{ $activeRolePresent['assoc_dean'] ? '1' : '0' }}" {{ $activeRolePresent['assoc_dean'] ? 'checked' : '' }} {{ ($pendingRole['dean'] || $hasPending) ? 'disabled' : '' }} title="{{ $hasPending ? 'Disabled: pending role request exists' : ($pendingRole['dean'] ? 'Disabled: pending Dean request exists' : '') }}">
                     <label class="form-check-label fw-semibold" for="mpRole_assoc_dean">Associate Dean @if($activeRolePresent['assoc_dean']) <span class="text-success small ms-1">(Current)</span>@endif</label>
                   </div>
                 </div>
@@ -135,7 +135,7 @@
               <div class="row g-2 align-items-center mb-2">
                 <div class="col-md-6">
                   <div class="form-check">
-                    <input class="form-check-input sv-check" type="checkbox" id="mpRole_dept_chair" name="roles[]" value="dept_chair" data-pending="{{ $pendingRole['dept_chair'] ? '1' : '0' }}" data-current="{{ $activeRolePresent['dept_chair'] ? '1' : '0' }}" {{ $activeRolePresent['dept_chair'] ? 'checked' : '' }} {{ $pendingRole['dept_chair'] ? 'disabled' : '' }} title="{{ $pendingRole['dept_chair'] ? 'Disabled: pending Department Chair request exists' : '' }}">
+                    <input class="form-check-input sv-check" type="checkbox" id="mpRole_dept_chair" name="roles[]" value="dept_chair" data-pending="{{ $pendingRole['dept_chair'] ? '1' : '0' }}" data-current="{{ $activeRolePresent['dept_chair'] ? '1' : '0' }}" {{ $activeRolePresent['dept_chair'] ? 'checked' : '' }} {{ ($pendingRole['dept_chair'] || $hasPending) ? 'disabled' : '' }} title="{{ $hasPending ? 'Disabled: pending role request exists' : ($pendingRole['dept_chair'] ? 'Disabled: pending Department Chair request exists' : '') }}">
                     <label class="form-check-label fw-semibold" for="mpRole_dept_chair">Chairperson @if($activeRolePresent['dept_chair']) <span class="text-success small ms-1">(Current)</span>@endif</label>
                   </div>
                 </div>
@@ -152,7 +152,7 @@
               <div class="row g-2 align-items-center mb-3">
                 <div class="col-md-6">
                   <div class="form-check">
-                    <input class="form-check-input sv-check" type="checkbox" id="mpRole_faculty" name="roles[]" value="faculty" data-pending="{{ $pendingRole['faculty'] ? '1' : '0' }}" data-current="{{ $activeRolePresent['faculty'] ? '1' : '0' }}" {{ $activeRolePresent['faculty'] ? 'checked' : '' }} {{ $pendingRole['faculty'] ? 'disabled' : '' }} title="{{ $pendingRole['faculty'] ? 'Disabled: pending Faculty request exists' : '' }}">
+                    <input class="form-check-input sv-check" type="checkbox" id="mpRole_faculty" name="roles[]" value="faculty" data-pending="{{ $pendingRole['faculty'] ? '1' : '0' }}" data-current="{{ $activeRolePresent['faculty'] ? '1' : '0' }}" {{ $activeRolePresent['faculty'] ? 'checked' : '' }} {{ ($pendingRole['faculty'] || $hasPending) ? 'disabled' : '' }} title="{{ $hasPending ? 'Disabled: pending role request exists' : ($pendingRole['faculty'] ? 'Disabled: pending Faculty request exists' : '') }}">
                     <label class="form-check-label fw-semibold" for="mpRole_faculty">Faculty @if($activeRolePresent['faculty']) <span class="text-success small ms-1">(Current)</span>@endif</label>
                   </div>
                 </div>

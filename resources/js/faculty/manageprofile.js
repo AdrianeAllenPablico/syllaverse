@@ -40,6 +40,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (roleForm) {
+    const hasPendingGlobal = roleForm.dataset && roleForm.dataset.hasPending === '1';
+    if (hasPendingGlobal) {
+      // When a pending request exists, role checkboxes are disabled server-side;
+      // skip attaching interactive behavior for new requests.
+      return;
+    }
     // Toggle department selects enabled state based on checkbox
     const rid = ['dean','assoc_dean','dept_chair','faculty'];
     rid.forEach(r => {
@@ -49,19 +55,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const sync = () => {
           const isCurrent = cb.dataset && cb.dataset.current === '1';
           sel.disabled = !cb.checked && !isCurrent; // keep enabled if current even when unchecked
-          if (!cb.checked) {
-            // Keep current roles' departments rendered; do not clear when unchecked
-            if (!isCurrent && r !== 'faculty') {
-              // Reset department when unchecked for non-faculty roles
-              sel.selectedIndex = 0;
-              if (sel.options.length && sel.options[0].value !== '') {
-                const emptyOpt = Array.from(sel.options).find(o => o.value === '');
-                if (emptyOpt) sel.value = '';
-              } else {
-                sel.value = '';
-              }
-              sel.dispatchEvent(new Event('change'));
+          if (!cb.checked && !isCurrent) {
+            // Reset department when unchecked for non-current roles (including Faculty)
+            sel.selectedIndex = 0;
+            if (sel.options.length && sel.options[0].value !== '') {
+              const emptyOpt = Array.from(sel.options).find(o => o.value === '');
+              if (emptyOpt) sel.value = '';
+            } else {
+              sel.value = '';
             }
+            sel.dispatchEvent(new Event('change'));
           }
         };
         cb.addEventListener('change', sync);
@@ -159,18 +162,20 @@ document.addEventListener('DOMContentLoaded', () => {
           const cb = document.getElementById(`mpRole_${r}`);
           const sel = document.getElementById(`mpDept_${r}`);
           if (!cb || !sel) return;
-          const isCurrent = cb.dataset && cb.dataset.current === '1';
           if (r === selected) {
             cb.disabled = false; // keep selected usable
-            sel.disabled = false; // allow dept selection for selected
+            sel.disabled = false; // allow dept selection only for selected role
           } else {
             cb.checked = false;
             cb.disabled = true;
-            sel.disabled = !isCurrent; // keep enabled for current role
-            // Keep Faculty department rendered even when another role is selected
-            if (!isCurrent && r !== 'faculty') {
-              // Reset department for other non-selected roles
-              sel.selectedIndex = 0; sel.value = ''; sel.dispatchEvent(new Event('change'));
+            // Disable all other department dropdowns (including current roles)
+            sel.disabled = true;
+            // Reset department only for non-current roles
+            const isCurrent = cb.dataset && cb.dataset.current === '1';
+            if (!isCurrent) {
+              sel.selectedIndex = 0;
+              sel.value = '';
+              sel.dispatchEvent(new Event('change'));
             }
             cb.title = 'Disabled: another role is selected';
           }
