@@ -821,39 +821,7 @@ export function snapshotSo(){
   };
 }
 
-// Global window exposure for debugging/inspection (optional)
-if (typeof window !== 'undefined') {
-  window.SVSnapshot = {
-    snapshotMissionVision,
-    snapshotCourseInfo,
-    snapshotCriteria,
-    snapshotIlo,
-    snapshotAssessmentTasks,
-    snapshotIga,
-    snapshotSo,
-    snapshotCdio,
-    snapshotSdg,
-    snapshotCoursePolicies,
-    snapshotTla,
-    snapshotAssessmentMapping,
-    snapshotIloSoCpaMapping,
-    snapshotIloIgaMapping,
-    snapshotIloCdioSdgMapping
-  };
-  // Also expose directly on window for easy access
-  window.snapshotMissionVision = snapshotMissionVision;
-  window.snapshotCourseInfo = snapshotCourseInfo;
-  window.snapshotCriteria = snapshotCriteria;
-  window.snapshotIlo = snapshotIlo;
-  window.snapshotAssessmentTasks = snapshotAssessmentTasks;
-  window.snapshotIga = snapshotIga;
-  window.snapshotSo = snapshotSo;
-  window.snapshotCdio = snapshotCdio;
-  window.snapshotSdg = snapshotSdg;
-  window.snapshotCoursePolicies = snapshotCoursePolicies;
-  window.snapshotTla = snapshotTla;
-  window.snapshotAssessmentMapping = snapshotAssessmentMapping;
-  window.snapshotIloSoCpaMapping = snapshotIloSoCpaMapping;
-  window.snapshotIloIgaMapping = snapshotIloIgaMapping;
-  window.snapshotIloCdioSdgMapping = snapshotIloCdioSdgMapping;
-}
+// Note: This module only exports snapshot helpers for the
+// criteria/undo system via ES module imports. Global AI
+// snapshots (SVSnapshot.collectAllSnapshots, etc.) are
+// owned by resources/js/faculty/ai/snapshot.js.
