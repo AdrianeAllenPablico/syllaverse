@@ -164,26 +164,14 @@ class AIController extends Controller
             }
         }
 
-        // Add comprehensive prompt library
-        $promptLibrary = "You have access to specialized guidance for analyzing syllabus sections:\n\n";
-        
-        if (!empty($allPrompts) && is_array($allPrompts)) {
-            foreach ($allPrompts as $promptKey => $promptText) {
-                if (!empty($promptText)) {
-                    $promptLibrary .= "## {$promptKey}\n{$promptText}\n\n";
-                }
-            }
-        }
-
-        // Add partial-specific prompt if provided
+        // Add only the partial-specific prompt (to keep context focused and compact)
+        // instead of dumping the entire prompt library for all partials.
         if (!empty($prompt)) {
-            $promptLibrary .= "## Current Focus\n{$prompt}\n";
+            $messages[] = [
+                'role' => 'system',
+                'content' => "Specialized guidance for the current syllabus section:\n\n{$prompt}",
+            ];
         }
-
-        $messages[] = [
-            'role' => 'system',
-            'content' => $promptLibrary,
-        ];
 
         // Add textbook chunks if available
         if (!empty($textbookChunks) && is_array($textbookChunks)) {

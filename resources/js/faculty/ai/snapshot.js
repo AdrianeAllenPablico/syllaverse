@@ -783,12 +783,13 @@
             rowNo: rowCounter,
             code: section.code || '-',
             task: section.task || '-',
-            ird: '-',
+            ird: '',
             percent: section.percent || '',
             iloColumns: section.iloColumns ? section.iloColumns.slice() : [],
             c: '',
             p: '',
-            a: ''
+            a: '',
+            isCategory: true
           });
         } else {
           // Main category row
@@ -797,12 +798,13 @@
             rowNo: rowCounter,
             code: section.code || '-',
             task: section.task || '-',
-            ird: '-',
+            ird: '',
             percent: section.percent || '',
             iloColumns: section.iloColumns ? section.iloColumns.slice() : [],
             c: '',
             p: '',
-            a: ''
+            a: '',
+            isCategory: true
           });
 
           // Sub-rows (individual tasks)
@@ -811,13 +813,14 @@
             flatRows.push({
               rowNo: rowCounter,
               code: subRow.code || '-',
-              task: `- ${subRow.task || '-'}`,
+              task: subRow.task || '-',
               ird: subRow.ird || '-',
               percent: '',
               iloColumns: subRow.iloColumns ? subRow.iloColumns.slice() : [],
               c: subRow.cpa.c || '',
               p: subRow.cpa.p || '',
-              a: subRow.cpa.a || ''
+              a: subRow.cpa.a || '',
+              isCategory: false
             });
           });
         }
@@ -856,18 +859,22 @@
       md.push('|' + alignCols.join('|') + '|');
 
       flatRows.forEach(row => {
+        const isCategory = !!row.isCategory;
         const iloCells = [];
         for (let i = 0; i < iloCount; i++) {
-          iloCells.push(row.iloColumns && row.iloColumns[i] ? row.iloColumns[i] : '-');
+          const v = row.iloColumns && row.iloColumns[i] ? row.iloColumns[i] : '';
+          iloCells.push(v || (isCategory ? '' : '-'));
         }
-        const cVal = row.c ? row.c : '-';
-        const pVal = row.p ? row.p : '-';
-        const aVal = row.a ? row.a : '-';
+        const cVal = row.c ? row.c : (isCategory ? '' : '-');
+        const pVal = row.p ? row.p : (isCategory ? '' : '-');
+        const aVal = row.a ? row.a : (isCategory ? '' : '-');
+
+        const irdVal = row.ird ? row.ird : (isCategory ? '' : '-');
 
         const baseCols = [
           row.code || '-',
           row.task || '-',
-          row.ird || '-',
+          irdVal,
           row.percent || '',
         ];
 
