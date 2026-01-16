@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Log;
 use App\Models\SuperAdmin;
 
 class AuthController extends Controller
@@ -93,6 +94,9 @@ class AuthController extends Controller
             });
             return back()->with('status', 'Reset link sent. Please check your email.');
         } catch (\Throwable $e) {
+            Log::error('Superadmin reset mail failed', [
+                'message' => $e->getMessage(),
+            ]);
             return back()->withErrors(['reset' => 'Failed to send reset link.']);
         }
     }
