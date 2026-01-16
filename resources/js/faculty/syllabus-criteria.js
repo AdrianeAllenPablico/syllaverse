@@ -662,11 +662,19 @@ import { snapshotCriteria } from './utilities/snapshot.js';
 
 		const root = getRootEl();
 		if (root){
-			root.addEventListener('focusin', function(){ 
+			root.addEventListener('focusin', function(e){ 
 				try { 
 					window.SVLastActiveModule = MODULE_NAME; 
 					window.SVActiveModuleName = MODULE_NAME; 
-				} catch(e){} 
+				} catch(e){}
+				// Whenever focus enters a criteria input, notify AI layer (it will handle gating).
+				try {
+					const t = e && e.target ? e.target : null;
+					if (t && t.classList && (t.classList.contains('category') || t.classList.contains('sub-input') || t.classList.contains('sub-percent'))){
+						const ev = new CustomEvent('sv:criteria:auto-suggest', { detail: { source: 'focus' } });
+						document.dispatchEvent(ev);
+					}
+				} catch(_){/* noop */}
 			});
 			root.addEventListener('mouseenter', function(){ 
 				try { 

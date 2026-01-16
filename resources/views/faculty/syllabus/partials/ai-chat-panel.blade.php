@@ -8,6 +8,19 @@
   <i class="bi bi-stars"></i>
 </button>
 
+<!-- One-time Criteria Suggestion "thought" panel anchored near FAB -->
+<div id="aiFabCriteriaHint" class="ai-fab-hint" aria-live="polite" aria-label="Suggested criteria" style="display:none;">
+  <div class="ai-fab-hint-inner">
+    <div class="ai-fab-hint-header">
+      <span class="ai-fab-hint-title">Suggested Criteria</span>
+      <button type="button" class="ai-fab-hint-close" aria-label="Dismiss suggestion">&times;</button>
+    </div>
+    <div class="ai-fab-hint-body" id="aiFabCriteriaHintBody">
+      <!-- Filled dynamically by AI auto-suggest for Criteria -->
+    </div>
+  </div>
+</div>
+
 <!-- AI Chat Panel (slide-in from right, full height) -->
 <div id="aiChatPanel" class="ai-chat-panel" role="dialog" aria-labelledby="aiChatTitle" aria-hidden="true">
   <!-- Resize Handle (left edge) -->
@@ -127,6 +140,112 @@
 
 .ai-chat-fab i {
   animation: pulse 2s ease-in-out infinite;
+}
+
+/* One-off "thinking" pop animation when triggered from other UI (e.g., Criteria focus) */
+.ai-chat-fab.ai-thinking {
+  animation: ai-fab-think-pop 0.8s ease-out;
+  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55);
+}
+
+@keyframes ai-fab-think-pop {
+  0% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55);
+  }
+  60% {
+    transform: translateY(-4px) scale(1.08);
+    box-shadow: 0 0 0 14px rgba(220, 38, 38, 0);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.0);
+  }
+}
+
+/* One-time "thought" hint panel near FAB for Criteria suggestions */
+.ai-fab-hint {
+  position: fixed;
+  right: 2rem;
+  bottom: 5.5rem;
+  max-width: 360px;
+  z-index: 1055;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.22s ease-out, transform 0.22s ease-out;
+}
+
+.ai-fab-hint.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ai-fab-hint-inner {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.28);
+  border: 1px solid rgba(209, 213, 219, 0.7);
+  padding: 0.75rem 0.9rem 0.85rem 0.9rem;
+  font-size: 0.85rem;
+  color: #111827;
+}
+
+.ai-fab-hint-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.ai-fab-hint-title {
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b7280;
+}
+
+.ai-fab-hint-close {
+  border: none;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+  cursor: pointer;
+}
+
+.ai-fab-hint-close:hover {
+  color: #4b5563;
+}
+
+.ai-fab-hint-body {
+  max-height: 260px;
+  overflow: auto;
+}
+
+.ai-fab-hint-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #6b7280;
+}
+
+.ai-fab-hint-loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #dc2626;
+  animation: ai-fab-loading-bounce 1s infinite ease-in-out;
+}
+
+.ai-fab-hint-loading-dot:nth-child(2) { animation-delay: 0.12s; }
+.ai-fab-hint-loading-dot:nth-child(3) { animation-delay: 0.24s; }
+
+@keyframes ai-fab-loading-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-3px); opacity: 1; }
 }
 
 @keyframes pulse {

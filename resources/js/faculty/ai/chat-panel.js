@@ -10,6 +10,7 @@
 
 	// Global flag within this module to prevent concurrent AI requests
 	let aiSending = false;
+	let criteriaAutoSuggested = false; // true once a criteria suggestion request has been made
 
 	function $(id){ return document.getElementById(id); }
 
@@ -797,6 +798,9 @@
 		const form = $('aiChatForm');
 		const input = $('aiChatInput');
 		const sendBtn = $('aiChatSend');
+		const fabHint = $('aiFabCriteriaHint');
+		const fabHintBody = $('aiFabCriteriaHintBody');
+		const fabHintClose = fabHint ? fabHint.querySelector('.ai-fab-hint-close') : null;
 
 		if (!panel || !fab) return;
 
@@ -860,6 +864,74 @@
 			sendBtn.addEventListener('click', function(){ handleSend(''); });
 		}
 
+		// Small FAB hint helpers (one-time Criteria suggestion)
+		function showFabHint(){
+			if (!fabHint || !fabHintBody) return;
+			fabHint.style.display = 'block';
+			// ensure reflow before adding class for transition
+			void fabHint.offsetWidth;
+			fabHint.classList.add('show');
+		}
+
+		function hideFabHint(){
+			if (!fabHint) return;
+			fabHint.classList.remove('show');
+			setTimeout(function(){
+				if (!fabHint.classList.contains('show')) {
+					fabHint.style.display = 'none';
+				}
+			}, 220);
+		}
+
+		function setFabHintLoading(){
+			if (!fabHintBody) return;
+			fabHintBody.innerHTML = '';
+			const row = document.createElement('div');
+			row.className = 'ai-fab-hint-loading';
+			for (let i = 0; i < 3; i++){
+				const dot = document.createElement('div');
+				dot.className = 'ai-fab-hint-loading-dot';
+				row.appendChild(dot);
+			}
+			const label = document.createElement('span');
+			label.textContent = 'Thinking about grading criteria…';
+			row.appendChild(label);
+			fabHintBody.appendChild(row);
+			showFabHint();
+		}
+
+		function setFabHintContent(markdown){
+			if (!fabHintBody) return;
+			fabHintBody.innerHTML = '';
+			const wrap = document.createElement('div');
+			wrap.className = 'ai-fab-hint-content';
+			try {
+				// Re-use markdown renderer for a compact preview
+				renderMarkdownBlocks(wrap, markdown || '');
+			} catch(e) {
+				wrap.textContent = markdown || '';
+			}
+			fabHintBody.appendChild(wrap);
+			showFabHint();
+		}
+
+		function setFabHintError(msg){
+			if (!fabHintBody) return;
+			fabHintBody.innerHTML = '';
+			const p = document.createElement('p');
+			p.style.color = '#b91c1c';
+			p.style.margin = '0';
+			p.textContent = msg || 'Sorry, I could not suggest criteria right now.';
+			fabHintBody.appendChild(p);
+			showFabHint();
+		}
+
+		if (fabHintClose) {
+			fabHintClose.addEventListener('click', function(){ hideFabHint(); });
+		}
+		// Also hide the hint if the FAB itself is clicked to open full panel
+		fab.addEventListener('click', function(){ hideFabHint(); });
+
 		// Generate / Map chips
 		const chipContainers = panel.querySelectorAll('.ai-chat-section-body');
 		chipContainers.forEach(function(container){
@@ -899,6 +971,49 @@
 					// Other actions can be wired later; for now do nothing
 				}
 			});
+		});
+
+		// Auto-suggestion when Criteria for Assessment fields are focused
+		document.addEventListener('sv:criteria:auto-suggest', function(){
+			// If a request is already in-flight, just ensure the loading hint is visible
+			if (aiSending) {
+				setFabHintLoading();
+				return;
+			}
+
+			// If we have already requested criteria suggestions once, simply re-show the hint
+			if (criteriaAutoSuggested) {
+				showFabHint();
+				return;
+			}
+			criteriaAutoSuggested = true;
+
+			// Brief "thinking" animation on the FAB for visual feedback
+			try {
+				fab.classList.add('ai-thinking');
+				setTimeout(function(){ fab.classList.remove('ai-thinking'); }, 900);
+			} catch(_){/* noop */}
+
+			setFabHintLoading();
+
+			// Fire a background AI call dedicated to criteria suggestions (only once)
+			(async function(){
+				if (!window.SVAI || typeof window.SVAI.send !== 'function') {
+					setFabHintError('AI helper is not available right now.');
+					return;
+				}
+				try {
+					aiSending = true;
+					const msg = 'Based on the current syllabus context and institutional grading norms, propose a clear, concise breakdown of grading criteria for this course. Use a markdown table with columns "Category", "Assessment", and "Percent", listing typical tasks (quizzes, exams, projects, labs, participation, etc.). Within each Category, make sure that the Percent values of its tasks add up to 100% for that category itself (not 100% across all categories combined).';
+					const reply = await window.SVAI.send(msg, [], 'criteria-assessment');
+					setFabHintContent(String(reply || ''));
+				} catch (err) {
+					console.error('[AI] Criteria auto-suggest error', err);
+					setFabHintError('I had trouble suggesting criteria. Please try again later or open the AI assistant.');
+				} finally {
+					aiSending = false;
+				}
+			})();
 		});
 
 		// Keyboard shortcut: Alt+Shift+A to toggle panel
