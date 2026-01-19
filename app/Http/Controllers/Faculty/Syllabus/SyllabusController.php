@@ -413,39 +413,81 @@ class SyllabusController extends Controller
                 $lab = (int) ($course->contact_hours_lab ?? 0);
                 $total = $lec + $lab;
                 if ($total > 0) {
-                    // Compute percent weights that sum to 100
+                    // Base percent weights that sum to 100 from contact hours
                     $lecPct = (int) round(($lec / $total) * 100);
                     $labPct = max(0, 100 - $lecPct);
-                    // Build headings e.g., "Lecture (40%)", "Laboratory (60%)"
+
                     $sections = [];
-                    if ($lec > 0) {
+                    $criteriaLectureTitle = null;
+                    $criteriaLaboratoryTitle = null;
+
+                    // Case 1: Courses with both Lecture and Laboratory contact hours
+                    // Always grade as Lecture 40% and Laboratory 60%
+                    if ($lec > 0 && $lab > 0) {
+                        $lecPct = 40;
+                        $labPct = 60;
+
                         $sections[] = [
                             'key' => 'lecture',
                             'heading' => 'Lecture (' . $lecPct . '%)',
                             'value' => [],
                         ];
-                    }
-                    if ($lab > 0) {
                         $sections[] = [
                             'key' => 'laboratory',
                             'heading' => 'Laboratory (' . $labPct . '%)',
                             'value' => [],
                         ];
-                    }
-                    // Persist normalized categories with positions
-                    $this->criteria->sync($sections, $syllabus);
 
-                    // Also store titles in course-info for Blade consumption when needed
-                    try {
-                        $ci = $syllabus->courseInfo ?: \App\Models\SyllabusCourseInfo::where('syllabus_id', $syllabus->id)->first();
-                        if ($ci) {
-                            $ci->update([
-                                'criteria_lecture_title' => ($lec > 0) ? ('Lecture (' . $lecPct . '%)') : null,
-                                'criteria_laboratory_title' => ($lab > 0) ? ('Laboratory (' . $labPct . '%)') : null,
-                            ]);
+                        $criteriaLectureTitle = 'Lecture (' . $lecPct . '%)';
+                        $criteriaLaboratoryTitle = 'Laboratory (' . $labPct . '%)';
+
+                    // Case 2: Lecture-only courses (no Lab contact hours)
+                    } elseif ($lec > 0 && $lab === 0) {
+                        // Institution rule: for lecture-only courses, grading is
+                        // 50% Major Requirements and 50% Additional Requirements.
+                        $sections[] = [
+                            'key' => 'major_requirements',
+                            'heading' => 'Major Requirements (50%)',
+                            'value' => [],
+                        ];
+                        $sections[] = [
+                            'key' => 'additional_requirements',
+                            'heading' => 'Additional Requirements (50%)',
+                            'value' => [],
+                        ];
+                        // No lecture/lab titles in this pattern
+                        $criteriaLectureTitle = null;
+                        $criteriaLaboratoryTitle = null;
+
+                    // Case 3: Laboratory-only courses (no Lecture contact hours)
+                    } elseif ($lab > 0 && $lec === 0) {
+                        $lecPct = 0;
+                        $labPct = 100;
+                        $sections[] = [
+                            'key' => 'laboratory',
+                            'heading' => 'Laboratory (' . $labPct . '%)',
+                            'value' => [],
+                        ];
+                        $criteriaLectureTitle = null;
+                        $criteriaLaboratoryTitle = 'Laboratory (' . $labPct . '%)';
+                    }
+
+                    if (!empty($sections)) {
+                        // Persist normalized categories with positions
+                        $this->criteria->sync($sections, $syllabus);
+
+                        // Also store titles in course-info for Blade consumption when needed
+                        try {
+                            $ci = $syllabus->courseInfo ?: \App\Models\SyllabusCourseInfo::where('syllabus_id', $syllabus->id)->first();
+                            if ($ci) {
+                                $ci->update([
+                                    'criteria_lecture_title' => $criteriaLectureTitle,
+                                    'criteria_laboratory_title' => $criteriaLaboratoryTitle,
+                                ]);
+                            }
+                        } catch (\Throwable $e) {
+                            \Log::warning('SyllabusController::store failed updating courseInfo criteria titles', ['error' => $e->getMessage(), 'syllabus_id' => $syllabus->id]);
                         }
-                    } catch (\Throwable $e) {
-                        \Log::warning('SyllabusController::store failed updating courseInfo criteria titles', ['error' => $e->getMessage(), 'syllabus_id' => $syllabus->id]);
                     }
                 }
             } catch (\Throwable $e) {

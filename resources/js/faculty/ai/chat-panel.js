@@ -801,6 +801,7 @@
 		const fabHint = $('aiFabCriteriaHint');
 		const fabHintBody = $('aiFabCriteriaHintBody');
 		const fabHintClose = fabHint ? fabHint.querySelector('.ai-fab-hint-close') : null;
+		const fabHintRegenerate = fabHint ? fabHint.querySelector('.ai-fab-hint-regenerate') : null;
 
 		if (!panel || !fab) return;
 
@@ -912,6 +913,9 @@
 				wrap.textContent = markdown || '';
 			}
 			fabHintBody.appendChild(wrap);
+			if (fabHintRegenerate) {
+				fabHintRegenerate.style.display = 'inline-flex';
+			}
 			showFabHint();
 		}
 
@@ -923,11 +927,64 @@
 			p.style.margin = '0';
 			p.textContent = msg || 'Sorry, I could not suggest criteria right now.';
 			fabHintBody.appendChild(p);
+			if (fabHintRegenerate) {
+				fabHintRegenerate.style.display = 'inline-flex';
+			}
 			showFabHint();
+		}
+
+		async function triggerCriteriaSuggest(forceNew){
+			// If a request is already in-flight, just keep showing/loading the hint
+			if (aiSending) {
+				setFabHintLoading();
+				return;
+			}
+
+			// For automatic suggestion, only run once; for manual regenerate, always run
+			if (!forceNew) {
+				if (criteriaAutoSuggested) {
+					showFabHint();
+					return;
+				}
+				criteriaAutoSuggested = true;
+			} else {
+				criteriaAutoSuggested = true;
+			}
+
+			// Brief "thinking" animation on the FAB for visual feedback
+			try {
+				fab.classList.add('ai-thinking');
+				setTimeout(function(){ fab.classList.remove('ai-thinking'); }, 900);
+			} catch(_){/* noop */}
+
+			setFabHintLoading();
+			if (fabHintRegenerate) {
+				fabHintRegenerate.style.display = 'none';
+			}
+
+			if (!window.SVAI || typeof window.SVAI.send !== 'function') {
+				setFabHintError('AI helper is not available right now.');
+				return;
+			}
+
+			try {
+				aiSending = true;
+				const msg = 'Based on the current syllabus context and institutional grading norms, propose a clear, concise breakdown of grading criteria for this course using a markdown table with columns "Category", "Assessment", and "Percent". In the "Assessment" column, always use generic task labels only (for example, "Quiz", "Examination", "Project", "Lab Work") and do not include instance numbers such as "Quiz 1" or "Quiz 2"; for the two major examinations, use the exact labels "Midterm Exam" and "Final Exam" (with no numbering like "Midterm Exam 1"). For General Education, Mathematics, and Professional (Non-Lab) courses, you MUST strictly enforce the institutional policy that 50% of the final grade comes from a "Major Requirements" category and 50% from an "Additional Requirements" category. Under "Major Requirements", include at most two major examinations (Midterm Exam and Final Exam, written or oral) together with any semestral projects or other major assessment methods applicable to the course, and ensure that the Percent values of those rows sum exactly to 50. Under "Additional Requirements", include at least 2 but at most 4 items chosen from assignments, projects, reports, term papers, case studies, essays, recitations, seatworks, quizzes, and other applicable assessments, and ensure that the Percent values of those rows also sum exactly to 50, so that the total for the course is 100. When the course is a Pure Laboratory course (for example, Computer Applications, Computer Programming, ME Laboratory, Introduction to Engineering, and other lab-focused offerings), instead enforce a 70% / 30% policy: group lab reports, individual lab performance, and any final laboratory project under a laboratory-focused category (totaling exactly 70% of the final grade), and then include at least two major requirements (examinations that may be oral, written, hands-on, practical, or other major assessments) under a Major Requirements category totaling exactly 30%, so that the overall Percent still sums to 100. When the course has combined lecture and laboratory components, allocate the overall lecture and laboratory contributions in proportion to their contact hours (for example, a 4-unit course with 3 hours lecture and 3 hours laboratory would use about 50% Lecture Part and 50% Laboratory/Studio Part). Within the Lecture Part, follow the same rules as for General Education/Mathematics/Professional Non-Lab (maximum of two major lecture exams—Midterm Exam and Final Exam—plus semestral projects and 2–4 additional lecture requirements such as assignments, projects, reports, term papers, case studies, essays, recitations, seatworks, quizzes, and other applicable assessments). Within the Laboratory/Studio Part, group lab reports, individual lab performance, drawing plates/program codes, and any final lab project together with at least two major lab requirements (oral/written/hands-on/practical/consultation or similar), and distribute their Percent values so that the lab part reaches its required share of the final grade, while the lecture and lab parts together still sum to 100. When the course is a Comprehensive Examination course, enforce a fixed three-way split: 30% for Evaluation Examinations (with the number of exams depending on the board-exam subjects), 30% for Quizzes, and 40% for Mock-board Examination, each represented as its own category whose internal task Percents sum to that category share so the overall total remains 100%. For other course types, follow any institution-specific patterns that can be inferred from the snapshots while still keeping the overall Percent total at 100.';
+				const reply = await window.SVAI.send(msg, [], 'criteria-assessment');
+				setFabHintContent(String(reply || ''));
+			} catch (err) {
+				console.error('[AI] Criteria auto-suggest error', err);
+				setFabHintError('I had trouble suggesting criteria. Please try again later or open the AI assistant.');
+			} finally {
+				aiSending = false;
+			}
 		}
 
 		if (fabHintClose) {
 			fabHintClose.addEventListener('click', function(){ hideFabHint(); });
+		}
+		if (fabHintRegenerate) {
+			fabHintRegenerate.addEventListener('click', function(){ triggerCriteriaSuggest(true); });
 		}
 		// Also hide the hint if the FAB itself is clicked to open full panel
 		fab.addEventListener('click', function(){ hideFabHint(); });
@@ -975,45 +1032,7 @@
 
 		// Auto-suggestion when Criteria for Assessment fields are focused
 		document.addEventListener('sv:criteria:auto-suggest', function(){
-			// If a request is already in-flight, just ensure the loading hint is visible
-			if (aiSending) {
-				setFabHintLoading();
-				return;
-			}
-
-			// If we have already requested criteria suggestions once, simply re-show the hint
-			if (criteriaAutoSuggested) {
-				showFabHint();
-				return;
-			}
-			criteriaAutoSuggested = true;
-
-			// Brief "thinking" animation on the FAB for visual feedback
-			try {
-				fab.classList.add('ai-thinking');
-				setTimeout(function(){ fab.classList.remove('ai-thinking'); }, 900);
-			} catch(_){/* noop */}
-
-			setFabHintLoading();
-
-			// Fire a background AI call dedicated to criteria suggestions (only once)
-			(async function(){
-				if (!window.SVAI || typeof window.SVAI.send !== 'function') {
-					setFabHintError('AI helper is not available right now.');
-					return;
-				}
-				try {
-					aiSending = true;
-					const msg = 'Based on the current syllabus context and institutional grading norms, propose a clear, concise breakdown of grading criteria for this course. Use a markdown table with columns "Category", "Assessment", and "Percent", listing typical tasks (quizzes, exams, projects, labs, participation, etc.). Within each Category, make sure that the Percent values of its tasks add up to 100% for that category itself (not 100% across all categories combined).';
-					const reply = await window.SVAI.send(msg, [], 'criteria-assessment');
-					setFabHintContent(String(reply || ''));
-				} catch (err) {
-					console.error('[AI] Criteria auto-suggest error', err);
-					setFabHintError('I had trouble suggesting criteria. Please try again later or open the AI assistant.');
-				} finally {
-					aiSending = false;
-				}
-			})();
+			triggerCriteriaSuggest(false);
 		});
 
 		// Keyboard shortcut: Alt+Shift+A to toggle panel

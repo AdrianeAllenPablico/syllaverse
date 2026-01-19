@@ -13,7 +13,13 @@
   <div class="ai-fab-hint-inner">
     <div class="ai-fab-hint-header">
       <span class="ai-fab-hint-title">Suggested Criteria</span>
-      <button type="button" class="ai-fab-hint-close" aria-label="Dismiss suggestion">&times;</button>
+      <div class="ai-fab-hint-actions">
+        <button type="button" class="ai-fab-hint-regenerate" aria-label="Regenerate suggested criteria">
+          <i class="bi bi-arrow-repeat"></i>
+          <span>Regenerate</span>
+        </button>
+        <button type="button" class="ai-fab-hint-close" aria-label="Dismiss suggestion">&times;</button>
+      </div>
     </div>
     <div class="ai-fab-hint-body" id="aiFabCriteriaHintBody">
       <!-- Filled dynamically by AI auto-suggest for Criteria -->
@@ -194,7 +200,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.4rem;
   margin-bottom: 0.35rem;
 }
 
@@ -218,6 +224,32 @@
 
 .ai-fab-hint-close:hover {
   color: #4b5563;
+}
+
+.ai-fab-hint-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ai-fab-hint-regenerate {
+  display: none; /* shown via JS after first AI suggestion */
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  background: rgba(59, 130, 246, 0.06);
+  color: #1d4ed8;
+  font-size: 0.75rem;
+  padding: 0.18rem 0.6rem;
+  line-height: 1.2;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ai-fab-hint-regenerate:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(37, 99, 235, 0.35);
 }
 
 .ai-fab-hint-body {

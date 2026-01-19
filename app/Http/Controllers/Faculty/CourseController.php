@@ -283,7 +283,7 @@ class CourseController extends Controller
             'title'              => 'required|string|max:255',
             'course_category'    => 'required|string|max:255',
             'cmo_reference'      => 'nullable|string|max:255',
-            'contact_hours_lec'  => 'required|integer|min:0',
+            'contact_hours_lec'  => 'nullable|integer|min:0',
             'contact_hours_lab'  => 'nullable|integer|min:0',
             'description'        => 'nullable|string',
             'prerequisite_ids'   => 'nullable|array',
@@ -332,8 +332,31 @@ class CourseController extends Controller
             return redirect()->back()->withErrors(['department_id' => 'Department is required but could not be determined from your role.']);
         }
 
-        $lec = (int) $request->contact_hours_lec;
+        // Ensure at least one of lecture or lab contact hours is provided
+        $lec = (int) ($request->contact_hours_lec ?? 0);
         $lab = (int) ($request->contact_hours_lab ?? 0);
+
+        if ($lec === 0 && $lab === 0) {
+            $errorMessage = 'Please provide lecture or lab contact hours (or both).';
+
+            if ($this->isAjax($request)) {
+                return response()->json([
+                    'message' => 'Validation error.',
+                    'errors'  => [
+                        'contact_hours_lec' => [$errorMessage],
+                        'contact_hours_lab' => [$errorMessage],
+                    ],
+                ], 422);
+            }
+
+            return back()
+                ->withErrors([
+                    'contact_hours_lec' => $errorMessage,
+                    'contact_hours_lab' => $errorMessage,
+                ])
+                ->withInput();
+        }
+
         $totalUnits = $lec + $lab;
 
         if ($deletedCourse) {
@@ -422,7 +445,7 @@ class CourseController extends Controller
             'title'              => 'required|string|max:255',
             'course_category'    => 'required|string|max:255',
             'cmo_reference'      => 'nullable|string|max:255',
-            'contact_hours_lec'  => 'required|integer|min:0',
+            'contact_hours_lec'  => 'nullable|integer|min:0',
             'contact_hours_lab'  => 'nullable|integer|min:0',
             'description'        => 'nullable|string',
             'prerequisite_ids'   => 'nullable|array',
@@ -457,8 +480,31 @@ class CourseController extends Controller
             return redirect()->back()->withErrors(['department_id' => 'Department is required but could not be determined from your role.']);
         }
 
-        $lec = (int) $request->contact_hours_lec;
+        // Ensure at least one of lecture or lab contact hours is provided
+        $lec = (int) ($request->contact_hours_lec ?? 0);
         $lab = (int) ($request->contact_hours_lab ?? 0);
+
+        if ($lec === 0 && $lab === 0) {
+            $errorMessage = 'Please provide lecture or lab contact hours (or both).';
+
+            if ($this->isAjax($request)) {
+                return response()->json([
+                    'message' => 'Validation error.',
+                    'errors'  => [
+                        'contact_hours_lec' => [$errorMessage],
+                        'contact_hours_lab' => [$errorMessage],
+                    ],
+                ], 422);
+            }
+
+            return back()
+                ->withErrors([
+                    'contact_hours_lec' => $errorMessage,
+                    'contact_hours_lab' => $errorMessage,
+                ])
+                ->withInput();
+        }
+
         $totalUnits = $lec + $lab;
 
         $course->update([
